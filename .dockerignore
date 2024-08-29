@@ -1,0 +1,9 @@
+**
+!bin
+!libsentrykube
+!requirements*.txt
+!install.sh
+!sentry_kube
+!setup.py
+!setup.cfg
+!Makefile

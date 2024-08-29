@@ -1,0 +1,81 @@
+substitutions:
+  _KUBECTL_VERSION_1_22: "1.22.15"
+  _KUBECTL_VERSION_1_23: "1.23.14"
+  _KUBECTL_VERSION_1_24: "1.24.8"
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      [
+        "-c",
+        "docker pull us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache || true",
+      ]
+
+  # 1.22
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "--build-arg",
+        "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_22}",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_22}-${COMMIT_SHA}",
+        "-t",
+        "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_22}-${COMMIT_SHA}",
+        "--cache-from",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        ".",
+      ]
+
+  # 1.23
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "--build-arg",
+        "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_23}",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_23}-${COMMIT_SHA}",
+        "-t",
+        "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_23}-${COMMIT_SHA}",
+        "--cache-from",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        ".",
+      ]
+
+  # 1.24
+  - name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "build",
+        "--build-arg",
+        "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_24}",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        "-t",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_24}-${COMMIT_SHA}",
+        "-t",
+        "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_24}-${COMMIT_SHA}",
+        "--cache-from",
+        "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+        ".",
+      ]
+
+images: [
+    "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
+
+    # Push all versions
+    "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_22}-${COMMIT_SHA}",
+    "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_23}-${COMMIT_SHA}",
+    "us.gcr.io/${PROJECT_ID}/sentry-kube:${_KUBECTL_VERSION_1_24}-${COMMIT_SHA}",
+
+    # Artifact registry in the GCP project with test env (https://github.com/getsentry/test-factory)
+    "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_22}-${COMMIT_SHA}",
+    "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_23}-${COMMIT_SHA}",
+    "europe-west3-docker.pkg.dev/sentry-st-testing/main/sentry-kube:${_KUBECTL_VERSION_1_24}-${COMMIT_SHA}",
+  ]
+timeout: 600s

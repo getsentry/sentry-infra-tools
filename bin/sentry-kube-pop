@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+###
+# Wrapper around "sentry-kube" that runs the commands over all production PoP clusters.
+###
+set -euo pipefail
+
+CLUSTERS=(pop-europe pop-us pop-asia pop-australia)
+
+# If set to "1", errors will be ignored while looping over clusters
+IGNORE_ERRORS="${SENTRY_KUBE_POP_IGNORE_ERRORS:-0}"
+
+
+_handle_error() {
+  if [[ "${IGNORE_ERRORS}" == "1" ]]; then
+    echo "Ignoring the non-zero return code."
+  else
+    exit 1
+  fi
+}
+
+
+_render() {
+  for cluster in "${CLUSTERS[@]}"; do
+    sentry-kube -c "$cluster" render "$@" || _handle_error
+  done
+}
+
+
+_diff() {
+  for cluster in "${CLUSTERS[@]}"; do
+    sentry-kube -c "$cluster" diff "$@" || _handle_error
+  done
+}
+
+
+_apply() {
+  diff_results=$(FORCE_COLOR=1 _diff "$@" | tee /dev/tty)
+
+  if [[ -z "${diff_results// }" ]]; then
+    echo "Nothing to apply!"
+    exit 0
+  fi
+
+  # Confirm
+  read -r -p "Would you like to apply this? [y/N]: " input
+  case $input in
+    [yY])
+      echo "Applying..."
+      ;;
+    *)
+      echo "Aborted!"
+      exit 1
+      ;;
+  esac
+
+  for cluster in "${CLUSTERS[@]}"; do
+    sentry-kube -c "$cluster" apply --yes "$@" || _handle_error
+  done
+}
+
+
+_kubectl() {
+  # Run arbitrary 'kubectl' commands. Dangerous!
+  for cluster in "${CLUSTERS[@]}"; do
+    sentry-kube -c "$cluster" kubectl "$@" || _handle_error
+  done
+}
+
+
+_usage() {
+  echo "
+Run sentry-kube commands across all PoP clusters.
+
+Usage: $0
+          render|diff|apply [arguments]     -- Run 'sentry-kube' commands.
+          kubectl [arguments]               -- Run arbitrary 'kubectl' commands. Dangerous!
+
+To ignore errors when looping over the clusters, set SENTRY_KUBE_POP_IGNORE_ERRORS environment variable to "1".
+"
+}
+
+
+cmd="${1:-}"
+if [ "$cmd" == "render" ]; then
+  shift
+  _render "$@"
+elif [ "$cmd" == "diff" ]; then
+  shift
+  _diff "$@"
+elif [ "$cmd" == "apply" ]; then
+  shift
+  _apply "$@"
+elif [ "$cmd" == "kubectl" ]; then
+  shift
+  _kubectl "$@"
+else
+  _usage
+  echo "Invalid command!"
+  exit 1
+fi

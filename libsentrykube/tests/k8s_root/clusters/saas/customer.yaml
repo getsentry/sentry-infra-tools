@@ -1,0 +1,11 @@
+# customer
+id: something4something
+release: weekly-2022-11-15-a
+dsn: https://blablabla@sentry.io/1513938
+project: something-kube
+context: gke_something-kube_us-west1-c_primary
+
+services:
+- k8s_root/services/service1
+- k8s_root/services/service2
+- k8s_root/services/service4

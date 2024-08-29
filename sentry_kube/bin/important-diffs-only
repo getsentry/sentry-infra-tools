@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+import sys
+
+import click
+from libsentrykube.kubectl import important_diffs
+
+
+@click.command()
+@click.argument("from_dir")
+@click.argument("to_dir")
+def main(from_dir, to_dir) -> None:
+    from_dir_apply_results = important_diffs.process_folder(from_dir)
+    to_dir_apply_results = important_diffs.process_folder(to_dir)
+
+    for warning_message in important_diffs.warn_user_for_changes(from_dir_apply_results, to_dir_apply_results):
+        click.echo(warning_message, err=True)
+
+    return important_diffs.perform_diff(from_dir, to_dir)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

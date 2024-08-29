@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+files_changed_upstream="$(mktemp)"
+trap "rm -f ${files_changed_upstream}" EXIT
+
+git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD > "$files_changed_upstream"
+
+# When executing hooks, git chdirs to the git root (in most cases.)
+grep -E --quiet 'requirements.*\.txt|setup\.py' "$files_changed_upstream" \
+    && ./install.sh

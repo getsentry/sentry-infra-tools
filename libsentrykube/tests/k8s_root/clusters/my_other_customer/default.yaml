@@ -1,0 +1,5 @@
+context: gke_st-kube_us-west1-c_primary
+
+services:
+- k8s_root/services/service1
+- k8s_root/services/service2
