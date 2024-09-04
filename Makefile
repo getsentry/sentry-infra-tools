@@ -12,6 +12,12 @@ install-pre-commit-hook:
 	pre-commit install --install-hooks
 .PHONY: install-pre-commit-hook
 
+install-brew-dev:
+	brew bundle
+.PHONY: install-brew-dev
+
+develop: install-python-dependencies install-pre-commit-hook install-brew-dev
+
 .PHONY: tools-test
 tools-test:
 	pytest -vv .

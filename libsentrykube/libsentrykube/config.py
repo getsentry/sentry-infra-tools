@@ -11,6 +11,7 @@ from yaml import SafeLoader, load
 
 from libsentrykube.utils import workspace_root
 
+DEFAULT_CONFIG = "cli_config/configuration.yaml"
 
 @dataclass(frozen=True)
 class Site:
