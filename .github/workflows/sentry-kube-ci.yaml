@@ -1,0 +1,36 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+  merge_group:
+
+jobs:
+  tests:
+    name: "Run tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Make environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install $(grep ^-- requirements.txt) --upgrade pip==22.2.2 wheel==0.37.1
+          make develop
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.22'
+
+      - name: Install kube-linter
+        # Needed for the kube-linter integration tests.
+        # It this starts taking too long we can xfail those tests and isolate
+        # the logic more.
+        run: go install golang.stackrox.io/kube-linter/cmd/kube-linter@v0.6.8
+
+      - name: Run sentry-kube tests
+        run: |
+          make tools-test
