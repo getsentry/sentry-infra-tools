@@ -29,7 +29,7 @@ charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via -r requirements.in
-cryptography==42.0.8
+cryptography==43.0.1
     # via
     #   paramiko
     #   types-paramiko
