@@ -102,7 +102,6 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
                     "ExitOnForwardFailure=yes",
                     "-L",
                     port_fwd,
-                    "ssh-key-expire-after=1d",
                 ),
             ),
             # spawn as detached process

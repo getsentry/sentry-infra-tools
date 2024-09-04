@@ -31,6 +31,7 @@ def build_ssh_command(ctx, host, project, user, ssh_key_file, region, zone, ssh_
         f"{region}-{zone}",
         "--project",
         project,
+        "--ssh-key-expire-after=1d",
     )
     if ssh_key_file:
         cmd += ("--ssh-key-file", ssh_key_file)

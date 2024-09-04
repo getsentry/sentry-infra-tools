@@ -1,5 +1,4 @@
 # sentry-kube
-# --iap
 # -C saas
 # run-pod
 # --exec

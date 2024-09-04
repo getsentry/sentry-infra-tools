@@ -86,13 +86,13 @@ class PGBouncerSidecar(SimpleExtension):
     def run(
         self,
         databases: List[str],
-        repository: str = "mattrobenolt",
+        repository: str = "us.gcr.io/sentryio",
         preStopWait: int = 1,
         checkInterval: int = 1,
         maxClientConn: int = 100,
         defaultPoolSize: int = 25,
         serverLifetime: int = 300,
-        version: str = "1.15.0",
+        version: str = "1.23.1-alpine3.20",
         application_name: Optional[str] = None,
         livenessProbe: Optional[dict] = None,
         resources: Optional[dict] = None,
@@ -138,7 +138,7 @@ cat << EOF > /etc/pgbouncer.ini
 [pgbouncer]
 listen_addr = 0.0.0.0
 listen_port = 6432
-unix_socket_dir ={ " ''" if version == "1.15.0" else "" }
+unix_socket_dir =
 auth_type = trust
 auth_file = /etc/pgbouncer/userlist.txt
 admin_users = postgres
