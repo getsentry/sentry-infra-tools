@@ -1,0 +1,1 @@
+brew 'kube-linter'
