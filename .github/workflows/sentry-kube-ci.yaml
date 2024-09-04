@@ -15,10 +15,7 @@ jobs:
 
       - name: Make environment
         run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
-          pip install $(grep ^-- requirements.txt) --upgrade pip==22.2.2 wheel==0.37.1
-          make develop
+          make install-python-dependencies
 
       - name: Set up Go
         uses: actions/setup-go@v2
