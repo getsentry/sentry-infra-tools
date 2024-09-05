@@ -16,10 +16,10 @@ def get_requirements() -> Sequence[str]:
 
 
 setup(
-    name="sentry-kube",
-    version="0.0.0.dev0",
+    name="sentry-infra-tools",
+    version="0.0.1",
     author="Sentry",
-    author_email="ops@sentry.io",
+    author_email="oss@sentry.io",
     packages=find_packages("."),
     install_requires=get_requirements(),
     zip_safe=False,
