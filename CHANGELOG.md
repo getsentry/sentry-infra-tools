@@ -1,3 +1,10 @@
+## 0.0.2
+
+### Various fixes & improvements
+
+- fix(craft): Remove unnecessary fields (#16) by @nikhars
+- fix(release): Add changelog file for release process to work (#14) by @nikhars
+
 ## 2024-09-09
 
 - Merge pull request #13 from getsentry/nikhars/feat/bump-version-script (81dc0b1)

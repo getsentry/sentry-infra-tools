@@ -39,7 +39,7 @@ def get_requirements() -> Sequence[str]:
 
 setup(
     name="sentry-infra-tools",
-    version="0.0.1",
+    version="0.0.2",
     author="Sentry",
     author_email="oss@sentry.io",
     packages=find_packages("."),
