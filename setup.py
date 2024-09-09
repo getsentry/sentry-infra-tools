@@ -43,6 +43,8 @@ setup(
     author="Sentry",
     author_email="oss@sentry.io",
     packages=find_packages("."),
+    license="FSL-1.0-Apache-2.0",
+    description="Infrastructure tools used at Sentry",
     install_requires=get_requirements(),
     zip_safe=False,
     include_package_data=True,
@@ -57,6 +59,5 @@ setup(
         "libsentrykube.macros": macros,
     },
     scripts=["bin/sentry-kube-pop"],
-    classifiers=["DO NOT UPLOAD"],
-    python_requires=">=3.9",
+    python_requires=">=3.11",
 )
