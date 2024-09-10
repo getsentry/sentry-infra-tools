@@ -1,3 +1,12 @@
+## 0.0.3
+
+### Various fixes & improvements
+
+- fix(keys): Remove default datadog key (#18) by @nikhars
+- release: 0.0.2 (#17) by @nikhars
+- fix(craft): Remove unnecessary fields (#16) by @nikhars
+- fix(release): Add changelog file for release process to work (#14) by @nikhars
+
 ## 0.0.2
 
 ### Various fixes & improvements
