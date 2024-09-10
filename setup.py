@@ -59,5 +59,5 @@ setup(
         "libsentrykube.macros": macros,
     },
     scripts=["bin/sentry-kube-pop"],
-    python_requires=">=3.11",
+    python_requires=">=3.10",
 )
