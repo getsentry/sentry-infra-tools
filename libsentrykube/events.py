@@ -11,8 +11,7 @@ from libsentrykube.config import Config
 
 DD_API_BASE = "https://api.datadoghq.com"
 
-DEFAULT_DATADOG_API_KEY = "564cda8860343967f121681068f471c8"
-DATADOG_API_KEY = os.getenv("DATADOG_API_KEY") or os.getenv("DD_API_KEY") or DEFAULT_DATADOG_API_KEY
+DATADOG_API_KEY = os.getenv("DATADOG_API_KEY") or os.getenv("DD_API_KEY")
 DISABLED_VALUE = "NONE_AND_YES_I_AM_SURE"
 
 SENTRY_KUBE_EVENT_SOURCE = "sentry-kube"
