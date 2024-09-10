@@ -1,3 +1,10 @@
+## 0.0.5
+
+### Various fixes & improvements
+
+- chore(review): Add CODEOWNERS (#20) by @nikhars
+- fix(python): Reduce minimum python version required to 3.10 (#19) by @nikhars
+
 ## 0.0.4
 
 ### Various fixes & improvements
