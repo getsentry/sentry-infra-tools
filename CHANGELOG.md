@@ -1,3 +1,9 @@
+## 0.0.6
+
+### Various fixes & improvements
+
+- chore(requirements): Fix dependencies based on sentry pypi (#21) by @nikhars
+
 ## 0.0.5
 
 ### Various fixes & improvements
