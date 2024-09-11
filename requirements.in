@@ -12,7 +12,6 @@ google-auth
 google-api-python-client
 paramiko
 pathspec
-httpx
 requests>=2.32.2
 responses
 sentry_jsonnet
