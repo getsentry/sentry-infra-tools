@@ -1,0 +1,23 @@
+name: type-checking
+on:
+  pull_request:
+  merge_group:
+
+jobs:
+  files-changed:
+    uses: ./.github/workflows/files-changed.yaml
+  typing:
+    name: "mypy typing"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Make environment
+        run: make install-python-dependencies
+
+      - name: Run mypy
+        run: mypy k8s --config-file mypy.ini
+
+      - name: Run strict mypy
+        run: mypy config_builder --config-file mypy.ini --strict
