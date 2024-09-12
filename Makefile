@@ -5,6 +5,7 @@ reset-python:
 
 install-python-dependencies:
 	pip install -q -r requirements-dev.txt
+	pip install -q -r requirements.txt
 	pip install -q pre-commit==2.13.0
 .PHONY: install-python-dependencies
 
