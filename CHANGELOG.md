@@ -1,3 +1,27 @@
+## 0.0.7
+
+### Various fixes & improvements
+
+- Bring back requirements.in files (#23) by @nikhars
+- Revert "Remove .in files with dependencies" (#23) by @nikhars
+- Fix make target (#24) by @nikhars
+- Fix make command (#24) by @nikhars
+- Use make command in GHA (#24) by @nikhars
+- Add sentry pypi for dev requirements (#23) by @nikhars
+- Remove pyright (#23) by @nikhars
+- Revert "Does removing pyright still work" (#24) by @nikhars
+- Does removing pyright still work (#24) by @nikhars
+- Remove mypy from k8s folder (#24) by @nikhars
+- More fixes to GHA (#24) by @nikhars
+- Fix makefile target (#24) by @nikhars
+- fix(mypy): Add mypy github action (#24) by @nikhars
+- Add requirements file to make target (#23) by @nikhars
+- Remove comments from requirements file (#23) by @nikhars
+- Remove .in files with dependencies (#23) by @nikhars
+- Add build to gitignore (#22) by @nikhars
+- Remove build directory (#22) by @nikhars
+- chore(requirements): Add sentry pypi index url (#23) by @nikhars
+
 ## 0.0.6
 
 ### Various fixes & improvements
