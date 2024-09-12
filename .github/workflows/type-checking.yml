@@ -14,4 +14,4 @@ jobs:
         run: make install-python-dependencies
 
       - name: Run strict mypy
-        run: mypy config_builder --config-file mypy.ini --strict
+        run: make cli-type-check
