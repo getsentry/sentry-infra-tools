@@ -4,6 +4,9 @@
 #
 #    pip-compile --output-file=requirements.txt --strip-extras requirements.in
 #
+
+--index-url https://pypi.devinfra.sentry.io/simple
+
 anyio==4.4.0
     # via httpx
 attrs==24.2.0
