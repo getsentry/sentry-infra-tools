@@ -24,5 +24,5 @@ tools-test:
 
 .PHONY: cli-typecheck
 cli-typecheck:
-	pip install -q -r .requirements-dev.txt
-	mypy config_builder --config-file k8s/mypy.ini --strict
+	pip install -q -r requirements-dev.txt
+	mypy config_builder --config-file mypy.ini --strict

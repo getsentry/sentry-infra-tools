@@ -1,0 +1,17 @@
+name: type-checking
+on:
+  pull_request:
+
+jobs:
+  typing:
+    name: "mypy typing"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Make environment
+        run: make install-python-dependencies
+
+      - name: Run strict mypy
+        run: make cli-typecheck
