@@ -14,4 +14,4 @@ jobs:
         run: make install-python-dependencies
 
       - name: Run strict mypy
-        run: make cli-type-check
+        run: make cli-typecheck
