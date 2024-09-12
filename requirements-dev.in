@@ -1,0 +1,28 @@
+-r requirements.in
+
+# environment
+pyupgrade
+
+# typing
+pyright
+mypy
+mypy-extensions
+
+# auto-formatting
+isort
+black!=24.2.0
+
+# test & coverage
+pytest
+pytest-xdist
+coverage_enable_subprocess
+coverage
+covdefaults
+jsonschema
+
+# lint
+pre-commit
+flake8
+
+# dependency management
+pip-tools
