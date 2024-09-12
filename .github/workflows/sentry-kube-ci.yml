@@ -2,9 +2,8 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
-  merge_group:
 
 jobs:
   tests:

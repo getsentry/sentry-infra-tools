@@ -1,11 +1,8 @@
 name: type-checking
 on:
   pull_request:
-  merge_group:
 
 jobs:
-  files-changed:
-    uses: ./.github/workflows/files-changed.yaml
   typing:
     name: "mypy typing"
     runs-on: ubuntu-latest
