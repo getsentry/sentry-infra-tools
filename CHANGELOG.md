@@ -1,3 +1,10 @@
+## 0.0.8
+
+### Various fixes & improvements
+
+- fix(materialize): Take root directory as argument (#26) by @nikhars
+- Add typing to packages (#25) by @nikhars
+
 ## 0.0.7
 
 ### Various fixes & improvements
