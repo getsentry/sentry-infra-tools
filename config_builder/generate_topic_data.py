@@ -1,13 +1,15 @@
 import os
+import click
 import json
 from sys import stderr
 from sentry_kafka_schemas import get_topic, list_topics
 from pathlib import Path
 
 
-def main() -> None:
-    root = Path(os.path.abspath(__file__)).parent.parent.parent.parent
-    output = f"{root}/shared_config/kafka/topics/generated/_generated_raw_topic_data.json"
+@click.command()
+@click.option("--root-dir", default="", help="Path where the root directory exists")
+def generate_raw_topic_data(root_dir: str) -> None:
+    output = f"{root_dir}/kafka/topics/generated/_generated_raw_topic_data.json"
 
     print("Generating raw topic data", file=stderr)
     file_path = Path(output)
@@ -20,7 +22,3 @@ def main() -> None:
     os.makedirs(file_path.parent, exist_ok=True)
     with open(file_path, "w") as f:
         f.write(json.dumps(topic_data, indent=2) + "\n")
-
-
-if __name__ == "__main__":
-    main()
