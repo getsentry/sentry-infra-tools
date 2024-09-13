@@ -34,7 +34,9 @@ macros = [
 
 def get_requirements() -> Sequence[str]:
     with open("requirements.txt") as f:
-        return [x.strip() for x in f.read().split("\n") if not x.startswith(("#", "--"))]
+        return [
+            x.strip() for x in f.read().split("\n") if not x.startswith(("#", "--"))
+        ]
 
 
 setup(
@@ -52,7 +54,7 @@ setup(
         "console_scripts": [
             "sentry-kube=sentry_kube.cli:main",
             "materialize-config=config_builder.materialize_all:main",
-            "generate-raw-topic-data=config_builder.generate_topic_data:main",
+            "generate-raw-topic-data=config_builder.generate_topic_data:generate_raw_topic_data",
             "pr-docs=assistant.prdocs:main",
             "pr-approver=pr_approver.approver:main",
         ],
