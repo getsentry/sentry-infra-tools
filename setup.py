@@ -34,7 +34,9 @@ macros = [
 
 def get_requirements() -> Sequence[str]:
     with open("requirements.txt") as f:
-        return [x.strip() for x in f.read().split("\n") if not x.startswith(("#", "--"))]
+        return [
+            x.strip() for x in f.read().split("\n") if not x.startswith(("#", "--"))
+        ]
 
 
 setup(
@@ -42,7 +44,10 @@ setup(
     version="0.0.7",
     author="Sentry",
     author_email="oss@sentry.io",
-    packages=find_packages("."),
+    packages=find_packages(where=".", exclude="tests"),
+    package_data={
+        "": ["py.typed"],
+    },
     license="FSL-1.0-Apache-2.0",
     description="Infrastructure tools used at Sentry",
     install_requires=get_requirements(),
