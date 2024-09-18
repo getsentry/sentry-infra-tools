@@ -19,6 +19,7 @@ from libsentrykube.service import (
     get_service_path,
     get_service_template_files,
     get_service_values,
+    get_service_value_overrides,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -96,17 +97,23 @@ def _get_path(obj, *pathparts, default=None):
 def _consolidate_variables(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
 ) -> dict:
+    # Service defaults from _values
+    service_values = get_service_values(service_name)
+
+    # Service data overrides from services/SERVICE/region_overrides/
+    service_value_overrides = get_service_value_overrides(
+        service_name, customer_name, cluster_name
+    )
+    deep_merge_dict(service_values, service_value_overrides)
+
+    # Service data overrides from clusters/
     customer_values, _ = get_service_data(
         customer_name,
         service_name,
         cluster_name,
     )
-
-    service_values = get_service_values(service_name)
-
-    # Service data overrides values.
     deep_merge_dict(service_values, customer_values)
 
     return service_values
@@ -115,7 +122,7 @@ def _consolidate_variables(
 def render_service_values(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
 ) -> dict:
     return _consolidate_variables(customer_name, service_name, cluster_name)
 
@@ -142,7 +149,7 @@ def render_services(
 def render_templates(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
     skip_kinds: Optional[Tuple] = None,
     filters: Optional[List[str]] = None,
 ) -> str:
@@ -158,7 +165,9 @@ def render_templates(
         cluster_name,
     )
 
-    render_data["values"] = _consolidate_variables(customer_name, service_name, cluster_name)
+    render_data["values"] = _consolidate_variables(
+        customer_name, service_name, cluster_name
+    )
 
     extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
     extensions.extend(load_macros())
@@ -170,7 +179,9 @@ def render_templates(
     )
 
     # Add custom jinja filters here
-    env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode("utf-8")
+    env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode(
+        "utf-8"
+    )
     env.filters["yaml"] = safe_dump
     # debugging filter which prints a var to console
     env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
@@ -235,7 +246,7 @@ def materialize(customer_name: str, service_name: str, cluster_name: str) -> boo
 def collect_kube_resources(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
     skip_kinds: Optional[Tuple] = ("Job",),
     kind_matches: Optional[Tuple] = None,
     name_matches: Optional[Tuple] = None,
@@ -326,7 +337,10 @@ def _load_resources(kube_resources):
                         item.name, item.namespace
                     )
                 except ValueError as exception:
-                    if str(exception) == "Invalid value for `conditions`, must not be `None`":
+                    if (
+                        str(exception)
+                        == "Invalid value for `conditions`, must not be `None`"
+                    ):
                         click.echo(
                             "Some resources are still being created, "
                             "please wait a few seconds..."
@@ -523,7 +537,10 @@ def apply(items: List[KubeResource]):
                         item.namespace, item.local_doc
                     )
                 except ValueError as exception:
-                    if str(exception) == "Invalid value for `conditions`, must not be `None`":
+                    if (
+                        str(exception)
+                        == "Invalid value for `conditions`, must not be `None`"
+                    ):
                         click.echo(
                             "Ignoring empty 'conditions' value for a new resource..."
                         )  # https://github.com/kubernetes-client/python/issues/1098
@@ -546,7 +563,9 @@ def apply(items: List[KubeResource]):
                 click.echo(f'{item.kind} "{item.name}" updated')
 
 
-def rollout_status_deployment(api: client.AppsV1Api, name: str, namespace: str) -> Tuple[str, bool]:
+def rollout_status_deployment(
+    api: client.AppsV1Api, name: str, namespace: str
+) -> Tuple[str, bool]:
     deployment = api.read_namespaced_deployment(name=name, namespace=namespace)
     if deployment.metadata.generation > deployment.status.observed_generation:
         # the desired generation is greater than the live (observed) generation,

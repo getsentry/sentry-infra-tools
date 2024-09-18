@@ -41,7 +41,7 @@ def clear_service_paths() -> None:
     _services.clear()
 
 
-def get_service_path(service_name):
+def get_service_path(service_name) -> Path:
     if service_name not in _services:
         click.echo(f"Service named {service_name} was not found.", err=True)
         raise click.Abort()
@@ -70,18 +70,47 @@ def get_service_values(service_name: str, external: bool = False):
     return values
 
 
-def get_service_data(customer_name, service_name, cluster_name=None):
+def get_service_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+):
+    """
+    For the given service, return the values specified in the corresponding _values.yaml.
+
+    If "external=True" is specified, treat the service name as the full service path.
+    """
+    if external:
+        service_regions_path = workspace_root() / service_name
+    else:
+        service_regions_path = get_service_path(service_name)
+
+    service_regions_path = service_regions_path / "region_overrides"
+
+    if region_name == "saas":
+        region_name = "us"
+
+    try:
+        service_override_file: Path = (
+            service_regions_path / region_name / f"{cluster_name}.yaml"
+        )
+        with open(service_override_file, "rb") as f:
+            values = yaml.safe_load(f)
+    except FileNotFoundError:
+        values = {}
+    return values
+
+
+def get_service_data(
+    customer_name: str, service_name: str, cluster_name: str = "default"
+):
     # Customer data is used as the render_data, or the initial data.
-    # This is an ST concept - in single-tenant/k8s/customers we have customer YAMLs
-    # as an all-in-one place to tweak the knobs on various services.
-    # Since SaaS services are so big and special we don't have this concept,
-    # hence load_customer_data for SaaS is just a stub.
 
     # Then inside render_templates, get_service_values
     # puts values into render_data["values"], then the service_data
     # can override those.
     customer_data = load_customer_data(Config(), customer_name, cluster_name)
-    # cluster_config is analogous to customer_data...
     service_data = customer_data.get(service_name, {})
     render_data = {"customer": customer_data}
     return service_data, render_data
@@ -94,11 +123,15 @@ def get_service_template_files(service_name):
         raise click.Abort()
 
     for template in service_dir.iterdir():
-        if not template.name.startswith("_") and template.name.endswith((".yaml", ".yml")):
+        if not template.name.startswith("_") and template.name.endswith(
+            (".yaml", ".yml")
+        ):
             yield template
 
 
-def build_materialized_directory(customer_name: str, cluster_name: str, service_name: str) -> Path:
+def build_materialized_directory(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
     """
     Returns the directory where a service should be rendered when we
     materialize the rendered template.
@@ -112,10 +145,13 @@ def build_materialized_directory(customer_name: str, cluster_name: str, service_
     return path
 
 
-def build_materialized_path(customer_name: str, cluster_name: str, service_name: str) -> Path:
+def build_materialized_path(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
     """
     Returns the file name where to store a materialized service
     """
     return (
-        build_materialized_directory(customer_name, cluster_name, service_name) / "deployment.yaml"
+        build_materialized_directory(customer_name, cluster_name, service_name)
+        / "deployment.yaml"
     )
