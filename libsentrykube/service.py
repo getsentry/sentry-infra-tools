@@ -88,9 +88,6 @@ def get_service_value_overrides(
 
     service_regions_path = service_regions_path / "region_overrides"
 
-    if region_name == "saas":
-        region_name = "us"
-
     try:
         service_override_file: Path = (
             service_regions_path / region_name / f"{cluster_name}.yaml"
