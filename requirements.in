@@ -1,32 +1,34 @@
-# sentry-kube
-dictdiffer
-sshuttle>=1.1.2
-tabulate
-click>=8.1.7
-jinja2
-PyYAML
-kubernetes>=29.0.0
-python-hcl2
-httpx
-google-auth
-google-api-python-client
-paramiko
-pathspec
-requests>=2.32.2
-responses
-sentry_jsonnet
-sentry-sdk
-setuptools
-sshuttle
-tabulate
-urllib3
-jsonpatch
-jsonpath-ng
-types-requests
-types-PyYAML
-types-setuptools
-types-paramiko
-types-tabulate
-types-jsonschema
-sentry-kafka-schemas
+
+# config builder
+click
 jsonschema
+PyYAML
+referencing
+sentry_jsonnet
+sentry_kafka_schemas
+
+# libsentrykube
+click
+google_api_python_client
+httpx
+Jinja2
+jsonpatch
+jsonpath_ng
+kubernetes
+paramiko
+protobuf
+PyYAML
+Requests
+setuptools
+
+# pr_approver
+dictdiffer
+PyYAML
+
+# sentry_kube
+click
+Jinja2
+kubernetes
+PyYAML
+sentry_sdk
+tabulate
