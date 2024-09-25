@@ -57,7 +57,6 @@ setup(
         "console_scripts": [
             "sentry-kube=sentry_kube.cli:main",
             "materialize-config=config_builder.materialize_all:main",
-            "generate-raw-topic-data=config_builder.generate_topic_data:generate_raw_topic_data",
             "pr-docs=assistant.prdocs:main",
             "pr-approver=pr_approver.approver:main",
         ],
