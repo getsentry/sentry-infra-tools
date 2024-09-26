@@ -28,5 +28,4 @@ types-setuptools
 types-paramiko
 types-tabulate
 types-jsonschema
-sentry-kafka-schemas
 jsonschema
