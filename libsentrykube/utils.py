@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import json
 import os
 import platform
 import re
@@ -374,3 +375,15 @@ def get_pubkey() -> Path:
         "SSH public key file.\n"
         "Example: export SSH_PUBLIC_KEY_PATH=/Users/rgibert/.ssh/id_ed25519.pub"
     )
+
+
+def get_service_registry_data(service_registry_id: str) -> dict:
+    filepath = (
+        workspace_root()
+        / "shared_config"
+        / "_materialized_configs"
+        / "service_registry"
+        / "combined"
+        / "service_registry.json"
+    )
+    return json.loads(filepath.read_text())[service_registry_id]
