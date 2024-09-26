@@ -29,6 +29,8 @@ macros = [
     "xds_proxy_sidecar=libsentrykube.ext:XDSProxySidecar",
     "xds_proxy_initcontainer=libsentrykube.ext:XDSProxyInitContainer",
     "xds_proxy_volume=libsentrykube.ext:XDSProxyVolume",
+    "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
+    "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
 ]
 
 

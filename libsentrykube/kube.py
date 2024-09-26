@@ -19,6 +19,7 @@ from libsentrykube.service import (
     get_service_path,
     get_service_template_files,
     get_service_values,
+    get_service_value_overrides,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -96,17 +97,21 @@ def _get_path(obj, *pathparts, default=None):
 def _consolidate_variables(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
 ) -> dict:
+    # Service defaults from _values
+    service_values = get_service_values(service_name)
+
+    # Service data overrides from services/SERVICE/region_overrides/
+    service_value_overrides = get_service_value_overrides(service_name, customer_name, cluster_name)
+    deep_merge_dict(service_values, service_value_overrides)
+
+    # Service data overrides from clusters/
     customer_values, _ = get_service_data(
         customer_name,
         service_name,
         cluster_name,
     )
-
-    service_values = get_service_values(service_name)
-
-    # Service data overrides values.
     deep_merge_dict(service_values, customer_values)
 
     return service_values
@@ -115,7 +120,7 @@ def _consolidate_variables(
 def render_service_values(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
 ) -> dict:
     return _consolidate_variables(customer_name, service_name, cluster_name)
 
@@ -142,7 +147,7 @@ def render_services(
 def render_templates(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
     skip_kinds: Optional[Tuple] = None,
     filters: Optional[List[str]] = None,
 ) -> str:
@@ -235,7 +240,7 @@ def materialize(customer_name: str, service_name: str, cluster_name: str) -> boo
 def collect_kube_resources(
     customer_name,
     service_name,
-    cluster_name=None,
+    cluster_name="default",
     skip_kinds: Optional[Tuple] = ("Job",),
     kind_matches: Optional[Tuple] = None,
     name_matches: Optional[Tuple] = None,
