@@ -1,7 +1,9 @@
 import click
-from libsentrykube.events import report_event_to_datadog
-from libsentrykube.events import report_terragrunt_event
-from libsentrykube.events import SENTRY_KUBE_EVENT_SOURCE_CATEGORY
+from libsentrykube.events import (
+    SENTRY_KUBE_EVENT_SOURCE_CATEGORY,
+    report_event_to_datadog,
+    report_terragrunt_event,
+)
 
 __all__ = ("datadog_log_terragrunt", "datadog_log")
 

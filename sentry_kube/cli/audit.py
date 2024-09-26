@@ -63,7 +63,14 @@ def audit(ctx, services):
             version="v1",
             plural="backendconfigs",
         ),
+        "VerticalPodAutoscaler": functools.partial(
+            apis["CustomObjects"].list_cluster_custom_object,
+            group="autoscaling.k8s.io",
+            version="v1",
+            plural="verticalpodautoscalers",
+        ),
     }
+    crds = [name for name, config in listing_funcs.items() if isinstance(config, functools.partial)]
     # This might miss some kinds if there are no more such objects locally.
     # May need to check for a list of kinds unconditionally.
     return_code = 0
@@ -92,12 +99,12 @@ def audit(ctx, services):
         selector = f"service in ({','.join(services)})"
         items = listing_funcs[kind](label_selector=selector, limit=100)
         while True:
-            if kind in ["ManagedCertificate", "BackendConfig"]:
+            if kind in crds:
                 itemlist = items["items"]
             else:
                 itemlist = items.items
             remote_names.update((item.metadata.namespace, item.metadata.name) for item in itemlist)
-            if kind in ["ManagedCertificate", "BackendConfig"]:
+            if kind in crds:
                 cont = items["metadata"]["continue"]
             else:
                 cont = items.metadata._continue

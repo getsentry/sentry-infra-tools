@@ -29,6 +29,8 @@ macros = [
     "xds_proxy_sidecar=libsentrykube.ext:XDSProxySidecar",
     "xds_proxy_initcontainer=libsentrykube.ext:XDSProxyInitContainer",
     "xds_proxy_volume=libsentrykube.ext:XDSProxyVolume",
+    "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
+    "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
 ]
 
 
@@ -57,7 +59,6 @@ setup(
         "console_scripts": [
             "sentry-kube=sentry_kube.cli:main",
             "materialize-config=config_builder.materialize_all:main",
-            "generate-raw-topic-data=config_builder.generate_topic_data:generate_raw_topic_data",
             "pr-docs=assistant.prdocs:main",
             "pr-approver=pr_approver.approver:main",
         ],

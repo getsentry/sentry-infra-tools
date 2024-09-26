@@ -16,6 +16,7 @@ from libsentrykube.customer import get_machine_type_list
 from libsentrykube.service import get_service_data, get_service_values
 from libsentrykube.utils import (
     deep_merge_dict,
+    get_service_registry_data,
     kube_extract_namespace,
     kube_get_client,
     md5_fileobj,
@@ -181,6 +182,109 @@ class StatefulSetImage(SimpleExtension):
             if c.name == container:
                 return c.image
         return default
+
+
+class ServiceRegistryLabels(SimpleExtension):
+    """
+    Look up metadata about a service from our shared service registry and return a dict of labels
+    """
+
+    def run(self, service_registry_id: str) -> dict:
+        return build_label_data(service_registry_id=service_registry_id)
+
+
+def format_docs(docs: dict) -> str:
+    return ", ".join([f"{k} ({v})" for k, v in docs.items()])
+
+
+def format_people(people: list) -> str:
+    return ", ".join([f'{p["name"]} ({p["email"]})' for p in people])
+
+
+def format_slack_channels(slack_channels: list) -> str:
+    return ", ".join([f"#{sc}" for sc in slack_channels])
+
+
+def format_slos(slos: list) -> str:
+    return ", ".join(slos)
+
+
+def format_teams(teams: list) -> str:
+    return ", ".join(
+        [f'{t["display_name"]} ({t["id"]}) tags={{{",".join(t["tags"])}}}' for t in teams]
+        )
+
+
+def build_annotation_data(service_registry_id: str) -> dict:
+    try:
+        data = get_service_registry_data(service_registry_id=service_registry_id)
+    except Exception:
+        service_reg = {
+            "alertSlackChannels": format_slack_channels(slack_channels=[]),
+            "aspiringDomainExperts": format_people(people=[]),
+            "component": "",
+            "dashboard": "",
+            "docs": format_docs(docs={}),
+            "domainExperts": format_people(people=[]),
+            "escalation": "",
+            "id": "",
+            "name": "",
+            "slackChannels": format_slack_channels(slack_channels=[]),
+            "slos": format_slos(slos=[]),
+            "teams": format_teams(teams=[]),
+            "tier": "",
+        }
+    else:
+        service_reg = {
+            "alertSlackChannels": format_slack_channels(
+                slack_channels=data["alert_slack_channels"]
+            ),
+            "aspiringDomainExperts": format_people(people=data["aspiring_domain_experts"]),
+            "component": data["component"],
+            "dashboard": data["dashboard"],
+            "docs": format_docs(docs=data["docs"]),
+            "domainExperts": format_people(people=data["domain_experts"]),
+            "escalation": data["escalation"],
+            "id": data["id"],
+            "name": data["name"],
+            "slackChannels": format_slack_channels(slack_channels=data["slack_channels"]),
+            "slos": format_slos(slos=data["slos"]),
+            "teams": format_teams(teams=data["teams"]),
+            "tier": str(data["tier"]),
+        }
+
+    return service_reg
+
+
+def build_label_data(service_registry_id: str) -> dict:
+    try:
+        data = get_service_registry_data(service_registry_id=service_registry_id)
+    except Exception:
+        service_reg = {
+            "service_registry_component": "unknown",
+            "service_registry_id": "unknown",
+            "service_registry_primary_team": "unknown",
+            "service_registry_tier": "unknown",
+        }
+    else:
+        # k8s labels have a max of 63 chars
+        service_reg = {
+            "service_registry_component": data["component"],
+            "service_registry_id": data["id"],
+            "service_registry_primary_team": data["teams"][0]["id"],
+            "service_registry_tier": str(data["tier"]),
+        }
+
+    return service_reg
+
+
+class ServiceRegistryAnnotations(SimpleExtension):
+    """
+    Look up metadata about a service from our shared service registry and return a dict of annotations
+    """
+
+    def run(self, service_registry_id: str) -> dict:
+        return build_annotation_data(service_registry_id=service_registry_id)
 
 
 class JsonFile(SimpleExtension):

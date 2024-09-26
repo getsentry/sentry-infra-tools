@@ -83,6 +83,9 @@ def report_terragrunt_event(
     else:
         raise RuntimeError("Unable to determine what slice you're running in.")
 
+    if region == "us":
+        region = "saas"
+
     sentry_region = Config().silo_regions[region].sentry_region
 
     user = getpass.getuser()
