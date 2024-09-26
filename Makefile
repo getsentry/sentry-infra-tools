@@ -3,10 +3,11 @@ reset-python:
 	rm -rf .venv
 .PHONY: reset-python
 
-install-python-dependencies:
-	pip install -q -r requirements-dev.txt
-	pip install -q -r requirements.txt
-	pip install -q pre-commit==2.13.0
+install-dev-dependencies:
+	pip install -r requirements-dev.txt
+
+install-all-dependencies: install-dev-dependencies
+	pip install -r requirements.txt
 .PHONY: install-python-dependencies
 
 install-pre-commit-hook:
@@ -17,7 +18,7 @@ install-brew-dev:
 	brew bundle
 .PHONY: install-brew-dev
 
-develop: install-python-dependencies install-pre-commit-hook install-brew-dev
+develop: install-all-dependencies install-pre-commit-hook install-brew-dev
 
 .PHONY: tools-test
 tools-test:

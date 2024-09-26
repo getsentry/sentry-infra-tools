@@ -14,7 +14,7 @@ jobs:
 
       - name: Make environment
         run: |
-          make install-python-dependencies
+          make install-dev-dependencies
 
       - name: Set up Go
         uses: actions/setup-go@v2
