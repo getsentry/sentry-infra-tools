@@ -237,7 +237,9 @@ def run_pod(
     }
     if delete or only_delete:
         label_selector = ",".join(f"{k}={v}" for k, v in run_pod_labels.items())
-        resp = api.list_namespaced_pod(namespace=namespace, label_selector=label_selector)
+        resp = api.list_namespaced_pod(
+            namespace=namespace, label_selector=label_selector
+        )
         if resp.items:
             click.secho(f"Found PodS for {label_selector}", fg="red")
             pod_names = [pod.metadata.name for pod in resp.items]
@@ -285,7 +287,9 @@ def run_pod(
         if container["name"] == container_name:
             break
     else:
-        click.echo(f"Can't find container:{container_name} in service:{service} and name:{name}")
+        click.echo(
+            f"Can't find container:{container_name} in service:{service} and name:{name}"
+        )
         click.echo(
             f"Available containers: {','.join(c['name'] for c in pod_template['spec']['containers'])}"
         )
@@ -356,7 +360,10 @@ def run_pod(
 
     try:
         report_event_for_service(
-            ctx.obj.customer_name, ctx.obj.cluster_name, operation="run-pod", service_name=service
+            ctx.obj.customer_name,
+            ctx.obj.cluster_name,
+            operation="run-pod",
+            service_name=service,
         )
     except Exception as e:
         click.echo("!! Could not report an event to DataDog:")
@@ -373,7 +380,9 @@ def run_pod(
                     for state in ("running", "terminated", "waiting"):
                         full_state = getattr(container_status.state, state)
                         if full_state:
-                            msg = f"-- container: {container_status.name}, state: {state}"
+                            msg = (
+                                f"-- container: {container_status.name}, state: {state}"
+                            )
                             if state != "running":
                                 msg += f", reason: {full_state.reason}"
                             click.echo(msg)
@@ -400,7 +409,7 @@ def run_pod(
             obj=ctx.obj,
             allow_extra_args=True,
         )
-        exec_args = ["exec"]
+        exec_args = ["-n", namespace, "exec"]
         if interactive:
             exec_args.append("-i")
         if tty:

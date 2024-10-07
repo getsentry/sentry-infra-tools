@@ -36,6 +36,9 @@ def build_command(ctx, host, host_port, project, verbose, region, zone, local_po
     config = Config()
     cluster_name = config.silo_regions[customer_name].k8s_config.cluster_name
 
+    if cluster_name is None:
+        cluster_name = "default"
+
     if not project:
         project = get_project(config, customer_name, cluster_name)
 
@@ -75,8 +78,12 @@ def build_command(ctx, host, host_port, project, verbose, region, zone, local_po
     help="GCP project for the instance, required if not in 'internal-sentry'",
 )
 @click.option("-v", "--verbose", count=True)
-@click.option("--region", "-r", show_default=True, required=False, help="The region to act on")
-@click.option("--zone", "-z", show_default=True, required=False, help="The zone to act on")
+@click.option(
+    "--region", "-r", show_default=True, required=False, help="The region to act on"
+)
+@click.option(
+    "--zone", "-z", show_default=True, required=False, help="The zone to act on"
+)
 @click.option(
     "--local-port",
     "-l",
@@ -109,11 +116,15 @@ def tunnel(ctx, host, host_port, project, verbose, region, zone, local_port, bro
     if host_port in ["kafka", "Kafka"]:
         host_port = "9092"
 
-    cmd = build_command(ctx, host, host_port, project, verbose, region, zone, local_port)
+    cmd = build_command(
+        ctx, host, host_port, project, verbose, region, zone, local_port
+    )
     click.echo(" ".join(cmd))
 
     # Inspired by https://blog.dalibo.com/2022/09/12/monitoring-python-subprocesses.html
-    with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+    with subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    ) as proc:
         errs = []
         for line in proc.stderr:
             # click.echo(line)

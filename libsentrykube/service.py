@@ -52,7 +52,7 @@ def get_service_names() -> List[str]:
     return [s for s in _services.keys()]
 
 
-def get_service_values(service_name: str, external: bool = False):
+def get_service_values(service_name: str, external: bool = False) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
 
@@ -69,9 +69,13 @@ def get_service_values(service_name: str, external: bool = False):
         values = {}
     return values
 
+
 def get_service_value_overrides(
-    service_name: str, region_name: str, cluster_name: str = "default", external: bool = False
-):
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
 
@@ -88,14 +92,19 @@ def get_service_value_overrides(
         region_name = "us"
 
     try:
-        service_override_file: Path = service_regions_path / region_name / f"{cluster_name}.yaml"
+        service_override_file: Path = (
+            service_regions_path / region_name / f"{cluster_name}.yaml"
+        )
         with open(service_override_file, "rb") as f:
             values = yaml.safe_load(f)
     except FileNotFoundError:
         values = {}
     return values
 
-def get_service_data(customer_name: str, service_name: str, cluster_name: str = "default"):
+
+def get_service_data(
+    customer_name: str, service_name: str, cluster_name: str = "default"
+):
     # Customer data is used as the render_data, or the initial data.
 
     # Then inside render_templates, get_service_values
@@ -114,11 +123,15 @@ def get_service_template_files(service_name):
         raise click.Abort()
 
     for template in service_dir.iterdir():
-        if not template.name.startswith("_") and template.name.endswith((".yaml", ".yml")):
+        if not template.name.startswith("_") and template.name.endswith(
+            (".yaml", ".yml")
+        ):
             yield template
 
 
-def build_materialized_directory(customer_name: str, cluster_name: str, service_name: str) -> Path:
+def build_materialized_directory(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
     """
     Returns the directory where a service should be rendered when we
     materialize the rendered template.
@@ -132,10 +145,13 @@ def build_materialized_directory(customer_name: str, cluster_name: str, service_
     return path
 
 
-def build_materialized_path(customer_name: str, cluster_name: str, service_name: str) -> Path:
+def build_materialized_path(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
     """
     Returns the file name where to store a materialized service
     """
     return (
-        build_materialized_directory(customer_name, cluster_name, service_name) / "deployment.yaml"
+        build_materialized_directory(customer_name, cluster_name, service_name)
+        / "deployment.yaml"
     )

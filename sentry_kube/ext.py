@@ -122,8 +122,12 @@ class PGBouncerSidecar(SimpleExtension):
         if custom_pre_stop_command:
             pre_stop_command = custom_pre_stop_command
 
+        image = f"{repository}/pgbouncer:{version}"
+        if ".pkg.dev/" in repository:
+            image = f"{repository}/pgbouncer/image:{version}"
+
         res = {
-            "image": f"{repository}/pgbouncer:{version}",
+            "image": image,
             "name": "pgbouncer",
             "args": [
                 "/bin/sh",
@@ -222,11 +226,15 @@ class XDSConfigMapFrom(SimpleExtension):
                         listeners.extend(doc.get("listeners", []))
                         clusters.extend(doc.get("clusters", []))
                         for by in assignments.keys():
-                            for key, values in doc.get("assignments", {}).get(by, {}).items():
+                            for key, values in (
+                                doc.get("assignments", {}).get(by, {}).items()
+                            ):
                                 assignments[by].setdefault(key, {})
                                 for type in types:
                                     assignments[by][key].setdefault(type, [])
-                                    assignments[by][key][type].extend(values.get(type, []))
+                                    assignments[by][key][type].extend(
+                                        values.get(type, [])
+                                    )
 
         for by in assignments.keys():
             for key in assignments[by].keys():

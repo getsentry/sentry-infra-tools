@@ -13,7 +13,7 @@ from kubernetes.client import AppsV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
-from libsentrykube.service import get_service_data, get_service_values
+from libsentrykube.kube import render_service_values
 from libsentrykube.utils import (
     deep_merge_dict,
     get_service_registry_data,
@@ -211,8 +211,11 @@ def format_slos(slos: list) -> str:
 
 def format_teams(teams: list) -> str:
     return ", ".join(
-        [f'{t["display_name"]} ({t["id"]}) tags={{{",".join(t["tags"])}}}' for t in teams]
-        )
+        [
+            f'{t["display_name"]} ({t["id"]}) tags={{{",".join(t["tags"])}}}'
+            for t in teams
+        ]
+    )
 
 
 def build_annotation_data(service_registry_id: str) -> dict:
@@ -239,7 +242,9 @@ def build_annotation_data(service_registry_id: str) -> dict:
             "alertSlackChannels": format_slack_channels(
                 slack_channels=data["alert_slack_channels"]
             ),
-            "aspiringDomainExperts": format_people(people=data["aspiring_domain_experts"]),
+            "aspiringDomainExperts": format_people(
+                people=data["aspiring_domain_experts"]
+            ),
             "component": data["component"],
             "dashboard": data["dashboard"],
             "docs": format_docs(docs=data["docs"]),
@@ -247,7 +252,9 @@ def build_annotation_data(service_registry_id: str) -> dict:
             "escalation": data["escalation"],
             "id": data["id"],
             "name": data["name"],
-            "slackChannels": format_slack_channels(slack_channels=data["slack_channels"]),
+            "slackChannels": format_slack_channels(
+                slack_channels=data["slack_channels"]
+            ),
             "slos": format_slos(slos=data["slos"]),
             "teams": format_teams(teams=data["teams"]),
             "tier": str(data["tier"]),
@@ -330,7 +337,11 @@ class Md5Template(Md5File):
     @pass_context
     def run(self, context, template_path: str) -> str:  # type: ignore
         return md5_fileobj(
-            io.BytesIO(self.environment.get_template(template_path).render(context).encode("utf-8"))
+            io.BytesIO(
+                self.environment.get_template(template_path)
+                .render(context)
+                .encode("utf-8")
+            )
         )
 
 
@@ -412,31 +423,18 @@ class ValuesOf(SimpleExtension):
         self,
         context,
         service_name: str,
-        cluster_name: str | None = None,
+        cluster_name: str = "default",
         external: bool = False,
     ) -> dict:
         customer_name = context["customer"]["id"]
-
-        # Handle multi-cluster scenarios where default defaults to None
-        if cluster_name is None:
-            cluster_name = "default"
 
         # Handle sentry4sentry id being in the s4s directory
         if customer_name == "sentry4sentry":
             customer_name = "s4s"
 
-        service_data, _ = get_service_data(
-            customer_name,
-            service_name,
-            cluster_name,
+        return render_service_values(
+            customer_name, service_name, cluster_name, external
         )
-
-        values = get_service_values(service_name, external)
-
-        # Service data overrides values.
-        deep_merge_dict(values, service_data)
-
-        return values
 
 
 class EnvoySidecar(SimpleExtension):
@@ -489,7 +487,9 @@ class EnvoySidecar(SimpleExtension):
                     f"{pre_stop_command}"
                 )
             else:
-                raise ValueError("'admin' configuration is required for draining to work")
+                raise ValueError(
+                    "'admin' configuration is required for draining to work"
+                )
 
         if custom_pre_stop_command:
             pre_stop_command = custom_pre_stop_command
@@ -520,7 +520,9 @@ class EnvoySidecar(SimpleExtension):
             # only write to "/tmp", plus there might be issues with binding to unix
             # sockets. Setting ENVOY_UID to 0 reverts that change in behavior.
             "env": [{"name": "ENVOY_UID", "value": "0"}],
-            "lifecycle": {"preStop": {"exec": {"command": ["/bin/sh", "-c", pre_stop_command]}}},
+            "lifecycle": {
+                "preStop": {"exec": {"command": ["/bin/sh", "-c", pre_stop_command]}}
+            },
             "resources": {
                 "requests": {"cpu": "15m", "memory": "20Mi"},
                 "limits": {"memory": "50Mi"},
@@ -652,16 +654,24 @@ class XDSProxySidecar(SimpleExtension):
                 "command": [
                     "/bin/sh",
                     "-ec",
-                    XDS_SIDECAR_ENTRYPOINT.format(cluster=cluster, concurrency=concurrency).strip(),
+                    XDS_SIDECAR_ENTRYPOINT.format(
+                        cluster=cluster, concurrency=concurrency
+                    ).strip(),
                 ],
                 "lifecycle": {
-                    "preStop": {"exec": {"command": ["/bin/sh", "-c", f"/bin/sleep {preStopWait}"]}}
+                    "preStop": {
+                        "exec": {
+                            "command": ["/bin/sh", "-c", f"/bin/sleep {preStopWait}"]
+                        }
+                    }
                 },
                 "resources": {
                     "requests": {"cpu": "15m", "memory": "20Mi"},
                     "limits": {"cpu": "1000m", "memory": "50Mi"},
                 },
-                "volumeMounts": [{"name": "envoy-bootstrap-data", "mountPath": "/data"}],
+                "volumeMounts": [
+                    {"name": "envoy-bootstrap-data", "mountPath": "/data"}
+                ],
             }
         )
 
@@ -689,7 +699,9 @@ class SysctlInitContainer(SimpleExtension):
 
     def run(self, params: dict):
         assert params, "No sysctl values provided"
-        command = " ".join(f"sysctl -w '{key}'='{value}';" for key, value in sorted(params.items()))
+        command = " ".join(
+            f"sysctl -w '{key}'='{value}';" for key, value in sorted(params.items())
+        )
         return json.dumps(
             {
                 "name": "init-sysctl",
@@ -711,7 +723,9 @@ class XDSProxyInitContainer(SimpleExtension):
                     "-ec",
                     XDS_BOOTSTRAP_ENTRYPOINT.format(cluster=cluster).strip(),
                 ],
-                "volumeMounts": [{"name": "envoy-bootstrap-data", "mountPath": "/data"}],
+                "volumeMounts": [
+                    {"name": "envoy-bootstrap-data", "mountPath": "/data"}
+                ],
             }
         )
 
@@ -760,14 +774,18 @@ class MachineType(SimpleExtension):
     def run(self, project: str, zone: str, name: str) -> Dict[str, str]:
         return self._get_machine_type_by_name(project, zone, name)
 
-    def _get_machine_type_by_name(self, project: str, zone: str, name: str) -> Dict[str, str]:
+    def _get_machine_type_by_name(
+        self, project: str, zone: str, name: str
+    ) -> Dict[str, str]:
         if name in self._type_cache:
             return self._type_cache[name]
         if self._items_cache:
             return self._get_type_from_items_cache(name)
         return self._execute_get_machine_type(project, zone, name)
 
-    def _execute_get_machine_type(self, project: str, zone: str, name: str) -> Dict[str, str]:
+    def _execute_get_machine_type(
+        self, project: str, zone: str, name: str
+    ) -> Dict[str, str]:
         self._items_cache = get_machine_type_list(project, zone)
         return self._get_type_from_items_cache(name)
 
