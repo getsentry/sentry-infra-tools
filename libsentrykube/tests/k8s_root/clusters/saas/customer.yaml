@@ -9,3 +9,6 @@ services:
 - k8s_root/services/service1
 - k8s_root/services/service2
 - k8s_root/services/service4
+
+service2:
+  key3: three

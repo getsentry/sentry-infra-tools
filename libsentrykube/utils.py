@@ -22,7 +22,7 @@ from yaml import SafeDumper, safe_dump_all, safe_load_all
 # According to https://kubernetes.io/releases/version-skew-policy/#kubectl
 # kubectl is supported within one minor version (older or newer) of kube-apiserver.
 # Also, you'll want to upgrade the python kubernetes client version accordingly.
-KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.28.7")
+KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.30.4")
 ENABLE_NOTIFICATIONS = os.environ.get("SENTRY_KUBE_ENABLE_NOTIFICATIONS", False)
 
 _kube_client = None
@@ -66,7 +66,9 @@ def ensure_gcloud_reauthed() -> None:
     # stdout just contains a large amount of configuration information, so ignore.
     out, err = proc.communicate()
     if proc.returncode != 0:
-        raise RuntimeError(f"Failed to ensure gcloud reauthentication.\n\nstdout:\n{str(out)}")
+        raise RuntimeError(
+            f"Failed to ensure gcloud reauthentication.\n\nstdout:\n{str(out)}"
+        )
 
 
 def poke_sudo() -> None:
@@ -113,7 +115,9 @@ def kube_set_context(context_name: str, kubeconfig: str) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
-            _kube_client = new_client_from_config(config_file=kubeconfig, context=context_name)
+            _kube_client = new_client_from_config(
+                config_file=kubeconfig, context=context_name
+            )
         except ConfigException as e:
             # example: gke_internal-sentry_us-central1-b_zdpwkxst
             _, project, region, cluster = context_name.split("_")
@@ -163,7 +167,9 @@ def kube_classes_for_data(data: Any) -> Tuple[Any, Any]:
     group = "".join(word.capitalize() for word in group.split("."))
     try:
         api = getattr(kubernetes.client, f"{group}{version.capitalize()}Api")
-        kind = getattr(kubernetes.client.models, f"{version.capitalize()}{data['kind']}")
+        kind = getattr(
+            kubernetes.client.models, f"{version.capitalize()}{data['kind']}"
+        )
     except AttributeError as e:
         raise RuntimeError(
             f"""{e}
@@ -202,7 +208,10 @@ def workspace_root() -> Path:
         return _workspace_root
 
     workspace_root, root = _cwd, Path("/")
-    while ".terragrunt-cache" in workspace_root.parts or not (workspace_root / ".git").is_dir():
+    while (
+        ".terragrunt-cache" in workspace_root.parts
+        or not (workspace_root / ".git").is_dir()
+    ):
         workspace_root = (workspace_root / "..").resolve()
         if workspace_root == root:
             raise RuntimeError("failed to locate a git root directory")
@@ -239,7 +248,9 @@ def block_until_sshd_ready(*, host: str, port: int = 22) -> None:
         try:
             # Attempt to actually negotiate an SSH session
             s.connect((host, port))
-            t = Transport(s, gss_kex=False, gss_deleg_creds=True, disabled_algorithms=None)
+            t = Transport(
+                s, gss_kex=False, gss_deleg_creds=True, disabled_algorithms=None
+            )
             # start_client will block until either the handshake
             # is completed or the timeout occurs. No exception is
             # raised in the event of a timeout, so a check to
@@ -336,7 +347,9 @@ def chunked(lst: List[Any], n: int) -> Iterator[List[Any]]:
         yield lst[i : i + n]
 
 
-def deep_merge_dict(into: dict[Any, Any], other: dict[Any, Any], overwrite: bool = True) -> None:
+def deep_merge_dict(
+    into: dict[Any, Any], other: dict[Any, Any], overwrite: bool = True
+) -> None:
     """
     Merges `other` dict into the `into` dict. Will perform recursive merges if those dicts contain other dicts.
 
