@@ -47,7 +47,7 @@ def kafkactl(ctx):
         delete=False,
         only_delete=False,
         selective_delete=None,
-        root=True,
+        root=False,
         safe_to_evict=False,
         memory=None,
     )
@@ -68,7 +68,7 @@ def kafkactl(ctx):
         delete=False,
         only_delete=True,
         selective_delete=None,
-        root=True,
+        root=False,
         safe_to_evict=False,
         memory=None,
     )
