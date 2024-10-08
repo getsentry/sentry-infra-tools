@@ -1,3 +1,20 @@
+## 0.0.9
+
+### Various fixes & improvements
+
+- chore(sync): Sync with changes till sha b65df3da50166daec95facef9ca44d8ebfed525 (#31) by @nikhars
+- Install all dependencies (#30) by @nikhars
+- Fix the dependencies (#30) by @nikhars
+- fix (#30) by @nikhars
+- ignore dist directory (#30) by @nikhars
+- fix the dependencies (#30) by @nikhars
+- Sync upto sha 493ddf7e9b5ed3a5e5ee8233ea3fd330c3bb3c7 (#27) by @nikhars
+- Remove sentry kafka schemas dependency (#29) by @nikhars
+- Remove it from setup.py (#29) by @nikhars
+- Remove generate topic data (#29) by @nikhars
+- WIP (#30) by @nikhars
+- chore(sync): Sync with changes on ops repo (#27) by @nikhars
+
 ## 0.0.8
 
 ### Various fixes & improvements
