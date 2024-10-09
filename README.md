@@ -38,3 +38,11 @@ $ sentry-kube --help
 * `SENTRY_KUBE_KUBECTL_VERSION`: Set `SENTRY_KUBE_KUBECTL_VERSION=1.22.17` to configure the kubectl version to use
 * `SENTRY_KUBE_NO_CONTEXT`: Set `SENTRY_KUBE_NO_CONTEXT=1` to skip checking for a functional kube context
 * `SENTRY_KUBE_ROOT`: Sets the workspace root. It defaults to the git root directory.
+
+## How to use sentry-infra-tools in editable mode (for development) in another environment
+
+Lets assume you have a local working copy of sentry-infra-tools in `~/sentry-infra-tools` and you want to use it in
+another virtual environment in editable mode. Here is how you can do it:
+
+1. Go to the environment where you want to use sentry-infra-tools in editable mode.
+2.
