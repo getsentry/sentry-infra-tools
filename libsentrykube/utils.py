@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import importlib
 import json
 import os
 import platform
@@ -391,12 +392,16 @@ def get_pubkey() -> Path:
 
 
 def get_service_registry_data(service_registry_id: str) -> dict:
-    filepath = (
-        workspace_root()
-        / "shared_config"
-        / "_materialized_configs"
-        / "service_registry"
-        / "combined"
-        / "service_registry.json"
-    )
+    filepath = get_service_registry_filepath()
     return json.loads(filepath.read_text())[service_registry_id]
+
+
+def get_service_registry_filepath() -> Path:
+    service_registry_pkg_name = "sentry_service_registry"
+    try:
+        importlib.import_module(service_registry_pkg_name)
+        path = str(importlib.resources.files(service_registry_pkg_name).joinpath(''))
+        return Path(path) / "sentry_service_registry" / "services.json"
+    except ImportError:
+        root = workspace_root()
+        return Path(f"{root}/shared_config/_materialized_configs/service_registry/combined/service_registry.json")
