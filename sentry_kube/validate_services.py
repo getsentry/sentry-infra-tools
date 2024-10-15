@@ -49,18 +49,22 @@ def test_services(filename: Sequence[str]) -> None:
                 Path(service_path) / "policy",
             ]
 
-            rendered = render_services(
+            rendered_lint = render_services(
                 resource.customer_name, resource.cluster_name, [resource.service_name]
             )
             click.echo(f"Linting resource {resource.service_name}")
             lint_errors_count += lint_and_print(
-                resource.customer_name, resource.cluster_name, resource.service_name, rendered
+                resource.customer_name, resource.cluster_name, resource.service_name, rendered_lint
+            )
+
+            rendered_validate = render_services(
+                resource.customer_name, resource.cluster_name, [resource.service_name]
             )
 
             click.echo(f"Testing resource {resource.service_name}")
             for path in policies_paths:
                 if path.exists() and path.is_dir():
-                    for doc in rendered:
+                    for doc in rendered_validate:
                         click.echo(f"Evaluating policies in {path}")
                         cmd = ["conftest", "test", "--policy", path, "-"]
                         child_process = subprocess.Popen(
