@@ -18,13 +18,12 @@
 
 Follow the setup instructions in the [top-level README](../../README.md).
 
-
 ## Help
 
 All commands support `--help`, so please reference this.
 
 ```shell
-$ sentry-kube --help
+sentry-kube --help
 ```
 
 ## Environment Variables
@@ -41,8 +40,22 @@ $ sentry-kube --help
 
 ## How to use sentry-infra-tools in editable mode (for development) in another environment
 
-Lets assume you have a local working copy of sentry-infra-tools in `~/sentry-infra-tools` and you want to use it in
-another virtual environment in editable mode. Here is how you can do it:
+Lets assume you have a local working copy of sentry-infra-tools in
+`~/sentry-infra-tools`. Lets assume that you made some change
+in your local copy of sentry-infra-tools. But you would like to validate
+the change in a different virtual environment. Here is how you can do it:
 
-1. Go to the environment where you want to use sentry-infra-tools in editable mode.
-2.
+1. Remove the existing sentry-infra-tools package from the environment
+   where you want to test it out.
+
+```shell
+pip uninstall sentry-infra-tools
+```
+
+2. Install the local working copy of sentry-infra-tools in editable mode.
+
+```shell
+pip install -e ~/sentry-infra-tools
+```
+
+3. Done. You should now be able to use the local working copy of sentry-infra-tools in the other environment.
