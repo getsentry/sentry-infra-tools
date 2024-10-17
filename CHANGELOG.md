@@ -1,3 +1,9 @@
+## 0.0.11
+
+### Various fixes & improvements
+
+- Sync till 134da6c507d2ee342575762cb3e47cc25b898767 (#35) by @nikhars
+
 ## 0.0.10
 
 ### Various fixes & improvements
