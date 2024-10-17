@@ -1,3 +1,9 @@
+## 0.0.10
+
+### Various fixes & improvements
+
+- chore(sync): Sync changes till a864cafd6a4771434bab51c79b7773877c8342d7 (#32) by @nikhars
+
 ## 0.0.9
 
 ### Various fixes & improvements
