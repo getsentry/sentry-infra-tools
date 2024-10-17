@@ -41,7 +41,7 @@ sentry-kube --help
 ## How to use sentry-infra-tools in editable mode (for development) in another environment
 
 Lets assume you have a local working copy of sentry-infra-tools in
-`~/sentry-infra-tools`. Lets assume that you made some change
+`<path-to-local-working-copy>/sentry-infra-tools`. Lets assume that you made some change
 in your local copy of sentry-infra-tools. But you would like to validate
 the change in a different virtual environment. Here is how you can do it:
 
@@ -52,10 +52,21 @@ the change in a different virtual environment. Here is how you can do it:
 pip uninstall sentry-infra-tools
 ```
 
-2. Install the local working copy of sentry-infra-tools in editable mode.
+2. Install the local working copy of sentry-infra-tools in editable mode. You can do this either manually as shown below.
 
 ```shell
-pip install -e ~/sentry-infra-tools
+pip install -e <path-to-local-working-copy>/sentry-infra-tools
 ```
+
+Or if `requirements.txt` is being used, you can remove the existing reference to `sentry-infra-tools` and add a reference to the local working copy.
+
+```shell
+# Edit python/requirements.txt
+# Remove any existing reference to sentry-infra-tools
+# Add the following reference to local working copy
+-e <path-to-local-working-copy>/sentry-infra-tools
+```
+
+and then run `pip install -r requirements.txt`.
 
 3. Done. You should now be able to use the local working copy of sentry-infra-tools in the other environment.
