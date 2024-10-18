@@ -1,3 +1,9 @@
+## 0.0.12
+
+### Various fixes & improvements
+
+- fix(diff): Expose important-diffs-only (#37) by @nikhars
+
 ## 0.0.11
 
 ### Various fixes & improvements
