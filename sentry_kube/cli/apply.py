@@ -9,6 +9,7 @@ import urllib.error
 from functools import wraps
 from typing import Iterator, List, Sequence
 from time import sleep
+import shutil
 
 import click
 import yaml
@@ -25,7 +26,6 @@ from libsentrykube.utils import (
     ensure_kubectl,
     macos_notify,
     pretty,
-    workspace_root,
 )
 
 __all__ = (
@@ -37,7 +37,9 @@ __all__ = (
 # Number of objects to process in parallel when diffing against the live version.
 # Larger number = faster, but more memory, I/O and CPU over that shorter period of
 # time.
-KUBECTL_DIFF_CONCURRENCY: int = int(os.environ.get("SENTRY_KUBE_KUBECTL_DIFF_CONCURRENCY", 1))
+KUBECTL_DIFF_CONCURRENCY: int = int(
+    os.environ.get("SENTRY_KUBE_KUBECTL_DIFF_CONCURRENCY", 1)
+)
 DEFAULT_SOAK_TIME_S = 120
 
 
@@ -88,7 +90,9 @@ def allow_for_all_services(f):
     return wrapper
 
 
-def _render(ctx, services, raw=False, skip_kinds=None, filters=None, use_canary: bool = False):
+def _render(
+    ctx, services, raw=False, skip_kinds=None, filters=None, use_canary: bool = False
+):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
 
@@ -143,9 +147,13 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
             new_env["ORIG_KUBECTL_EXTERNAL_DIFF"] = orig_kubectl_external_diff
 
         # Inject our wrapper into KUBECTL_EXTERNAL_DIFF env to filter out unwanted info
-        kubectl_external_diff_cmd = os.path.join(
-            workspace_root(), "bin/important-diffs-only"
-        )
+
+        # Find out where the important-diffs-only script is located
+        binary_name = "important-diffs-only"
+        kubectl_external_diff_cmd = shutil.which(binary_name)
+        if not kubectl_external_diff_cmd:
+            raise click.ClickException(f"Could not find {binary_name} in PATH")
+
         new_env["KUBECTL_EXTERNAL_DIFF"] = kubectl_external_diff_cmd
 
     child_process = subprocess.Popen(
@@ -188,7 +196,9 @@ def _diff_kubectl(
     # It needs multiple files to fully utilize concurrency implementation.
     yaml_docs = [
         yaml.dump(yaml_doc)
-        for yaml_doc in yaml.load_all(definitions.decode("utf-8"), Loader=yaml.SafeLoader)
+        for yaml_doc in yaml.load_all(
+            definitions.decode("utf-8"), Loader=yaml.SafeLoader
+        )
     ]
 
     @contextlib.contextmanager
@@ -247,7 +257,9 @@ def _diff_kubectl(
     lines = output.split("\n")
     for line in lines:
         # blocking garbage output
-        if all([keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]) or any(
+        if all(
+            [keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]
+        ) or any(
             [
                 "kubectl.kubernetes.io/last-applied-configuration" in line,
                 "diff -u -N" in line,
@@ -310,7 +322,9 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
 )
 @click.option("--use-canary", is_flag=True, default=False)
 @allow_for_all_services
-def diff(ctx, services, filters, server_side, important_diffs_only: bool, use_canary: bool):
+def diff(
+    ctx, services, filters, server_side, important_diffs_only: bool, use_canary: bool
+):
     """
     Render a diff between production and local configs, using a wrapper around
     "kubectl diff".
@@ -320,7 +334,9 @@ def diff(ctx, services, filters, server_side, important_diffs_only: bool, use_ca
     """
     click.echo(f"Rendering services: {', '.join(services)}")
     definitions = "".join(
-        _render(ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary),
+        _render(
+            ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary
+        ),
     ).encode("utf-8")
 
     if use_canary:
@@ -406,7 +422,9 @@ def apply(
         # For each service applied, check specified monitors aren't in Warning or Alert state.
         # If no monitor IDs are available then default to a manual prompt.
         if not canary_applied:
-            click.echo(f"\nNo canary changes for {services} skipping validation/soaking.\n")
+            click.echo(
+                f"\nNo canary changes for {services} skipping validation/soaking.\n"
+            )
         else:
             for service in services:
                 if skip_monitor_checks or service not in service_monitors:
@@ -468,7 +486,9 @@ def _apply(
     customer_name = ctx.obj.customer_name
     click.echo(f"Rendering services: {', '.join(services)}")
     definitions = "".join(
-        _render(ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary),
+        _render(
+            ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary
+        ),
     ).encode("utf-8")
 
     if not _diff_kubectl(ctx, definitions, server_side, important_diffs_only):
