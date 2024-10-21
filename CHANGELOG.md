@@ -1,3 +1,12 @@
+## 0.0.13
+
+### Various fixes & improvements
+
+- fix: add missing __init__.py for kubectl (#38) by @bmckerry
+- fix(service_registry): Dynamic detection of path (#33) by @nikhars
+- feat(devenv): Use devenv for setup (#36) by @nikhars
+- chore(readme): sentry-infra-tools in editable mode (#34) by @nikhars
+
 ## 0.0.12
 
 ### Various fixes & improvements
