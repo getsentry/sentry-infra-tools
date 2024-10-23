@@ -23,6 +23,7 @@ from yaml import SafeDumper, safe_dump_all, safe_load_all
 # According to https://kubernetes.io/releases/version-skew-policy/#kubectl
 # kubectl is supported within one minor version (older or newer) of kube-apiserver.
 # Also, you'll want to upgrade the python kubernetes client version accordingly.
+KUBECTL_BINARY = os.environ.get("SENTRY_KUBE_KUBECTL_BINARY", "kubectl")
 KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.30.4")
 ENABLE_NOTIFICATIONS = os.environ.get("SENTRY_KUBE_ENABLE_NOTIFICATIONS", False)
 
@@ -290,57 +291,64 @@ def ensure_libsentrykube_folder() -> Path:
 
 
 @cache
-def ensure_kubectl(version: str = KUBECTL_VERSION) -> Path:
+def ensure_kubectl(
+    binary: str = KUBECTL_BINARY, version: str = KUBECTL_VERSION
+) -> Path:
     base = ensure_libsentrykube_folder() / "kubectl" / f"v{version}"
-    path = base / "kubectl"
+    path = base / binary
     if path.is_file():
         return path
 
-    base.mkdir(parents=True, exist_ok=True)
+    if binary == "kubectl":
+        base.mkdir(parents=True, exist_ok=True)
 
-    import hashlib
-    import platform
+        import hashlib
+        import platform
 
-    import click
-    import httpx
+        import click
+        import httpx
 
-    click.echo(f"> kubectl v{version} is missing, so downloading")
+        click.echo(f"> kubectl v{version} is missing, so downloading")
 
-    arch = platform.machine()
-    arch = "amd64" if arch in ["x86_64", "amd64", "aarch64"] else arch
+        arch = platform.machine()
+        arch = "amd64" if arch in ["x86_64", "amd64", "aarch64"] else arch
 
-    # lol windows
-    system = "darwin" if platform.system() == "Darwin" else "linux"
-    url = f"https://dl.k8s.io/release/v{version}/bin/{system}/{arch}/kubectl"
+        # lol windows
+        system = "darwin" if platform.system() == "Darwin" else "linux"
+        url = f"https://dl.k8s.io/release/v{version}/bin/{system}/{arch}/kubectl"
 
-    resp = httpx.get(f"{url}.sha256", follow_redirects=True)
-    resp.raise_for_status()
-    checksum = resp.text.strip()
+        resp = httpx.get(f"{url}.sha256", follow_redirects=True)
+        resp.raise_for_status()
+        checksum = resp.text.strip()
 
-    click.echo(f">> downloading {url}")
+        click.echo(f">> downloading {url}")
 
-    sha256_hash = hashlib.sha256()
-    tmp_path = base / ".download"
-    with tmp_path.open("wb") as file:
-        with httpx.stream("GET", url, follow_redirects=True) as r:
-            for data in r.iter_bytes():
-                file.write(data)
-                sha256_hash.update(data)
+        sha256_hash = hashlib.sha256()
+        tmp_path = base / ".download"
+        with tmp_path.open("wb") as file:
+            with httpx.stream("GET", url, follow_redirects=True) as r:
+                for data in r.iter_bytes():
+                    file.write(data)
+                    sha256_hash.update(data)
 
-    dl_checksum = sha256_hash.hexdigest()
-    if dl_checksum != checksum:
-        try:
-            tmp_path.unlink()
-        except FileNotFoundError:
-            pass
-        click.secho("!! Checksums do not match", fg="red", bold=True)
-        click.secho(f"    checksum: {repr(checksum)}", fg="red", bold=True)
-        click.secho(f"    download: {repr(dl_checksum)}", fg="red", bold=True)
-        raise click.Abort()
+        dl_checksum = sha256_hash.hexdigest()
+        if dl_checksum != checksum:
+            try:
+                tmp_path.unlink()
+            except FileNotFoundError:
+                pass
+            click.secho("!! Checksums do not match", fg="red", bold=True)
+            click.secho(f"    checksum: {repr(checksum)}", fg="red", bold=True)
+            click.secho(f"    download: {repr(dl_checksum)}", fg="red", bold=True)
+            raise click.Abort()
 
-    tmp_path.rename(path)
-    path.chmod(0o755)
-    return path
+        tmp_path.rename(path)
+        path.chmod(0o755)
+        return path
+    else:
+        raise RuntimeError(
+            f"Unsupported binary '{binary}', please install it manually or update SENTRY_KUBE_KUBECTL_BINARY."
+        )
 
 
 def chunked(lst: List[Any], n: int) -> Iterator[List[Any]]:
@@ -400,8 +408,10 @@ def get_service_registry_filepath() -> Path:
     service_registry_pkg_name = "sentry_service_registry"
     try:
         importlib.import_module(service_registry_pkg_name)
-        path = str(importlib.resources.files(service_registry_pkg_name).joinpath(''))
+        path = str(importlib.resources.files(service_registry_pkg_name).joinpath(""))
         return Path(path) / "sentry_service_registry" / "services.json"
     except ImportError:
         root = workspace_root()
-        return Path(f"{root}/shared_config/_materialized_configs/service_registry/combined/service_registry.json")
+        return Path(
+            f"{root}/shared_config/_materialized_configs/service_registry/combined/service_registry.json"
+        )
