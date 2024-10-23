@@ -1,3 +1,9 @@
+## 0.0.14
+
+### Various fixes & improvements
+
+- fix(service-registry): Use the correct path to find JSON file (#41) by @nikhars
+
 ## 0.0.13
 
 ### Various fixes & improvements
