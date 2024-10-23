@@ -30,7 +30,9 @@ def ensure_datadog_api_key_set() -> None:
         return
 
     if not DATADOG_API_KEY:
-        raise ValueError("DataDog API key (DD_API_KEY variable) is not set. We require it now.")
+        raise ValueError(
+            "DataDog API key (DD_API_KEY variable) is not set. We require it now."
+        )
 
 
 def send_event_payload_to_datadog(payload) -> None:
@@ -176,7 +178,9 @@ def report_event_for_service(
             service_name = "getsentry"
         else:
             service_name = (
-                secret_name.replace("oauth-", "").replace("service-", "").replace("keda-", "")
+                secret_name.replace("oauth-", "")
+                .replace("service-", "")
+                .replace("keda-", "")
             )
 
         tags["sentry_service"] = service_name

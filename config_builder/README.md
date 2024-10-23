@@ -8,7 +8,7 @@ There are two types of scripts: combiners and materializers.
 ## Combiners
 
 Combiners take care of the generation of these unified files and apply the
-overrides. 
+overrides.
 
 Each directory we want to combine mush have a `_config_generator.json` file
 that instructs whether the files in such directory are overriding files from

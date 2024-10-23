@@ -27,7 +27,9 @@ __all__ = ("validate",)
     default=False,
     help="Only run the unit tests. Default `False`",
 )
-def validate(ctx: click.core.Context, service: str, skip_lint: bool, skip_unit_tests: bool):
+def validate(
+    ctx: click.core.Context, service: str, skip_lint: bool, skip_unit_tests: bool
+):
     """
     Renders the specified service and then runs linter and unit tests.
     """
@@ -49,7 +51,9 @@ def validate(ctx: click.core.Context, service: str, skip_lint: bool, skip_unit_t
     for doc in rendered:
         if not skip_lint:
             click.echo(f"Linting {service}")
-            include, exclude = get_kubelinter_config(customer_name, cluster_name, service)
+            include, exclude = get_kubelinter_config(
+                customer_name, cluster_name, service
+            )
 
             lint_errors += lint_and_print_doc(doc, include, exclude)
 

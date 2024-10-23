@@ -184,7 +184,9 @@ def build_index() -> ResourceIndex:
         for c in clusters:
             clear_service_paths()
             cluster_name = c.name
-            partial_index[clusters_root].add(ResourceReference(customer_name, cluster_name, None))
+            partial_index[clusters_root].add(
+                ResourceReference(customer_name, cluster_name, None)
+            )
             trie.add_descendents(clusters_root)
 
             set_service_paths(c.services)

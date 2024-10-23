@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Mapping, Optional, Sequence
 from types import MappingProxyType
 from functools import cache
-import click
 
 from yaml import SafeLoader, load
 
 from libsentrykube.utils import workspace_root
 
 DEFAULT_CONFIG = "cli_config/configuration.yaml"
+
 
 @dataclass(frozen=True)
 class Site:
@@ -71,7 +71,9 @@ class K8sConfig:
         return K8sConfig(
             root=str(conf["root"]),
             cluster_def_root=str(conf["cluster_def_root"]),
-            cluster_name=str(conf.get("cluster_name")) if "cluster_name" in conf else None,
+            cluster_name=str(conf.get("cluster_name"))
+            if "cluster_name" in conf
+            else None,
             materialized_manifests=str(conf["materialized_manifests"]),
         )
 
@@ -89,7 +91,9 @@ class SiloRegion:
         cls, silo_regions_conf: Mapping[str, Any], sites: Mapping[str, Site]
     ) -> SiloRegion:
         bastion_config = silo_regions_conf["bastion"]
-        assert bastion_config["site"] in sites, f"Undefined site {bastion_config['site']}"
+        assert (
+            bastion_config["site"] in sites
+        ), f"Undefined site {bastion_config['site']}"
         k8s_config = silo_regions_conf["k8s"]
         return SiloRegion(
             bastion_spawner_endpoint=bastion_config["spawner_endpoint"],
@@ -110,9 +114,14 @@ class Config:
             configuration = load(file, Loader=SafeLoader)
 
             assert "sites" in configuration, "sites entry not present in the config"
-            sites = {name: Site.from_conf(conf) for name, conf in configuration["sites"].items()}
+            sites = {
+                name: Site.from_conf(conf)
+                for name, conf in configuration["sites"].items()
+            }
 
-            assert "silo_regions" in configuration, "silo_regions entry not present in the config"
+            assert (
+                "silo_regions" in configuration
+            ), "silo_regions entry not present in the config"
             silo_regions = {
                 name: SiloRegion.from_conf(conf, sites)
                 for name, conf in configuration["silo_regions"].items()

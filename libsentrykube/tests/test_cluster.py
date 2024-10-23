@@ -13,7 +13,11 @@ TEST_CASES = [
         "saas",
         "customer",
         "customer",
-        ["k8s_root/services/service1", "k8s_root/services/service2", "k8s_root/services/service4"],
+        [
+            "k8s_root/services/service1",
+            "k8s_root/services/service2",
+            "k8s_root/services/service4",
+        ],
         "gke_something-kube_us-west1-c_primary",
         id="Load cluster template",
     ),

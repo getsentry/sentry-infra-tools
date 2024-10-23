@@ -16,7 +16,9 @@ def authenticate(sa_info: Mapping[str, Any]) -> str:
 
     res = httpx_client.post(f"{VAULT_URI}/v1/auth/gcp/login", json=payload)
     if res.status_code != 200:
-        raise Exception(f"Got non-200 response code: {res.status_code}.\nError: {res.text}")
+        raise Exception(
+            f"Got non-200 response code: {res.status_code}.\nError: {res.text}"
+        )
 
     return cast(str, res.json()["auth"]["client_token"])
 
@@ -34,7 +36,9 @@ def sign_pubkey(vault_token: str, id_key_path: Path) -> Path:
         json=payload,
     )
     if res.status_code != 200:
-        raise Exception(f"Got non-200 response code: {res.status_code}.\nError: {res.text}")
+        raise Exception(
+            f"Got non-200 response code: {res.status_code}.\nError: {res.text}"
+        )
 
     signed_key_data = res.json()["data"]["signed_key"]
     private_cert = private_key.with_suffix(".cert")

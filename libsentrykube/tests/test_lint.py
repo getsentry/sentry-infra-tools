@@ -81,7 +81,9 @@ def valid_structure() -> Generator[str, None, None]:
         with open(kubelinter_config / "snuba.yaml", "w") as f:
             f.write(safe_dump(SNUBA_CONFIG))
 
-        kubelinter_config = Path(temp_dir) / "somewhere/k8s/customers/customer2_cluster/kubelinter"
+        kubelinter_config = (
+            Path(temp_dir) / "somewhere/k8s/customers/customer2_cluster/kubelinter"
+        )
         os.makedirs(kubelinter_config)
         with open(kubelinter_config / "snuba.yaml", "w") as f:
             f.write(safe_dump(SNUBA_CONFIG2))

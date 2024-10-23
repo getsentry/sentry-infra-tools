@@ -54,9 +54,12 @@ def test_services(filename: Sequence[str]) -> None:
             )
             click.echo(f"Linting resource {resource.service_name}")
             lint_errors_count += lint_and_print(
-                resource.customer_name, resource.cluster_name, resource.service_name, rendered_lint
+                resource.customer_name,
+                resource.cluster_name,
+                resource.service_name,
+                rendered_lint,
             )
-            
+
             rendered_validate = render_services(
                 resource.customer_name, resource.cluster_name, [resource.service_name]
             )

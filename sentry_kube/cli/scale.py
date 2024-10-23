@@ -59,7 +59,11 @@ def scale(namespace, selector, revert, pause):
                 table.append(
                     (
                         idx,
-                        int((start_dt - datetime_from_session_file(file)).total_seconds()),
+                        int(
+                            (
+                                start_dt - datetime_from_session_file(file)
+                            ).total_seconds()
+                        ),
                         state["query"]["namespace"],
                         state["query"]["selector"],
                     )
@@ -83,7 +87,9 @@ def scale(namespace, selector, revert, pause):
             state = json.load(f)
 
         diff = int((start_dt - datetime_from_session_file(session)).total_seconds())
-        click.echo("Resuming session from " + click.style(f"{diff} seconds ago", bold=True))
+        click.echo(
+            "Resuming session from " + click.style(f"{diff} seconds ago", bold=True)
+        )
         click.echo()
     else:
         state = {
@@ -136,7 +142,9 @@ def scale(namespace, selector, revert, pause):
     # is referenced by one.
     # In our templating we have the same name for HPAs and Deployments,
     # but it isn't good to rely on that.
-    hpas = AutoscalingV1Api.list_namespaced_horizontal_pod_autoscaler(namespace=namespace)
+    hpas = AutoscalingV1Api.list_namespaced_horizontal_pod_autoscaler(
+        namespace=namespace
+    )
     deployments_hpas = {}
     for hpa in hpas.items:
         ref = hpa.spec.scale_target_ref
@@ -177,7 +185,9 @@ def scale(namespace, selector, revert, pause):
             # otherwise it'll just autoscale away from what we want.
             hpa_name = deployments_hpas.get(name)
             if hpa_name:
-                click.echo(f'Setting referent HPA "{namespace}/{hpa_name}" min/max to {target}')
+                click.echo(
+                    f'Setting referent HPA "{namespace}/{hpa_name}" min/max to {target}'
+                )
                 AutoscalingV1Api.patch_namespaced_horizontal_pod_autoscaler(
                     namespace=namespace,
                     name=hpa_name,
@@ -212,7 +222,9 @@ def scale(namespace, selector, revert, pause):
         # otherwise it'll just autoscale away from what we want.
         hpa_name = deployments_hpas.get(name)
         if hpa_name:
-            click.echo(f'Setting referent HPA "{namespace}/{hpa_name}" min/max to {target}')
+            click.echo(
+                f'Setting referent HPA "{namespace}/{hpa_name}" min/max to {target}'
+            )
             AutoscalingV1Api.patch_namespaced_horizontal_pod_autoscaler(
                 namespace=namespace,
                 name=hpa_name,

@@ -14,7 +14,9 @@ class ApprovalDecision(Enum):
     DECLINE = "decline"
 
     @classmethod
-    def compare(cls, decision1: ApprovalDecision, decision2: ApprovalDecision) -> ApprovalDecision:
+    def compare(
+        cls, decision1: ApprovalDecision, decision2: ApprovalDecision
+    ) -> ApprovalDecision:
         priorities = {
             ApprovalDecision.IGNORE: 0,
             ApprovalDecision.APPROVE: 1,
@@ -37,7 +39,9 @@ def ignore_file(file_path: Path, base: Path, pr: Path) -> ApprovalDecision:
     return ApprovalDecision.IGNORE
 
 
-def assess_service_registry_change(file_path: Path, base: Path, pr: Path) -> ApprovalDecision:
+def assess_service_registry_change(
+    file_path: Path, base: Path, pr: Path
+) -> ApprovalDecision:
     if not (pr / file_path).exists() and (base / file_path).exists():
         # Deleting T0 - 2. Ask for review.
         # TODO: Consider opening this up.

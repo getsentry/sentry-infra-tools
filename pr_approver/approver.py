@@ -53,7 +53,9 @@ def assess_pr(
         return {Path(f).relative_to(root) for f in eligible_files}
 
     for pattern, approver in rules_config:
-        eligible_files = get_eligible_files(base, pattern) | get_eligible_files(pr, pattern)
+        eligible_files = get_eligible_files(base, pattern) | get_eligible_files(
+            pr, pattern
+        )
         processed_config.append((eligible_files, approver))
 
     decisions = []

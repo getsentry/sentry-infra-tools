@@ -32,7 +32,9 @@ def edit_secret(ctx, secret_name, namespace, no_backup):
     data = secret.data or {}
     backup_data = copy.deepcopy(data)
 
-    k = click.prompt("What do you want to edit?", type=click.Choice(("NEW", *data.keys())))
+    k = click.prompt(
+        "What do you want to edit?", type=click.Choice(("NEW", *data.keys()))
+    )
     if k == "NEW":
         k = click.prompt("Key name", type=str)
         data[k] = ""
@@ -72,7 +74,9 @@ def edit_secret(ctx, secret_name, namespace, no_backup):
         click.echo(f"Backup current secret to {backup_secret_name}")
 
         try:
-            api.patch_namespaced_secret(backup_secret_name, namespace, {"data": backup_data})
+            api.patch_namespaced_secret(
+                backup_secret_name, namespace, {"data": backup_data}
+            )
         except ApiException as exc:
             if exc.status == 404:
                 body = V1Secret()

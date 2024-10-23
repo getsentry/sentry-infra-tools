@@ -98,7 +98,10 @@ def test_generated_libsonnet_file_content(valid_structure: str) -> None:
 
 def test_generated_json_content(valid_structure: str) -> None:
     generated_file = combine_files(
-        YamlMerger(CONFIG_GENERATOR_SETTINGS, YamlFileLoader(Path(valid_structure) / "feature1")),
+        YamlMerger(
+            CONFIG_GENERATOR_SETTINGS,
+            YamlFileLoader(Path(valid_structure) / "feature1"),
+        ),
         Path(valid_structure) / "feature1",
     )
     assert EXPECTED_JSON_CONTENT == loads(generated_file)
@@ -145,7 +148,8 @@ def test_combine_all(
             return LibsonnetMerger()
         else:
             return YamlMerger(
-                CONFIG_GENERATOR_SETTINGS, YamlFileLoader(Path(valid_structure) / "feature1")
+                CONFIG_GENERATOR_SETTINGS,
+                YamlFileLoader(Path(valid_structure) / "feature1"),
             )
 
     generated_file = Path(valid_structure) / "feature1" / "generated" / file_name
@@ -182,7 +186,9 @@ def test_cleanup(valid_structure: str) -> None:
     open(feature1 / "generated1", "w").close()
     open(feature1 / "generated2", "w").close()
 
-    feature2_s4s = path_structure / "feature2" / "regional_overrides" / "s4s" / "generated"
+    feature2_s4s = (
+        path_structure / "feature2" / "regional_overrides" / "s4s" / "generated"
+    )
     os.makedirs(feature2_s4s)
     open(feature2_s4s / "generated1", "w").close()
 
