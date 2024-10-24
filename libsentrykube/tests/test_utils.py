@@ -44,4 +44,4 @@ def test_ensure_kubectl_unsupported_binary():
         RuntimeError,
         match="Unsupported binary 'unsupported', please install it manually or update SENTRY_KUBE_KUBECTL_BINARY.",
     ):
-        ensure_kubectl("unsupported", "1.30.4")
+        ensure_kubectl("unsupported", KUBECTL_VERSION)
