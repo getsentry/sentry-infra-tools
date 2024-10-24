@@ -2,6 +2,8 @@ from pathlib import Path
 import pytest
 from unittest.mock import patch
 from libsentrykube.utils import (
+    KUBECTL_BINARY,
+    KUBECTL_VERSION,
     ensure_kubectl,
     get_service_registry_filepath,
     workspace_root,
@@ -29,13 +31,11 @@ def test_ensure_kubectl_existing_file(tmp_path):
     with patch(
         "libsentrykube.utils.ensure_libsentrykube_folder", return_value=tmp_path
     ):
-        version = "1.30.4"
-        binary = "kubectl"
-        kubectl_path = tmp_path / "kubectl" / f"v{version}" / binary
+        kubectl_path = tmp_path / "kubectl" / f"v{KUBECTL_VERSION}" / KUBECTL_BINARY
         kubectl_path.parent.mkdir(parents=True)
         kubectl_path.touch()
 
-        result = ensure_kubectl(binary, version)
+        result = ensure_kubectl(KUBECTL_BINARY, KUBECTL_VERSION)
         assert result == kubectl_path
 
 

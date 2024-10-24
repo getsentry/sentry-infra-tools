@@ -11,11 +11,12 @@ import subprocess
 import sys
 import time
 import warnings
+import click
+import httpx
 from functools import cache
 from pathlib import Path
 from typing import IO, Any, Iterable, Iterator, List, Tuple
 
-import click
 import kubernetes
 from yaml import SafeDumper, safe_dump_all, safe_load_all
 
@@ -301,12 +302,6 @@ def ensure_kubectl(
 
     if binary == "kubectl":
         base.mkdir(parents=True, exist_ok=True)
-
-        import hashlib
-        import platform
-
-        import click
-        import httpx
 
         click.echo(f"> kubectl v{version} is missing, so downloading")
 
