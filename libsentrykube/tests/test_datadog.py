@@ -41,8 +41,8 @@ COMMON_RESPONSE = {
 }
 
 
+@patch("libsentrykube.datadog.DATADOG_API_KEY", "TEST_DD_API_KEY")
 @patch("urllib.request.urlopen")
-@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_ok(mock) -> None:
     RESPONSE = COMMON_RESPONSE.copy()
     RESPONSE["overall_state"] = "OK"
@@ -54,8 +54,8 @@ def test_check_monitor_ok(mock) -> None:
     assert check_monitor(1, "TEST_DD_APP_KEY")
 
 
+@patch("libsentrykube.datadog.DATADOG_API_KEY", "TEST_DD_API_KEY")
 @patch("urllib.request.urlopen")
-@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_missing_overall_state(mock) -> None:
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(COMMON_RESPONSE)
@@ -65,8 +65,8 @@ def test_check_monitor_missing_overall_state(mock) -> None:
         check_monitor(1, "TEST_DD_APP_KEY")
 
 
+@patch("libsentrykube.datadog.DATADOG_API_KEY", "TEST_DD_API_KEY")
 @patch("urllib.request.urlopen")
-@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_bad_http_response(mock) -> None:
     mock_response = MagicMock()
     mock_response.status_code = 500
