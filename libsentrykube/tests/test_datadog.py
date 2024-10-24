@@ -42,6 +42,7 @@ COMMON_RESPONSE = {
 
 
 @patch("urllib.request.urlopen")
+@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_ok(mock) -> None:
     RESPONSE = COMMON_RESPONSE.copy()
     RESPONSE["overall_state"] = "OK"
@@ -54,6 +55,7 @@ def test_check_monitor_ok(mock) -> None:
 
 
 @patch("urllib.request.urlopen")
+@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_missing_overall_state(mock) -> None:
     mock_response = MagicMock()
     mock_response.read.return_value = json.dumps(COMMON_RESPONSE)
@@ -64,6 +66,7 @@ def test_check_monitor_missing_overall_state(mock) -> None:
 
 
 @patch("urllib.request.urlopen")
+@patch("libsentrykube.events.DATADOG_API_KEY", "TEST_DD_API_KEY")
 def test_check_monitor_bad_http_response(mock) -> None:
     mock_response = MagicMock()
     mock_response.status_code = 500
