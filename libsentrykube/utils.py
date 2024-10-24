@@ -300,50 +300,51 @@ def ensure_kubectl(
     if path.is_file():
         return path
 
-    if binary == "kubectl":
-        base.mkdir(parents=True, exist_ok=True)
-
-        click.echo(f"> kubectl v{version} is missing, so downloading")
-
-        arch = platform.machine()
-        arch = "amd64" if arch in ["x86_64", "amd64", "aarch64"] else arch
-
-        # lol windows
-        system = "darwin" if platform.system() == "Darwin" else "linux"
-        url = f"https://dl.k8s.io/release/v{version}/bin/{system}/{arch}/kubectl"
-
-        resp = httpx.get(f"{url}.sha256", follow_redirects=True)
-        resp.raise_for_status()
-        checksum = resp.text.strip()
-
-        click.echo(f">> downloading {url}")
-
-        sha256_hash = hashlib.sha256()
-        tmp_path = base / ".download"
-        with tmp_path.open("wb") as file:
-            with httpx.stream("GET", url, follow_redirects=True) as r:
-                for data in r.iter_bytes():
-                    file.write(data)
-                    sha256_hash.update(data)
-
-        dl_checksum = sha256_hash.hexdigest()
-        if dl_checksum != checksum:
-            try:
-                tmp_path.unlink()
-            except FileNotFoundError:
-                pass
-            click.secho("!! Checksums do not match", fg="red", bold=True)
-            click.secho(f"    checksum: {repr(checksum)}", fg="red", bold=True)
-            click.secho(f"    download: {repr(dl_checksum)}", fg="red", bold=True)
-            raise click.Abort()
-
-        tmp_path.rename(path)
-        path.chmod(0o755)
-        return path
-    else:
+    if binary != "kubectl":
         raise RuntimeError(
             f"Unsupported binary '{binary}', please install it manually or update SENTRY_KUBE_KUBECTL_BINARY."
         )
+
+    base.mkdir(parents=True, exist_ok=True)
+
+    click.echo(f"> kubectl v{version} is missing, so downloading")
+
+    arch = platform.machine()
+    arch = "amd64" if arch in ["x86_64", "amd64", "aarch64"] else arch
+
+    # lol windows
+    system = "darwin" if platform.system() == "Darwin" else "linux"
+    url = f"https://dl.k8s.io/release/v{version}/bin/{system}/{arch}/kubectl"
+
+    resp = httpx.get(f"{url}.sha256", follow_redirects=True)
+    resp.raise_for_status()
+    checksum = resp.text.strip()
+
+    click.echo(f">> downloading {url}")
+
+    sha256_hash = hashlib.sha256()
+    tmp_path = base / ".download"
+    with tmp_path.open("wb") as file:
+        with httpx.stream("GET", url, follow_redirects=True) as r:
+            for data in r.iter_bytes():
+                file.write(data)
+                sha256_hash.update(data)
+
+    dl_checksum = sha256_hash.hexdigest()
+    if dl_checksum != checksum:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        click.secho("!! Checksums do not match", fg="red", bold=True)
+        click.secho(f"    checksum: {repr(checksum)}", fg="red", bold=True)
+        click.secho(f"    download: {repr(dl_checksum)}", fg="red", bold=True)
+        raise click.Abort()
+
+    tmp_path.rename(path)
+    path.chmod(0o755)
+
+    return path
 
 
 def chunked(lst: List[Any], n: int) -> Iterator[List[Any]]:
