@@ -1,3 +1,9 @@
+## 0.0.15
+
+### Various fixes & improvements
+
+- feat: Initial support for alternative kubectls (#40) by @rgibert
+
 ## 0.0.14
 
 ### Various fixes & improvements
