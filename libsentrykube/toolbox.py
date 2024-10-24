@@ -5,7 +5,9 @@ from libsentrykube.utils import ensure_kubectl
 TOOLBOX_TAG = "20200810-0"
 
 
-def get_toolbox_cmd(context, user, clean, clean_all, *, namespace=None, nodepool="default"):
+def get_toolbox_cmd(
+    context, user, clean, clean_all, *, namespace=None, nodepool="default"
+):
     cmd = [
         f"{ensure_kubectl()}",
         "--context",

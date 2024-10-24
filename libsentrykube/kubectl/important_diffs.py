@@ -110,13 +110,19 @@ class ImageRule(Rule):
 
     def should_apply(self, data: Mapping[str, Any]) -> bool:
         try:
-            return data["kind"] == self.KIND and bool(list(self._image_jsonpath_expr.find(data)))
+            return data["kind"] == self.KIND and bool(
+                list(self._image_jsonpath_expr.find(data))
+            )
         except jsonpatch.JsonPatchTestFailed:
             return False
 
     def apply(self, data: Mapping[str, Any]) -> ApplyResult:
-        original_values = [match.value for match in self._image_jsonpath_expr.find(data)]
-        containers = [match.value for match in self._container_jsonpath_expr.find(data)][0]
+        original_values = [
+            match.value for match in self._image_jsonpath_expr.find(data)
+        ]
+        containers = [
+            match.value for match in self._container_jsonpath_expr.find(data)
+        ][0]
         for container in containers:
             container.pop("image")
 
@@ -130,7 +136,9 @@ class ImageRule(Rule):
             ]
         )
         patch.apply(data, in_place=True)
-        return ApplyResult(original_values=original_values, jsonpath=self.IMAGE_VALUE_JSONPATH)
+        return ApplyResult(
+            original_values=original_values, jsonpath=self.IMAGE_VALUE_JSONPATH
+        )
 
 
 class DeploymentImagesRule(ImageRule):
@@ -162,7 +170,9 @@ class CronJobImagesRule(ImageRule):
 
 
 RULES = [
-    JsonPatchRemoveRule(jsonpatch_path="/metadata/generation", jsonpath="metadata.generation"),
+    JsonPatchRemoveRule(
+        jsonpatch_path="/metadata/generation", jsonpath="metadata.generation"
+    ),
     JsonPatchRemoveRule(
         jsonpatch_path="/spec/template/metadata/annotations/configVersion",
         jsonpath="spec.template.metadata.annotations.configVersion",
@@ -189,7 +199,9 @@ def process_file(
         if not data:
             data = json.loads(raw_data)
     except Exception as e:
-        raise Exception(f"file {file_path} doesn't seem to have valid JSON/YAML: {raw_data}") from e
+        raise Exception(
+            f"file {file_path} doesn't seem to have valid JSON/YAML: {raw_data}"
+        ) from e
 
     apply_results = [rule.apply(data) for rule in RULES if rule.should_apply(data)]
     yaml.safe_dump(data, output_stream)
@@ -210,14 +222,18 @@ def process_folder(folder: str) -> Dict[str, List[ApplyResult]]:
             with open(full_path) as input_file, tempfile.NamedTemporaryFile(
                 mode="w", delete=False
             ) as output_stream:
-                file_apply_results[filename] = process_file(full_path, input_file, output_stream)
+                file_apply_results[filename] = process_file(
+                    full_path, input_file, output_stream
+                )
                 shutil.move(output_stream.name, full_path)
 
     return file_apply_results
 
 
 def perform_diff(from_dir: str, to_dir: str) -> int:
-    kubectl_diff_cmd = os.environ.get("ORIG_KUBECTL_EXTERNAL_DIFF", DEFAULT_DIFF_COMMAND)
+    kubectl_diff_cmd = os.environ.get(
+        "ORIG_KUBECTL_EXTERNAL_DIFF", DEFAULT_DIFF_COMMAND
+    )
     cmd = shlex.split(kubectl_diff_cmd)
     cmd += [from_dir, to_dir]
 

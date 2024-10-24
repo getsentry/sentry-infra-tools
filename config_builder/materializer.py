@@ -20,7 +20,9 @@ def iterate_jsonnet_configs(
     """
 
     files = [
-        f for f in root_dir.rglob("*") if not any(excluded in f.parts for excluded in exclude_dirs)
+        f
+        for f in root_dir.rglob("*")
+        if not any(excluded in f.parts for excluded in exclude_dirs)
     ]
 
     for file in files:
@@ -28,7 +30,9 @@ def iterate_jsonnet_configs(
             yield file
 
 
-def materialize_file(root_dir: Path, jsonnet_file: Path, materialized_root: Path | None) -> None:
+def materialize_file(
+    root_dir: Path, jsonnet_file: Path, materialized_root: Path | None
+) -> None:
     """
     Materialize a single jsonnet file
     Generate a json file in the same subdirectory as the jsonnet file

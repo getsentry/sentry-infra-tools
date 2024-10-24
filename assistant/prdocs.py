@@ -67,7 +67,9 @@ class InstructionsMessage:
 
         if config_path.exists() and config_path.is_file():
             conf = loads(config_path.read_text())
-            assert isinstance(conf, MutableMapping), f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
+            assert isinstance(
+                conf, MutableMapping
+            ), f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
             ref_path = conf.get("ref")
             if ref_path:
                 instructions_path = path / ref_path

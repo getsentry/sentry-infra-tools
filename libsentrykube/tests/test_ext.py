@@ -84,7 +84,9 @@ def test_build_annotation_data_symbolicator(mock_get_service_registry_data):
     }
 
     assert build_annotation_data(service_registry_id="symbolicator") == expected
-    mock_get_service_registry_data.assert_called_once_with(service_registry_id="symbolicator")
+    mock_get_service_registry_data.assert_called_once_with(
+        service_registry_id="symbolicator"
+    )
 
 
 @patch("libsentrykube.ext.get_service_registry_data", return_value=mock_service_data)
@@ -97,7 +99,9 @@ def test_build_label_data_symbolicator(mock_get_service_registry_data):
     }
 
     assert build_label_data(service_registry_id="symbolicator") == expected
-    mock_get_service_registry_data.assert_called_once_with(service_registry_id="symbolicator")
+    mock_get_service_registry_data.assert_called_once_with(
+        service_registry_id="symbolicator"
+    )
 
 
 def test_format_docs_empty():
@@ -181,7 +185,10 @@ def test_format_slos_single():
     slos = [
         "https://app.datadoghq.com/slo/manage?slo_id=a1&timeframe=30d",
     ]
-    assert format_slos(slos=slos) == "https://app.datadoghq.com/slo/manage?slo_id=a1&timeframe=30d"
+    assert (
+        format_slos(slos=slos)
+        == "https://app.datadoghq.com/slo/manage?slo_id=a1&timeframe=30d"
+    )
 
 
 def test_format_slos_multi():
@@ -224,7 +231,8 @@ def test_format_teams_multi():
         },
     ]
     assert (
-        format_teams(teams=teams) == "Ultra Mega Team (ultra_mega) tags={}, Mid Team (mid) tags={}"
+        format_teams(teams=teams)
+        == "Ultra Mega Team (ultra_mega) tags={}, Mid Team (mid) tags={}"
     )
 
 
@@ -248,6 +256,12 @@ def test_format_teams_single_tag():
 
 def test_format_teams_multi_tags():
     teams = [
-        {"display_name": "Ultra Mega Team", "id": "ultra_mega", "tags": ["beast", "kumbaya"]},
+        {
+            "display_name": "Ultra Mega Team",
+            "id": "ultra_mega",
+            "tags": ["beast", "kumbaya"],
+        },
     ]
-    assert format_teams(teams=teams) == "Ultra Mega Team (ultra_mega) tags={beast,kumbaya}"
+    assert (
+        format_teams(teams=teams) == "Ultra Mega Team (ultra_mega) tags={beast,kumbaya}"
+    )

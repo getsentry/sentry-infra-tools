@@ -60,7 +60,9 @@ def create_ephemeral_bastion(
     )
 
     if resp.status_code != 200:
-        raise Exception(f"Got non-200 response code: {resp.status_code}.\nError: {resp.text}")
+        raise Exception(
+            f"Got non-200 response code: {resp.status_code}.\nError: {resp.text}"
+        )
 
     external_ip = resp.text.strip()
     return external_ip, ssh_port

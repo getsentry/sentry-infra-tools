@@ -32,7 +32,9 @@ def datadog_log_terragrunt(ctx, cli_args: str):
 @click.option("--title", default="")
 @click.option("--message", default="")
 @click.option("--source", default="sentry-kube")
-@click.option("--tag", "-t", "custom_tags", multiple=True, help="format: -t tag=value", default=[])
+@click.option(
+    "--tag", "-t", "custom_tags", multiple=True, help="format: -t tag=value", default=[]
+)
 @click.pass_context
 def datadog_log(ctx, title: str, message: str, source: str, custom_tags):
     """

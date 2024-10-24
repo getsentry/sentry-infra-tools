@@ -62,7 +62,9 @@ def render_services(filename: Sequence[str]) -> None:
                 )
 
     if changes_made:
-        click.echo("I made changes to the materialized config. Please stage them and commit again.")
+        click.echo(
+            "I made changes to the materialized config. Please stage them and commit again."
+        )
         exit(-1)
 
 

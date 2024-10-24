@@ -32,7 +32,9 @@ def drift_jira_issue(jira: JiraConfig, region: str, service: str, body: str) -> 
         _create_jira_issue(jira, region, service, body)
 
 
-def _create_jira_issue(jira: JiraConfig, region: str, service: str, body: str) -> requests.Response:
+def _create_jira_issue(
+    jira: JiraConfig, region: str, service: str, body: str
+) -> requests.Response:
     """
     Attempts to create a new jira issue.
     """
@@ -61,7 +63,9 @@ def _create_jira_issue(jira: JiraConfig, region: str, service: str, body: str) -
     if response.status_code == 201:
         return response
     else:
-        raise JiraApiException(f"Failed to create issue: {response.status_code}, {response.text}")
+        raise JiraApiException(
+            f"Failed to create issue: {response.status_code}, {response.text}"
+        )
 
 
 def _update_jira_issue(
@@ -89,10 +93,14 @@ def _update_jira_issue(
     if response.status_code == 204:
         return response
     else:
-        raise JiraApiException(f"Failed to update issue: {response.status_code}, {response.text}")
+        raise JiraApiException(
+            f"Failed to update issue: {response.status_code}, {response.text}"
+        )
 
 
-def _add_jira_comment(jira: JiraConfig, issue_key: str, comment: str) -> requests.Response:
+def _add_jira_comment(
+    jira: JiraConfig, issue_key: str, comment: str
+) -> requests.Response:
     """
     Adds a comment to the given jira issue.
     """
@@ -109,7 +117,9 @@ def _add_jira_comment(jira: JiraConfig, issue_key: str, comment: str) -> request
     if response.status_code == 201:
         return response
     else:
-        raise JiraApiException(f"Failed to update issue: {response.status_code}, {response.text}")
+        raise JiraApiException(
+            f"Failed to update issue: {response.status_code}, {response.text}"
+        )
 
 
 def _find_jira_issue(jira: JiraConfig, region: str, service: str) -> Optional[str]:
@@ -144,4 +154,6 @@ def _find_jira_issue(jira: JiraConfig, region: str, service: str) -> Optional[st
             return cast(str, issues[0]["key"])
         return None
     else:
-        raise JiraApiException(f"Failed to search issues: {response.status_code}, {response.text}")
+        raise JiraApiException(
+            f"Failed to search issues: {response.status_code}, {response.text}"
+        )

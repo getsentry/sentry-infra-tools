@@ -92,7 +92,9 @@ def get_all_gke_clusters(project: str) -> List[Any]:
 def get_channel_versions(project: str, zone: str, channel: str) -> List[str]:
     container_resource = googleapiclient.discovery.build("container", "v1")
     server_config_request = (
-        container_resource.projects().zones().getServerconfig(projectId=project, zone=zone)
+        container_resource.projects()
+        .zones()
+        .getServerconfig(projectId=project, zone=zone)
     )
     response = server_config_request.execute()
     try:

@@ -50,7 +50,9 @@ def kubectl(ctx, quiet, yes):
 
     for dangerous_token in ("delete",):
         if dangerous_token in args:
-            click.secho("\nWait! This seems like a DANGEROUS command.", fg="red", bold=True)
+            click.secho(
+                "\nWait! This seems like a DANGEROUS command.", fg="red", bold=True
+            )
             _confirm_dangerous_action()
             break
 

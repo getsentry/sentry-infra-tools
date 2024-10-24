@@ -169,7 +169,8 @@ In another shell, use `sentry-kube ssh` to connect to production hosts.
     )
 
     macos_notify(
-        "sentry-kube connect", f"You now have a sshuttle tunnel (pid {sshuttle_proc.pid})!"
+        "sentry-kube connect",
+        f"You now have a sshuttle tunnel (pid {sshuttle_proc.pid})!",
     )
 
     def kill_sshuttle():
@@ -190,6 +191,7 @@ In another shell, use `sentry-kube ssh` to connect to production hosts.
     )
 
     click.echo(
-        "Registered atexit hooks to kill sshuttle and reap the bastion on exit." "Sleeping forever."
+        "Registered atexit hooks to kill sshuttle and reap the bastion on exit."
+        "Sleeping forever."
     )
     sshuttle_proc.wait()

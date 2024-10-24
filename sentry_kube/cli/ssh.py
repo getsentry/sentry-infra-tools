@@ -21,8 +21,12 @@ __all__ = ("ssh",)
     required=False,
     help="Points gcloud compute ssh to your keyfile",
 )
-@click.option("--region", "-r", show_default=True, required=False, help="The region to act on")
-@click.option("--zone", "-z", show_default=True, required=False, help="The zone to act on")
+@click.option(
+    "--region", "-r", show_default=True, required=False, help="The region to act on"
+)
+@click.option(
+    "--zone", "-z", show_default=True, required=False, help="The zone to act on"
+)
 @click.argument("ssh_args", nargs=-1)
 @click.pass_context
 def ssh(ctx, host, project, user, ssh_key_file, region, zone, ssh_args):
@@ -30,4 +34,8 @@ def ssh(ctx, host, project, user, ssh_key_file, region, zone, ssh_args):
     SSH into a host.
     You can specify an IP, hostname, or a service name (ST only).
     """
-    execvp(build_ssh_command(ctx, host, project, user, ssh_key_file, region, zone, ssh_args))
+    execvp(
+        build_ssh_command(
+            ctx, host, project, user, ssh_key_file, region, zone, ssh_args
+        )
+    )

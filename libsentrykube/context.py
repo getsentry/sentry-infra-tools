@@ -6,7 +6,9 @@ from libsentrykube.config import K8sConfig
 from typing import Tuple
 
 
-def init_cluster_context(customer_name: str, cluster_name: str) -> Tuple[K8sConfig, Cluster]:
+def init_cluster_context(
+    customer_name: str, cluster_name: str
+) -> Tuple[K8sConfig, Cluster]:
     """
     This abomination is needed to reset the context of a script when we need to
     operate on multiple customers and cluster within a single script.
