@@ -16,7 +16,7 @@ def test_get_service_registry_package_installed(
     mock_import_module, mock_import_resources_path
 ):
     assert get_service_registry_filepath() == Path(
-        "a/b/c/sentry_service_registry/services.json"
+        "a/b/c/config/combined/service_registry.json"
     )
 
 

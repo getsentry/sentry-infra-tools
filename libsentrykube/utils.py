@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import importlib
+import importlib.resources
 import json
 import os
 import platform
@@ -405,7 +406,7 @@ def get_service_registry_filepath() -> Path:
     try:
         importlib.import_module(service_registry_pkg_name)
         path = str(importlib.resources.files(service_registry_pkg_name).joinpath(""))
-        return Path(path) / "sentry_service_registry" / "services.json"
+        return Path(path) / "config" / "combined" / "service_registry.json"
     except ImportError:
         root = workspace_root()
         return Path(
