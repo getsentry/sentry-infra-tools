@@ -1,3 +1,11 @@
+## 0.0.16
+
+### Various fixes & improvements
+
+- Update min Python version and sentry-jsonnet dependency version (#44) by @brian-lou
+- [pre-commit.ci] pre-commit autoupdate (#43) by @pre-commit-ci
+- chore(formatting): Fix formatting of all code (#42) by @nikhars
+
 ## 0.0.15
 
 ### Various fixes & improvements
