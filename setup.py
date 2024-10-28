@@ -65,5 +65,5 @@ setup(
         "libsentrykube.macros": macros,
     },
     scripts=["sentry_kube/bin/sentry-kube-pop", "sentry_kube/bin/important-diffs-only"],
-    python_requires=">=3.10",
+    python_requires=">=3.11",
 )
