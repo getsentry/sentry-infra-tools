@@ -1,5 +1,5 @@
 import os
-from typing import Any, MutableMapping, Optional, Sequence
+from typing import MutableMapping, Optional, Sequence
 from ruamel.yaml import YAML
 import jsonpatch
 from jinja2 import Template
@@ -17,16 +17,13 @@ def find_patch_files(service: str, patch: str) -> Optional[str]:
     Finds the patch file for the given service and patch name
     """
     base_path = get_service_path(service)
-    patch_files = []
 
     for root, dirs, files in os.walk(base_path):
         if "quickpatches" in root:
             for file in files:
-                if file.endswith(".yaml.j2"):
-                    patch_files.append(os.path.join(root, file))
-    for file in patch_files:
-        if str(file).endswith(f"{patch}.yaml.j2"):
-            return file
+                if file.endswith(f"{patch}.yaml.j2"):
+                    print(file)
+                    return os.path.join(root, file)
     return None
 
 
@@ -37,7 +34,7 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     yaml = YAML()
     patch_file = find_patch_files(service, patch)
     if patch_file is None:
-        raise ValueError(f"Patch file {patch}.yaml.j2 not found")
+        raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
     with open(patch_file, "r") as file:
         patch_data = yaml.load(file)
     return patch_data.get("args", [])
@@ -69,10 +66,10 @@ def apply_patch(
     # Find files
     patch_file = find_patch_files(service, patch)
     if patch_file is None:
-        raise ValueError(f"Patch file {patch}.yaml.j2 not found")
+        raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
     resource_value_file = get_service_value_overrides_file_path(service, region)
-    if resource_value_file is None:
-        raise ValueError(
+    if not os.path.isfile(resource_value_file):
+        raise FileNotFoundError(
             f"Resource value file not found for service {service} in region {region}"
         )
 
@@ -99,7 +96,7 @@ def apply_patch(
     # Load the patch
     patches = []
     for patch in patch_data.get("patches", [{}]):
-        patch_obj: dict[str, Any] = patch  # type: ignore
+        patch_obj: dict[str, str] = patch  # type: ignore
         patches.append(
             {
                 "op": patch_obj["op"],
@@ -131,7 +128,7 @@ if __name__ == "__main__":
         apply_patch(
             "service1",
             "us",
-            "snuba-consumer-prod",
+            "test-consumer-prod",
             "test-patch",
             {
                 "replicas1": 2221,
