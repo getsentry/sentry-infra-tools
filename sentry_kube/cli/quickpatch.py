@@ -45,7 +45,7 @@ def quickpatch(
         pull_main()
         create_branch()
 
-    arguments = get_arguments(service, patch)
+    get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
     populated_arguments: Mapping[str, str] = {}
     apply_patch(service, resource, patch, populated_arguments)
