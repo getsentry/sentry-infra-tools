@@ -70,14 +70,14 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
     return values
 
 
-def get_service_value_overrides(
+def get_service_value_overrides_file_path(
     service_name: str,
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
-) -> dict:
+) -> Path:
     """
-    For the given service, return the values specified in the corresponding _values.yaml.
+    For the given service, return the filepath for the corresponding _values.yaml.
 
     If "external=True" is specified, treat the service name as the full service path.
     """
@@ -91,9 +91,26 @@ def get_service_value_overrides(
     if region_name == "saas":
         region_name = "us"
 
+    service_override_file: Path = (
+        service_regions_path / region_name / f"{cluster_name}.yaml"
+    )
+    return service_override_file
+
+
+def get_service_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> dict:
+    """
+    For the given service, return the values specified in the corresponding _values.yaml.
+
+    If "external=True" is specified, treat the service name as the full service path.
+    """
     try:
-        service_override_file: Path = (
-            service_regions_path / region_name / f"{cluster_name}.yaml"
+        service_override_file = get_service_value_overrides_file_path(
+            service_name, region_name, cluster_name, external
         )
         with open(service_override_file, "rb") as f:
             values = yaml.safe_load(f)

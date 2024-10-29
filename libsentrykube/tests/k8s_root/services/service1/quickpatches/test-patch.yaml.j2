@@ -1,0 +1,17 @@
+# Each patch file defines a patch for a single resource
+
+name: Scale Example
+args:
+  - replicas1
+  - replicas2
+patches:
+  # Key-Values should follow jsonpatch format
+  - op: replace
+    path: /consumers/{{ resource }}/replicas
+    value: {{ replicas1 }}
+  - op: replace
+    path: /consumers/{{ resource }}/replicas
+    value: {{ replicas2 }}
+mappings:
+  # Only the keys here are valid resources which patches can be applied to
+  - snuba-consumer-prod: consumer
