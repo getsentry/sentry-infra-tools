@@ -87,7 +87,7 @@ def apply_patch(
         for k, v in mapping.items():
             resource_mappings[k] = v
     if resource not in resource_mappings.keys():
-        raise ValueError(f"Resource {resource} not allowed to be patched")
+        raise ValueError(f"Resource {resource} is not allowed to be patched")
 
     # Add resource_name to the arguments and re-render (since we needed to validate the resource first)
     arguments["resource"] = resource_mappings[resource]

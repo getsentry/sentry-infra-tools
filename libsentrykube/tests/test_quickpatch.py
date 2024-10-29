@@ -6,6 +6,13 @@ from libsentrykube.service import (
     get_service_path,
     get_service_value_overrides_file_path,
 )
+import yaml
+
+
+def load_yaml(file_path):
+    with open(file_path, "r") as file:
+        return yaml.safe_load(file)
+
 
 _service = "service1"
 _region = "saas"
@@ -13,6 +20,7 @@ _patch = "test-patch"
 _resource = "test-consumer-prod"
 
 
+# Before each test, reset the configuration files to their default values
 @pytest.fixture(autouse=True)
 def reset_configs():
     region = _region
@@ -61,8 +69,8 @@ def test_missing_patch_file1():
             _resource,
             _patch,
             {
-                "replicas1": 2221,
-                "replicas2": 2221,
+                "replicas1": 1000,
+                "replicas2": 1000,
             },
         )
 
@@ -83,7 +91,7 @@ def test_missing_arguments():
             _resource,
             _patch,
             {
-                "replicas1": 2221,
+                "replicas1": 1000,
             },
         )
     with pytest.raises(ValueError, match="Missing argument: replicas1"):
@@ -93,7 +101,7 @@ def test_missing_arguments():
             _resource,
             _patch,
             {
-                "replicas2": 2221,
+                "replicas2": 1000,
             },
         )
 
@@ -112,15 +120,15 @@ def test_missing_value_file():
             _resource,
             _patch,
             {
-                "replicas1": 2221,
-                "replicas2": 2221,
+                "replicas1": 1000,
+                "replicas2": 1000,
             },
         )
 
 
 def test_invalid_resource():
     with pytest.raises(
-        ValueError, match="Resource test-consumer-invalid not allowed to be patched"
+        ValueError, match="Resource test-consumer-invalid is not allowed to be patched"
     ):
         apply_patch(
             _service,
@@ -128,7 +136,29 @@ def test_invalid_resource():
             "test-consumer-invalid",
             _patch,
             {
-                "replicas1": 2221,
-                "replicas2": 2221,
+                "replicas1": 1000,
+                "replicas2": 1000,
             },
         )
+
+
+def test_correct_patch():
+    expected_data = """
+                    consumers:
+                        consumer:
+                            replicas: 1000
+                    """
+    apply_patch(
+        _service,
+        _region,
+        _resource,
+        _patch,
+        {
+            "replicas1": 1000,
+            "replicas2": 1000,
+        },
+    )
+    config = get_service_value_overrides_file_path(_service, "us", "default", False)
+    actual = load_yaml(config)
+    expected = yaml.safe_load(expected_data)
+    assert expected == actual
