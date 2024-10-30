@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import MutableMapping, Optional, Sequence, Union
 import yaml
 import jsonpatch
@@ -11,22 +12,21 @@ from libsentrykube.service import (
 from jsonschema import validate, ValidationError
 
 
-def find_patch_files(service: str, patch: str) -> Optional[str]:
+def find_patch_file(service: str, patch: str) -> Optional[Path]:
     """
     Finds the patch file for the given service and patch name
     """
     base_path = get_service_path(service)
-    print(f"Base path: {base_path}")
-    for root, dirs, files in os.walk(base_path):
-        print(f"Root: {root}, dirs: {dirs}, files: {files}")
-        if "quickpatches" in root:
-            for file in files:
-                if file.endswith(f"{patch}.yaml.j2"):
-                    return os.path.join(root, file)
+    expected_path = Path(base_path) / "quickpatches"
+
+    if expected_path.exists() and expected_path.is_dir():
+        patch_file = expected_path / f"{patch}.yaml.j2"
+        if patch_file.exists():
+            return patch_file
     return None
 
 
-def load_pure_yaml(file_path: str) -> dict:
+def load_pure_yaml(file_path: Path) -> dict:
     """
     Load only the first section from the patch file that contains pure yaml and no jinja2
     """
@@ -41,7 +41,7 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     """
     Returns the arguments required by the patch file
     """
-    patch_file = find_patch_files(service, patch)
+    patch_file = find_patch_file(service, patch)
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
     patch_data = load_pure_yaml(patch_file)
@@ -65,7 +65,7 @@ def apply_patch(
         arguments: Arguments to be passed to the patch file and applied
     """
     # Find files
-    patch_file = find_patch_files(service, patch)
+    patch_file = find_patch_file(service, patch)
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
     resource_value_file = get_service_value_overrides_file_path(service, region)
@@ -77,9 +77,9 @@ def apply_patch(
     # Check that the resource is allowed to be patched
     resource_mappings = {}
     patch_data = load_pure_yaml(patch_file)
-    for mapping in patch_data.get("mappings", []):
-        for k, v in mapping.items():
-            resource_mappings[k] = v
+    print(f"Patch data: {patch_data.get('mappings')}")
+    for k, v in patch_data.get("mappings", {}).items():
+        resource_mappings[k] = v
     if resource not in resource_mappings.keys():
         raise ValueError(f"Resource {resource} is not allowed to be patched")
 
@@ -90,7 +90,7 @@ def apply_patch(
     try:
         validate(instance=arguments, schema=schema)
     except ValidationError as e:
-        raise ValidationError(f"Invalid arguments: {e.message}")
+        raise ValidationError(f"Invalid arguments: {e.message}") from e
 
     # Add resource_name to the arguments and render the patch template
     arguments["resource"] = resource_mappings[resource]
