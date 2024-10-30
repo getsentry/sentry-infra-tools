@@ -1,3 +1,3 @@
 consumers:
   consumer:
-    replicas: 1000
+    replicas: 10

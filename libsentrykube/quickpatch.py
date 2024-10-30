@@ -10,6 +10,7 @@ from libsentrykube.service import (
     get_service_value_overrides_file_path,
 )
 from libsentrykube.utils import set_workspace_root_start, workspace_root
+from jsonschema import validate, ValidationError
 
 
 def find_patch_files(service: str, patch: str) -> Optional[str]:
@@ -22,7 +23,6 @@ def find_patch_files(service: str, patch: str) -> Optional[str]:
         if "quickpatches" in root:
             for file in files:
                 if file.endswith(f"{patch}.yaml.j2"):
-                    print(file)
                     return os.path.join(root, file)
     return None
 
@@ -37,7 +37,9 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
     with open(patch_file, "r") as file:
         patch_data = yaml.load(file)
-    return patch_data.get("args", [])
+    if patch_data["schema"] is None:
+        raise FileNotFoundError(f"jsonschema not found in patch file {patch}.yaml.j2")
+    return patch_data.get("schema").get("required", [])
 
 
 def apply_patch(
@@ -54,15 +56,6 @@ def apply_patch(
         resource: The resource name to be patched
         arguments: Arguments to be passed to the patch file and applied
     """
-    # Check that the arguments match the required arguments 1:1
-    args = get_arguments(service, patch)
-    for arg in args:
-        if arg not in arguments:
-            raise ValueError(f"Missing argument: {arg}")
-    for arg in arguments.keys():
-        if arg not in args:
-            raise ValueError(f"Extra argument: {arg}")
-
     # Find files
     patch_file = find_patch_files(service, patch)
     if patch_file is None:
@@ -88,6 +81,13 @@ def apply_patch(
             resource_mappings[k] = v
     if resource not in resource_mappings.keys():
         raise ValueError(f"Resource {resource} is not allowed to be patched")
+
+    # Validate the arguments via jsonschema
+    schema = patch_data.get("schema", {})
+    try:
+        validate(instance=arguments, schema=schema)
+    except ValidationError as e:
+        raise ValidationError(f"Invalid arguments: {e.message}")
 
     # Add resource_name to the arguments and re-render (since we needed to validate the resource first)
     arguments["resource"] = resource_mappings[resource]
@@ -131,7 +131,7 @@ if __name__ == "__main__":
             "test-consumer-prod",
             "test-patch",
             {
-                "replicas1": 2221,
-                "replicas2": 2221,
+                "replicas1": 9,
+                "replicas2": 9,
             },
         )

@@ -1,9 +1,21 @@
 # Each patch file defines a patch for a single resource
 
 name: Scale Example
-args:
-  - replicas1
-  - replicas2
+schema:
+  type: object
+  properties:
+    replicas1:
+      type: integer
+      minimum: 1
+      maximum: 10
+    replicas2:
+      type: integer
+      minimum: 1
+      maximum: 10
+  required:
+    - replicas1
+    - replicas2
+  additionalProperties: false
 patches:
   # Key-Values should follow jsonpatch format
   - op: replace
