@@ -1,5 +1,4 @@
 # Each patch file defines a patch for a single resource
-
 name: Scale Example
 schema:
   type: object
@@ -16,6 +15,10 @@ schema:
     - replicas1
     - replicas2
   additionalProperties: false
+mappings:
+  # Only the keys here are valid resources which patches can be applied to
+  - test-consumer-prod: consumer
+---
 patches:
   # Key-Values should follow jsonpatch format
   - op: replace
@@ -24,6 +27,3 @@ patches:
   - op: replace
     path: /consumers/{{ resource }}/replicas
     value: {{ replicas2 }}
-mappings:
-  # Only the keys here are valid resources which patches can be applied to
-  - test-consumer-prod: consumer

@@ -1,6 +1,6 @@
 import os
 from typing import MutableMapping, Optional, Sequence
-from ruamel.yaml import YAML
+import yaml
 import jsonpatch
 from jinja2 import Template
 
@@ -27,19 +27,28 @@ def find_patch_files(service: str, patch: str) -> Optional[str]:
     return None
 
 
+def load_pure_yaml(file_path: str) -> dict:
+    """
+    Load only the first section from the patch file that contains pure yaml and no jinja2
+    """
+    with open(file_path, "r") as file:
+        content = file.read().split("---")[
+            0
+        ]  # Only use the first yaml doc which does not contain jinja2
+        return yaml.safe_load(content)
+
+
 def get_arguments(service: str, patch: str) -> Sequence[str]:
     """
     Returns the arguments required by the patch file
     """
-    yaml = YAML()
     patch_file = find_patch_files(service, patch)
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
-    with open(patch_file, "r") as file:
-        patch_data = yaml.load(file)
+    patch_data = load_pure_yaml(patch_file)
     if patch_data["schema"] is None:
         raise FileNotFoundError(f"jsonschema not found in patch file {patch}.yaml.j2")
-    return patch_data.get("schema").get("required", [])
+    return patch_data["schema"].get("required", [])
 
 
 def apply_patch(
@@ -66,16 +75,9 @@ def apply_patch(
             f"Resource value file not found for service {service} in region {region}"
         )
 
-    # Load the patch file and render the template
-    yaml = YAML()
-    with open(patch_file, "r") as file:
-        patch_template = Template(file.read())
-    patch_data = yaml.load(
-        patch_template.render(arguments)
-    )  # will be incomplete, but we need to validate the resource_name first
-
-    # Check that the resource_name resource is allowed to be patched
+    # Check that the resource is allowed to be patched
     resource_mappings = {}
+    patch_data = load_pure_yaml(patch_file)
     for mapping in patch_data.get("mappings", []):
         for k, v in mapping.items():
             resource_mappings[k] = v
@@ -89,13 +91,18 @@ def apply_patch(
     except ValidationError as e:
         raise ValidationError(f"Invalid arguments: {e.message}")
 
-    # Add resource_name to the arguments and re-render (since we needed to validate the resource first)
+    # Add resource_name to the arguments and render the patch template
     arguments["resource"] = resource_mappings[resource]
-    patch_data = yaml.load(patch_template.render(arguments))
+    with open(patch_file, "r") as file:
+        patch_template = Template(file.read())
+    patch_data = yaml.safe_load(
+        patch_template.render(arguments).split("---")[1]  # only use the 2nd yaml doc
+    )
 
     # Load the patch
     patches = []
     for patch in patch_data.get("patches", [{}]):
+        # mypy type inference bug, so this hack is needed
         patch_obj: dict[str, str] = patch  # type: ignore
         patches.append(
             {
@@ -108,10 +115,10 @@ def apply_patch(
 
     # Finally, apply the patch
     with open(resource_value_file, "r") as resource_file:
-        resource_data = yaml.load(resource_file)
+        resource_data = yaml.safe_load(resource_file)
     resource_data = json_patch.apply(resource_data)
     with open(resource_value_file, "w") as file:
-        yaml.dump(resource_data, file)
+        yaml.safe_dump(resource_data, file)
 
 
 # Local testing only
