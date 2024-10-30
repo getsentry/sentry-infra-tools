@@ -4,12 +4,10 @@ import yaml
 import jsonpatch
 from jinja2 import Template
 
-from libsentrykube.context import init_cluster_context
 from libsentrykube.service import (
     get_service_path,
     get_service_value_overrides_file_path,
 )
-from libsentrykube.utils import set_workspace_root_start, workspace_root
 from jsonschema import validate, ValidationError
 
 
@@ -122,26 +120,3 @@ def apply_patch(
     resource_data = json_patch.apply(resource_data)
     with open(resource_value_file, "w") as file:
         yaml.safe_dump(resource_data, file)
-
-
-# Local testing only
-if __name__ == "__main__":
-    start_workspace_root = workspace_root().as_posix()
-    set_workspace_root_start((workspace_root() / "libsentrykube/tests").as_posix())
-    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(workspace_root() / "config.yaml")
-
-    region = "saas"
-    cluster = "customer"
-    for service in ["service1"]:
-        init_cluster_context(region, cluster)
-        print(get_arguments("service1", "test-patch"))
-        apply_patch(
-            "service1",
-            "us",
-            "test-consumer-prod",
-            "test-patch",
-            {
-                "replicas1": 9,
-                "replicas2": 9,
-            },
-        )
