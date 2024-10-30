@@ -1,5 +1,5 @@
 import os
-from typing import MutableMapping, Optional, Sequence
+from typing import MutableMapping, Optional, Sequence, Union
 import yaml
 import jsonpatch
 from jinja2 import Template
@@ -55,7 +55,7 @@ def apply_patch(
     region: str,
     resource: str,
     patch: str,
-    arguments: MutableMapping[str, str | int | bool],
+    arguments: MutableMapping[str, Union[str, int, bool]],
 ) -> None:
     """
     Finds the patch file, the resource and applies the patch

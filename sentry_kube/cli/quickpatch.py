@@ -2,13 +2,14 @@ import click
 from libsentrykube.git import go_to_main, pull_main, create_branch
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.kube import render_templates
-from typing import Sequence, Mapping
+from typing import MutableMapping, Sequence, Union
 
 __all__ = ("quickpatch",)
 
 
 @click.command()
 @click.option("--service", "-s", help="Sentry kube service name")
+@click.option("--region", "-rg", help="Sentry region name. For example: us, saas, eu")
 @click.option(
     "--resource", "-r", help="K8s resource to patch. This must match the k8s name."
 )
@@ -24,6 +25,7 @@ __all__ = ("quickpatch",)
 def quickpatch(
     ctx: click.core.Context,
     service: str,
+    region: str,
     resource: str,
     patch: str,
     arguments: Sequence[str],
@@ -47,8 +49,8 @@ def quickpatch(
 
     get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
-    populated_arguments: Mapping[str, str] = {}
-    apply_patch(service, resource, patch, populated_arguments)
+    populated_arguments: MutableMapping[str, Union[str, int, bool]] = {}
+    apply_patch(service, region, resource, patch, populated_arguments)
 
     render_templates(
         ctx.obj.customer_name,
