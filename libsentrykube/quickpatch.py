@@ -18,8 +18,9 @@ def find_patch_files(service: str, patch: str) -> Optional[str]:
     Finds the patch file for the given service and patch name
     """
     base_path = get_service_path(service)
-
+    print(f"Base path: {base_path}")
     for root, dirs, files in os.walk(base_path):
+        print(f"Root: {root}, dirs: {dirs}, files: {files}")
         if "quickpatches" in root:
             for file in files:
                 if file.endswith(f"{patch}.yaml.j2"):
@@ -85,7 +86,9 @@ def apply_patch(
         raise ValueError(f"Resource {resource} is not allowed to be patched")
 
     # Validate the arguments via jsonschema
-    schema = patch_data.get("schema", {})
+    schema = patch_data.get("schema")
+    if schema is None:
+        raise ValueError(f"Schema not found in patch file {patch}.yaml.j2")
     try:
         validate(instance=arguments, schema=schema)
     except ValidationError as e:
@@ -96,7 +99,7 @@ def apply_patch(
     with open(patch_file, "r") as file:
         patch_template = Template(file.read())
     patch_data = yaml.safe_load(
-        patch_template.render(arguments).split("---")[1]  # only use the 2nd yaml doc
+        patch_template.render(arguments).split("---")[1]  # only render the 2nd yaml doc
     )
 
     # Load the patch

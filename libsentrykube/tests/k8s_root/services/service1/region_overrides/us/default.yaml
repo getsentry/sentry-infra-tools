@@ -1,3 +1,0 @@
-consumers:
-  consumer:
-    replicas: 10
