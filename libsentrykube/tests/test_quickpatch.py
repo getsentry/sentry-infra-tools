@@ -41,7 +41,6 @@ def reset_configs(monkeypatch):
 
         # Mock the get_service_path to return our temp directory
         def mock_get_service_path(service):
-            print(f"Mocking get_service_path for {service}")
             return tmp_path / "services" / service
 
         # Mock the get_service_value_overrides_file_path
@@ -51,9 +50,6 @@ def reset_configs(monkeypatch):
             cluster_name: str = "default",
             external: bool = False,
         ):
-            print(
-                f"Mocking get_service_value_overrides_file_path for {service}, {region_name}, {cluster_name}, {external}"
-            )
             if region_name == "saas":
                 region_name = "us"
             return (
@@ -87,7 +83,6 @@ def reset_configs(monkeypatch):
         )
         # Copy your template files to the temp directory
         template_dir = Path(__file__).parent / "test_data"
-        print(f"Template directory: {template_dir}")
         # Copy all files from values directory
         values_source = template_dir / "values"
         for file in values_source.iterdir():
@@ -97,11 +92,6 @@ def reset_configs(monkeypatch):
         quickpatches_source = template_dir / "quickpatches"
         for file in quickpatches_source.iterdir():
             shutil.copy(file, quickpatches_dir / file.name)
-        print(f"Temp directory: {temp_dir}")
-        print(f"Service directory: {service_dir}")
-        print(f"Files in service directory: {os.listdir(service_dir)}")
-        print(f"Files in quickpatches directory: {os.listdir(quickpatches_dir)}")
-        print(f"Files in values directory: {os.listdir(values_dir)}")
 
         yield temp_dir  # This allows the test to run with the temporary directory
 

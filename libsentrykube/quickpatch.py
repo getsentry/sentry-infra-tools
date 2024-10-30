@@ -77,7 +77,6 @@ def apply_patch(
     # Check that the resource is allowed to be patched
     resource_mappings = {}
     patch_data = load_pure_yaml(patch_file)
-    print(f"Patch data: {patch_data.get('mappings')}")
     for k, v in patch_data.get("mappings", {}).items():
         resource_mappings[k] = v
     if resource not in resource_mappings.keys():
