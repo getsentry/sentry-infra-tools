@@ -364,6 +364,7 @@ def run_pod(
             ctx.obj.cluster_name,
             operation="run-pod",
             service_name=service,
+            quiet=ctx.obj.quiet_mode,
         )
     except Exception as e:
         click.echo("!! Could not report an event to DataDog:")

@@ -119,6 +119,7 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
                         ctx.obj.cluster_name,
                         operation=f"run-job {job_name}",
                         service_name=service_name,
+                        quiet=ctx.obj.quiet_mode,
                     )
                 except Exception as e:
                     click.echo("!! Could not report an event to DataDog:")
