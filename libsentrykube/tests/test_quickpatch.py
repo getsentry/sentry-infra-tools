@@ -17,11 +17,11 @@ def load_yaml(file_path):
         return yaml.safe_load(file)
 
 
-_service = "service1"
-_region = "us"
-_patch = "test-patch"
-_resource = "test-consumer-prod"
-num_replicas = 10
+SERVICE = "service1"
+REGION = "us"
+TEST_PATCH = "test-patch"
+TEST_RESOURCE = "test-consumer-prod"
+TEST_NUM_REPLICAS = 10
 
 
 # Before each test, use a temporary directory
@@ -32,11 +32,11 @@ def reset_configs(monkeypatch):
         tmp_path = Path(temp_dir)
 
         # Create necessary directory structure in temp directory
-        service_dir = tmp_path / "services" / _service
+        service_dir = tmp_path / "services" / SERVICE
         service_dir.mkdir(parents=True)
         quickpatches_dir = service_dir / "quickpatches"
         quickpatches_dir.mkdir()
-        values_dir = service_dir / "region_overrides" / _region
+        values_dir = service_dir / "region_overrides" / REGION
         values_dir.mkdir(parents=True)
 
         # Mock the get_service_path to return our temp directory
@@ -97,43 +97,43 @@ def reset_configs(monkeypatch):
 
 
 def test_get_arguments():
-    args = get_arguments(_service, _patch)
+    args = get_arguments(SERVICE, TEST_PATCH)
     assert args == ["replicas1", "replicas2"]
 
 
 def test_missing_patch_path1():
     with pytest.raises(FileNotFoundError):
-        get_arguments(_service, "test-patch2")
+        get_arguments(SERVICE, "test-patch2")
 
 
 def test_missing_patch_path2():
     with pytest.raises(FileNotFoundError):
-        get_arguments("service2", _patch)
+        get_arguments("service2", TEST_PATCH)
 
 
 def test_missing_patch_file1():
     with pytest.raises(
-        FileNotFoundError, match=f"Patch file {_patch}.yaml.j2 not found"
+        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml.j2 not found"
     ):
-        os.remove(get_service_path(_service) / "quickpatches" / f"{_patch}.yaml.j2")
+        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml.j2")
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
 
 def test_missing_patch_file2():
     with pytest.raises(
-        FileNotFoundError, match=f"Patch file {_patch}.yaml.j2 not found"
+        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml.j2 not found"
     ):
-        os.remove(get_service_path(_service) / "quickpatches" / f"{_patch}.yaml.j2")
-        get_arguments("service2", _patch)
+        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml.j2")
+        get_arguments("service2", TEST_PATCH)
 
 
 def test_missing_arguments():
@@ -141,24 +141,24 @@ def test_missing_arguments():
         ValidationError, match="Invalid arguments: 'replicas2' is a required property"
     ):
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
             },
         )
     with pytest.raises(
         ValidationError, match="Invalid arguments: 'replicas1' is a required property"
     ):
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas2": num_replicas,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
@@ -166,35 +166,35 @@ def test_missing_arguments():
 def test_missing_value_file():
     with pytest.raises(
         FileNotFoundError,
-        match=f"Resource value file not found for service {_service} in region {_region}",
+        match=f"Resource value file not found for service {SERVICE} in region {REGION}",
     ):
         os.remove(
-            get_service_value_overrides_file_path(_service, _region, "default", False)
+            get_service_value_overrides_file_path(SERVICE, REGION, "default", False)
         )
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
 
-def test_invalid_resource():
+def test_invalidTEST_RESOURCE():
     with pytest.raises(
         ValueError, match="Resource test-consumer-invalid is not allowed to be patched"
     ):
         apply_patch(
-            _service,
-            _region,
+            SERVICE,
+            REGION,
             "test-consumer-invalid",
-            _patch,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
@@ -206,16 +206,16 @@ def test_correct_patch():
                             replicas: 10
                     """
     apply_patch(
-        _service,
-        _region,
-        _resource,
-        _patch,
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        TEST_PATCH,
         {
-            "replicas1": num_replicas,
-            "replicas2": num_replicas,
+            "replicas1": TEST_NUM_REPLICAS,
+            "replicas2": TEST_NUM_REPLICAS,
         },
     )
-    config = get_service_value_overrides_file_path(_service, "us", "default", False)
+    config = get_service_value_overrides_file_path(SERVICE, "us", "default", False)
     actual = load_yaml(config)
     expected = yaml.safe_load(expected_data)
     assert expected == actual
@@ -228,13 +228,13 @@ def test_missing_schema():
         match="Schema not found in patch file test-patch-missing-schema.yaml.j2",
     ):
         apply_patch(
-            _service,
-            _region,
-            _resource,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
             "test-patch-missing-schema",
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
@@ -242,13 +242,13 @@ def test_missing_schema():
 def test_invalid_arguments():
     with pytest.raises(ValidationError):
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
                 "replicas1": "invalid",  # Should be integer
-                "replicas2": num_replicas,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
@@ -256,27 +256,27 @@ def test_invalid_arguments():
 def test_missing_required_argument():
     with pytest.raises(ValidationError):
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
                 # Missing required replicas2
             },
         )
 
 
-def test_missing_resource_file():
+def test_missingTEST_RESOURCE_file():
     with pytest.raises(FileNotFoundError, match="Resource value file not found"):
         apply_patch(
-            _service,
+            SERVICE,
             "invalid-region",  # Non-existent region
-            _resource,
-            _patch,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
             },
         )
 
@@ -284,13 +284,13 @@ def test_missing_resource_file():
 def test_patch_with_additional_arguments():
     with pytest.raises(ValidationError):
         apply_patch(
-            _service,
-            _region,
-            _resource,
-            _patch,
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
-                "replicas1": num_replicas,
-                "replicas2": num_replicas,
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
                 "extra_arg": "should be ignored",
             },
         )
