@@ -56,6 +56,7 @@ def apply_patch(
     resource: str,
     patch: str,
     arguments: MutableMapping[str, Union[str, int, bool]],
+    cluster: str = "default",
 ) -> None:
     """
     Finds the patch file, the resource and applies the patch
@@ -68,7 +69,9 @@ def apply_patch(
     patch_file = find_patch_file(service, patch)
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
-    resource_value_file = get_service_value_overrides_file_path(service, region)
+    resource_value_file = get_service_value_overrides_file_path(
+        service, region, cluster_name=cluster
+    )
     if not os.path.isfile(resource_value_file):
         raise FileNotFoundError(
             f"Resource value file not found for service {service} in region {region}"

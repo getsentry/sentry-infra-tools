@@ -9,7 +9,6 @@ __all__ = ("quickpatch",)
 
 @click.command()
 @click.option("--service", "-s", help="Sentry kube service name")
-@click.option("--region", "-rg", help="Sentry region name. For example: us, saas, eu")
 @click.option(
     "--resource", "-r", help="K8s resource to patch. This must match the k8s name."
 )
@@ -25,7 +24,6 @@ __all__ = ("quickpatch",)
 def quickpatch(
     ctx: click.core.Context,
     service: str,
-    region: str,
     resource: str,
     patch: str,
     arguments: Sequence[str],
@@ -50,7 +48,14 @@ def quickpatch(
     get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
     populated_arguments: MutableMapping[str, Union[str, int, bool]] = {}
-    apply_patch(service, region, resource, patch, populated_arguments)
+    apply_patch(
+        service,
+        ctx.obj.customer_name,
+        resource,
+        patch,
+        populated_arguments,
+        cluster=ctx.obj.cluster_name,
+    )
 
     render_templates(
         ctx.obj.customer_name,
