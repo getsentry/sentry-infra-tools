@@ -13,3 +13,4 @@ pre-commit>=3.6.0
 pytest>=8.2.2
 types-PyYAML
 types-jsonschema
+confluent-kafka>=2.3.0
