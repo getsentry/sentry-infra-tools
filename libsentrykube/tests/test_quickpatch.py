@@ -1,4 +1,5 @@
 import os
+from typing import Generator
 from jsonschema import ValidationError
 import pytest
 from libsentrykube.quickpatch import apply_patch, get_arguments
@@ -26,7 +27,7 @@ TEST_NUM_REPLICAS = 10
 
 # Before each test, use a temporary directory
 @pytest.fixture(autouse=True)
-def reset_configs(monkeypatch):
+def reset_configs(monkeypatch) -> Generator[str, None, None]:
     with tempfile.TemporaryDirectory() as temp_dir:
         # Convert temp_dir string to Path object
         tmp_path = Path(temp_dir)
@@ -42,24 +43,6 @@ def reset_configs(monkeypatch):
         # Mock the get_service_path to return our temp directory
         def mock_get_service_path(service):
             return tmp_path / "services" / service
-
-        # Mock the get_service_value_overrides_file_path
-        def mock_get_value_path(
-            service: str,
-            region_name: str,
-            cluster_name: str = "default",
-            external: bool = False,
-        ):
-            if region_name == "saas":
-                region_name = "us"
-            return (
-                tmp_path
-                / "services"
-                / service
-                / "region_overrides"
-                / region_name
-                / f"{cluster_name}.yaml"
-            )
 
         # Apply the mocks
         monkeypatch.setattr(
@@ -96,7 +79,7 @@ def reset_configs(monkeypatch):
         yield temp_dir  # This allows the test to run with the temporary directory
 
 
-def test_get_arguments():
+def test_get_arguments(reset_configs):
     args = get_arguments(SERVICE, TEST_PATCH)
     assert args == ["replicas1", "replicas2"]
 
@@ -163,24 +146,33 @@ def test_missing_arguments():
         )
 
 
-# def test_missing_value_file():
-#     with pytest.raises(
-#         FileNotFoundError,
-#         match=f"Resource value file not found for service {SERVICE} in region {REGION}",
-#     ):
-#         os.remove(
-#             get_service_value_overrides_file_path(SERVICE, REGION, "default", False)
-#         )
-#         apply_patch(
-#             SERVICE,
-#             REGION,
-#             TEST_RESOURCE,
-#             TEST_PATCH,
-#             {
-#                 "replicas1": TEST_NUM_REPLICAS,
-#                 "replicas2": TEST_NUM_REPLICAS,
-#             },
-#         )
+def test_missing_value_file(reset_configs):
+    with pytest.raises(
+        FileNotFoundError,
+        match=f"Resource value file not found for service {SERVICE} in region {REGION}",
+    ):
+        if REGION == "saas":
+            region_name = "us"
+        else:
+            region_name = REGION
+        os.remove(
+            Path(reset_configs)
+            / "services"
+            / SERVICE
+            / "region_overrides"
+            / region_name
+            / "default.managed.yaml"
+        )
+        apply_patch(
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        )
 
 
 def test_invalidTEST_RESOURCE():

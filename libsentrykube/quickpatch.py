@@ -113,6 +113,8 @@ def apply_patch(
     )
     print(resource_data)
     if resource_data == {}:
-        raise FileNotFoundError("Resource value file not found")
+        raise FileNotFoundError(
+            f"Resource value file not found for service {service} in region {region}"
+        )
     resource_data = json_patch.apply(resource_data)
     write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
