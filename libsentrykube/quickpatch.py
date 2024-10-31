@@ -45,7 +45,7 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml not found")
     patch_data = load_pure_yaml(patch_file)
-    if patch_data["schema"] is None:
+    if patch_data.get("schema") is None:
         raise FileNotFoundError(f"jsonschema not found in patch file {patch}.yaml")
     return patch_data["schema"].get("required", [])
 
@@ -111,7 +111,6 @@ def apply_patch(
     resource_data = get_managed_service_value_overrides(
         service, region, cluster_name=cluster
     )
-    print(resource_data)
     if resource_data == {}:
         raise FileNotFoundError(
             f"Resource value file not found for service {service} in region {region}"

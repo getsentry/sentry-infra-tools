@@ -71,9 +71,19 @@ def reset_configs(monkeypatch) -> Generator[str, None, None]:
         yield temp_dir  # This allows the test to run with the temporary directory
 
 
-def test_get_arguments(reset_configs):
+def test_get_arguments1():
     args = get_arguments(SERVICE, TEST_PATCH)
     assert args == ["replicas1", "replicas2"]
+
+
+def test_get_arguments_missing_service():
+    with pytest.raises(FileNotFoundError):
+        get_arguments("service2", TEST_PATCH)
+
+
+def test_get_arguments_missing_schema():
+    with pytest.raises(FileNotFoundError):
+        get_arguments(SERVICE, "test-patch-missing-schema")
 
 
 def test_missing_patch_path1():
@@ -140,7 +150,7 @@ def test_missing_value_file(reset_configs):
         )
 
 
-def test_invalidTEST_RESOURCE():
+def test_invalid_resource():
     with pytest.raises(
         ValueError, match="Resource test-consumer-invalid is not allowed to be patched"
     ):
@@ -177,7 +187,6 @@ def test_correct_patch():
     assert expected == actual
 
 
-# TODO: Add more tests covering different patch operations and edge cases
 def test_missing_schema():
     with pytest.raises(
         ValueError,
