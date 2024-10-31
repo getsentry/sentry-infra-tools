@@ -20,7 +20,7 @@ def find_patch_file(service: str, patch: str) -> Optional[Path]:
     expected_path = Path(base_path) / "quickpatches"
 
     if expected_path.exists() and expected_path.is_dir():
-        patch_file = expected_path / f"{patch}.yaml.j2"
+        patch_file = expected_path / f"{patch}.yaml"
         if patch_file.exists():
             return patch_file
     return None
@@ -43,10 +43,10 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     """
     patch_file = find_patch_file(service, patch)
     if patch_file is None:
-        raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
+        raise FileNotFoundError(f"Patch file {patch}.yaml not found")
     patch_data = load_pure_yaml(patch_file)
     if patch_data["schema"] is None:
-        raise FileNotFoundError(f"jsonschema not found in patch file {patch}.yaml.j2")
+        raise FileNotFoundError(f"jsonschema not found in patch file {patch}.yaml")
     return patch_data["schema"].get("required", [])
 
 
@@ -68,7 +68,7 @@ def apply_patch(
     # Find files
     patch_file = find_patch_file(service, patch)
     if patch_file is None:
-        raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
+        raise FileNotFoundError(f"Patch file {patch}.yaml not found")
 
     # Check that the resource is allowed to be patched
     resource_mappings = {}
@@ -81,7 +81,7 @@ def apply_patch(
     # Validate the arguments via jsonschema
     schema = pure_yaml_data.get("schema")
     if schema is None:
-        raise ValueError(f"Schema not found in patch file {patch}.yaml.j2")
+        raise ValueError(f"Schema not found in patch file {patch}.yaml")
     try:
         validate(instance=arguments, schema=schema)
     except ValidationError as e:

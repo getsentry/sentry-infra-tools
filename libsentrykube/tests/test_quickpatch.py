@@ -113,9 +113,9 @@ def test_missing_patch_path2():
 
 def test_missing_patch_file1():
     with pytest.raises(
-        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml.j2 not found"
+        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml not found"
     ):
-        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml.j2")
+        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml")
         apply_patch(
             SERVICE,
             REGION,
@@ -130,9 +130,9 @@ def test_missing_patch_file1():
 
 def test_missing_patch_file2():
     with pytest.raises(
-        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml.j2 not found"
+        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml not found"
     ):
-        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml.j2")
+        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml")
         get_arguments("service2", TEST_PATCH)
 
 
@@ -224,7 +224,7 @@ def test_correct_patch():
 def test_missing_schema():
     with pytest.raises(
         ValueError,
-        match="Schema not found in patch file test-patch-missing-schema.yaml.j2",
+        match="Schema not found in patch file test-patch-missing-schema.yaml",
     ):
         apply_patch(
             SERVICE,
