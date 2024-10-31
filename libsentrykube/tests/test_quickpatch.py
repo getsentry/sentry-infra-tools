@@ -45,6 +45,8 @@ def reset_configs(monkeypatch) -> Generator[str, None, None]:
             return tmp_path / "services" / service
 
         # Apply the mocks
+        # Have to mock get_service_path since it's called by apply_patch and get_arguments
+        # and we are using a temporary directory
         monkeypatch.setattr(
             "libsentrykube.quickpatch.get_service_path", mock_get_service_path
         )
