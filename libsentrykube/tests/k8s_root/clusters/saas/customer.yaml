@@ -12,3 +12,6 @@ services:
 
 service2:
   key3: three
+
+service4:
+  key1: value4

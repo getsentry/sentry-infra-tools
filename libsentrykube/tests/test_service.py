@@ -4,6 +4,8 @@ from libsentrykube.service import (
     get_service_values,
     get_service_value_overrides,
     get_managed_service_value_overrides,
+    get_service_value_override_path,
+    get_service_path,
 )
 
 
@@ -30,7 +32,28 @@ expected_service_values = {
 expected_service_value_overrides = {
     "saas": {
         "customer": {
-            "service1": {"key2": {"subkey2_3": ["value2_3_1_replaced"]}},
+            "service1": {
+                "key2": {
+                    "subkey2_3": ["value2_3_1_replaced"],
+                    "subkey2_4": [
+                        "value2_4_1_replaced"  # From the managed file
+                    ],
+                }
+            },
+            "service2": {},
+        }
+    }
+}
+
+expected_service_value_managed_overrides = {
+    "saas": {
+        "customer": {
+            "service1": {
+                "key2": {
+                    "subkey2_4": ["value2_4_1_managed_replaced"],
+                    "subkey2_5": ["value2_5_1_managed_replaced"],
+                }
+            },
             "service2": {},
         }
     }
@@ -57,6 +80,20 @@ def test_get_service_values_external():
         assert returned == expected_service_values[region][cluster][service]
 
 
+def test_service_override_path() -> None:
+    region = "saas"
+    cluster = "customer"
+
+    init_cluster_context(region, cluster)
+    returned = get_service_value_override_path(
+        service_name="service1",
+        region_name=region,
+        external=False,
+    )
+    # saas is mapped to us
+    assert returned == get_service_path("service1") / "region_overrides" / "us"
+
+
 def test_get_service_value_overrides_present():
     region = "saas"
     cluster = "customer"
@@ -71,23 +108,22 @@ def test_get_service_value_overrides_present():
         assert returned == expected_service_value_overrides[region][cluster][service]
 
 
-def test_get_service_value_managed_overrides_present():
+def test_get_service_value_managed_overrides():
     region = "saas"
     cluster = "customer"
 
     init_cluster_context(region, cluster)
-    returned = get_managed_service_value_overrides(
-        service_name="service1",
-        region_name=region,
-        cluster_name=cluster,
-        external=False,
-    )
-    assert returned == {
-        "key2": {
-            "subkey2_3": ["value2_3_1_managed_replaced"],
-            "subkey2_4": ["value2_4_1_managed_replaced"],
-        }
-    }
+    for service in ["service1", "service2"]:
+        returned = get_managed_service_value_overrides(
+            service_name=service,
+            region_name=region,
+            cluster_name=cluster,
+            external=False,
+        )
+        assert (
+            returned
+            == expected_service_value_managed_overrides[region][cluster][service]
+        )
 
 
 def test_get_service_value_overrides_missing():
