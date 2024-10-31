@@ -8,7 +8,10 @@ class RepoNotCleanException(Exception):
 class Git:
     def __init__(self, repo_path: str):
         self.repo = git.Repo(repo_path)
-        if "main" in self.repo.heads:
+        print(self.repo.heads)
+        self.__heads = [head.name for head in self.repo.heads]
+        print(self.__heads)
+        if "main" in self.__heads:
             self.default_branch = "main"
         else:
             self.default_branch = "master"
