@@ -2,7 +2,7 @@ import click
 from libsentrykube.git import go_to_main, pull_main, create_branch
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.kube import render_templates
-from typing import MutableMapping, Sequence, Union
+from typing import MutableMapping, Sequence
 
 __all__ = ("quickpatch",)
 
@@ -47,7 +47,7 @@ def quickpatch(
 
     get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
-    populated_arguments: MutableMapping[str, Union[str, int, bool]] = {}
+    populated_arguments: MutableMapping[str, str] = {}
     apply_patch(
         service,
         ctx.obj.customer_name,

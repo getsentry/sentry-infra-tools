@@ -1,13 +1,13 @@
-import os
 from pathlib import Path
-from typing import MutableMapping, Optional, Sequence, Union
+import re
+from typing import MutableMapping, Optional, Sequence
 import yaml
 import jsonpatch
-from jinja2 import Template
 
 from libsentrykube.service import (
+    get_managed_service_value_overrides,
     get_service_path,
-    get_service_value_overrides_file_path,
+    write_managed_values_overrides,
 )
 from jsonschema import validate, ValidationError
 
@@ -55,7 +55,7 @@ def apply_patch(
     region: str,
     resource: str,
     patch: str,
-    arguments: MutableMapping[str, Union[str, int, bool]],
+    arguments: MutableMapping[str, str],
     cluster: str = "default",
 ) -> None:
     """
@@ -69,24 +69,17 @@ def apply_patch(
     patch_file = find_patch_file(service, patch)
     if patch_file is None:
         raise FileNotFoundError(f"Patch file {patch}.yaml.j2 not found")
-    resource_value_file = get_service_value_overrides_file_path(
-        service, region, cluster_name=cluster
-    )
-    if not os.path.isfile(resource_value_file):
-        raise FileNotFoundError(
-            f"Resource value file not found for service {service} in region {region}"
-        )
 
     # Check that the resource is allowed to be patched
     resource_mappings = {}
-    patch_data = load_pure_yaml(patch_file)
-    for k, v in patch_data.get("mappings", {}).items():
+    pure_yaml_data = load_pure_yaml(patch_file)
+    for k, v in pure_yaml_data.get("mappings", {}).items():
         resource_mappings[k] = v
     if resource not in resource_mappings.keys():
         raise ValueError(f"Resource {resource} is not allowed to be patched")
 
     # Validate the arguments via jsonschema
-    schema = patch_data.get("schema")
+    schema = pure_yaml_data.get("schema")
     if schema is None:
         raise ValueError(f"Schema not found in patch file {patch}.yaml.j2")
     try:
@@ -94,31 +87,32 @@ def apply_patch(
     except ValidationError as e:
         raise ValidationError(f"Invalid arguments: {e.message}") from e
 
-    # Add resource_name to the arguments and render the patch template
-    arguments["resource"] = resource_mappings[resource]
-    with open(patch_file, "r") as file:
-        patch_template = Template(file.read())
-    patch_data = yaml.safe_load(
-        patch_template.render(arguments).split("---")[1]  # only render the 2nd yaml doc
-    )
+    # Replace {{ resource_name }} with the actual resource name
+    # Scan through the patch_data file and replace all matches of {{ resource_name }} with the corresponding value in the
+    # arguments dictionary
+    variables = dict(arguments)
+    variables["resource"] = resource_mappings[resource]
+    patch_data_str = patch_file.read_text()
+    for arg, arg_value in variables.items():
+        pattern = r"\{\{\s*" + re.escape(arg) + r"\s*\}\}"
+        patch_data_str = re.sub(pattern, str(arg_value), patch_data_str)
+
+    # Remove the --- separator & load the full yaml file
+    patch_data_str = patch_data_str.replace("---", "")
+    patch_data = yaml.safe_load(patch_data_str)
 
     # Load the patch
     patches = []
     for patch in patch_data.get("patches", [{}]):
-        # mypy type inference bug, so this hack is needed
-        patch_obj: dict[str, str] = patch  # type: ignore
-        patches.append(
-            {
-                "op": patch_obj["op"],
-                "path": patch_obj["path"],
-                "value": patch_obj["value"],
-            }
-        )
+        patches.append(patch)
     json_patch = jsonpatch.JsonPatch(patches)
 
     # Finally, apply the patch
-    with open(resource_value_file, "r") as resource_file:
-        resource_data = yaml.safe_load(resource_file)
+    resource_data = get_managed_service_value_overrides(
+        service, region, cluster_name=cluster
+    )
+    print(resource_data)
+    if resource_data == {}:
+        raise FileNotFoundError("Resource value file not found")
     resource_data = json_patch.apply(resource_data)
-    with open(resource_value_file, "w") as file:
-        yaml.safe_dump(resource_data, file)
+    write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
