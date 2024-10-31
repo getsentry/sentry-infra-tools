@@ -48,10 +48,6 @@ def reset_configs(monkeypatch) -> Generator[str, None, None]:
         monkeypatch.setattr(
             "libsentrykube.quickpatch.get_service_path", mock_get_service_path
         )
-        # monkeypatch.setattr(
-        #     "libsentrykube.quickpatch.get_service_value_overrides_file_path",
-        #     mock_get_value_path,
-        # )
         monkeypatch.setattr(
             "libsentrykube.service.get_service_path", mock_get_service_path
         )
@@ -60,10 +56,6 @@ def reset_configs(monkeypatch) -> Generator[str, None, None]:
             "libsentrykube.tests.test_quickpatch.get_service_path",
             mock_get_service_path,
         )  # Add this line
-        # monkeypatch.setattr(
-        #     "libsentrykube.tests.test_quickpatch.get_service_value_overrides_file_path",
-        #     mock_get_value_path,
-        # )
         # Copy your template files to the temp directory
         template_dir = Path(__file__).parent / "test_data"
         # Copy all files from values directory
@@ -117,33 +109,6 @@ def test_missing_patch_file2():
     ):
         os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml")
         get_arguments("service2", TEST_PATCH)
-
-
-def test_missing_arguments():
-    with pytest.raises(
-        ValidationError, match="Invalid arguments: 'replicas2' is a required property"
-    ):
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas1": TEST_NUM_REPLICAS,
-            },
-        )
-    with pytest.raises(
-        ValidationError, match="Invalid arguments: 'replicas1' is a required property"
-    ):
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas2": TEST_NUM_REPLICAS,
-            },
-        )
 
 
 def test_missing_value_file(reset_configs):
@@ -230,34 +195,6 @@ def test_missing_schema():
         )
 
 
-def test_invalid_arguments():
-    with pytest.raises(ValidationError):
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas1": "invalid",  # Should be integer
-                "replicas2": TEST_NUM_REPLICAS,
-            },
-        )
-
-
-def test_missing_required_argument():
-    with pytest.raises(ValidationError):
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas1": TEST_NUM_REPLICAS,
-                # Missing required replicas2
-            },
-        )
-
-
 def test_missing_resource_file():
     with pytest.raises(FileNotFoundError, match="Resource value file not found"):
         apply_patch(
@@ -272,16 +209,48 @@ def test_missing_resource_file():
         )
 
 
-def test_patch_with_additional_arguments():
-    with pytest.raises(ValidationError):
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
+@pytest.mark.parametrize(
+    "expected_message, arguments",
+    [
+        pytest.param(
+            "Invalid arguments: 'replicas2' is a required property",
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+            },
+            id="missing-replicas1",
+        ),
+        pytest.param(
+            "Invalid arguments: 'replicas1' is a required property",
+            {
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="missing-replicas2",
+        ),
+        pytest.param(
+            "Invalid arguments: 'invalid' is not of type 'integer'",
+            {
+                "replicas1": "invalid",  # Should be integer
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="invalid-replicas1",
+        ),
+        pytest.param(
+            r"Invalid arguments: Additional properties are not allowed \('extra_arg' was unexpected\)",
             {
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
                 "extra_arg": "should be ignored",
             },
+            id="extra-args",
+        ),
+    ],
+)
+def test_validations(expected_message, arguments):
+    with pytest.raises(ValidationError, match=expected_message):
+        apply_patch(
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            TEST_PATCH,
+            arguments,
         )
