@@ -1,5 +1,5 @@
 key2:
-  subkey2_3:
-    - value2_3_1_managed_replaced
   subkey2_4:
     - value2_4_1_managed_replaced
+  subkey2_5:
+    - value2_5_1_managed_replaced
