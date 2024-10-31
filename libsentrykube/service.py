@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Mapping, Any
 
 import click
 import yaml
@@ -70,14 +70,13 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
     return values
 
 
-def get_service_value_overrides(
+def get_service_value_override_path(
     service_name: str,
     region_name: str,
-    cluster_name: str = "default",
     external: bool = False,
-) -> dict:
+) -> Path:
     """
-    For the given service, return the values specified in the corresponding _values.yaml.
+    For the given service, return the path to the override files.
 
     If "external=True" is specified, treat the service name as the full service path.
     """
@@ -91,15 +90,83 @@ def get_service_value_overrides(
     if region_name == "saas":
         region_name = "us"
 
+    return service_regions_path / region_name
+
+
+def get_service_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> dict:
+    """
+    For the given service, return the values specified in the corresponding _values.yaml.
+
+    If "external=True" is specified, treat the service name as the full service path.
+    """
     try:
-        service_override_file: Path = (
-            service_regions_path / region_name / f"{cluster_name}.yaml"
+        service_override_file = (
+            get_service_value_override_path(service_name, region_name, external)
+            / f"{cluster_name}.yaml"
         )
+
         with open(service_override_file, "rb") as f:
             values = yaml.safe_load(f)
     except FileNotFoundError:
         values = {}
     return values
+
+
+def get_managed_service_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> dict:
+    """
+    We have two override files. Conceptually there is no difference
+    but one is manually managed and the other is managed by automated
+    tools.
+
+    The manually managed one can have comments, most yaml parsers do
+    not preserve comments, so it is safer to keep a separate file.
+
+    The managed file is patched by tools like quickpatch. Though it can
+    also be updated by hand knowing that comments would not be preserved.
+
+    The managed file is applied last.
+    """
+    service_override_file = (
+        get_service_value_override_path(service_name, region_name, external)
+        / f"{cluster_name}.managed.yaml"
+    )
+
+    if service_override_file.exists() and service_override_file.is_file():
+        with open(service_override_file, "rb") as f:
+            return yaml.safe_load(f)
+
+    return {}
+
+
+def write_managed_values_overrides(
+    values: Mapping[str, Any],
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> None:
+    """
+    Some tools like `quickpatch` allow us to write the the managed file after
+    making changes.
+    This is the functions that updates the file.
+    """
+    service_override_file = (
+        get_service_value_override_path(service_name, region_name, external)
+        / f"{cluster_name}.managed.yaml"
+    )
+
+    with open(service_override_file, "w") as file:
+        yaml.dump(values, file)
 
 
 def get_service_data(

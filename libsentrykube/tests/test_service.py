@@ -3,6 +3,7 @@ from libsentrykube.service import (
     get_service_data,
     get_service_values,
     get_service_value_overrides,
+    get_managed_service_value_overrides,
 )
 
 
@@ -68,6 +69,25 @@ def test_get_service_value_overrides_present():
             external=False,
         )
         assert returned == expected_service_value_overrides[region][cluster][service]
+
+
+def test_get_service_value_managed_overrides_present():
+    region = "saas"
+    cluster = "customer"
+
+    init_cluster_context(region, cluster)
+    returned = get_managed_service_value_overrides(
+        service_name="service1",
+        region_name=region,
+        cluster_name=cluster,
+        external=False,
+    )
+    assert returned == {
+        "key2": {
+            "subkey2_3": ["value2_3_1_managed_replaced"],
+            "subkey2_4": ["value2_4_1_managed_replaced"],
+        }
+    }
 
 
 def test_get_service_value_overrides_missing():
