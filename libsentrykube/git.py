@@ -29,11 +29,7 @@ class Git:
 
         print(f"Checking out {self.default_branch}")
         print(self.repo.heads)
-        # Find the branch by name and checkout
-        default_branch = next(
-            head for head in self.repo.heads if head.name == self.default_branch
-        )
-        default_branch.checkout()
+        self.switch_to_branch(self.default_branch)
         print(f"Active branch: {self.repo.active_branch.name}")
         print(f"Default branch: {self.default_branch}")
         assert self.repo.active_branch.name == self.default_branch
@@ -60,6 +56,10 @@ class Git:
 
     def create_branch(self, branch_name: str) -> None:
         self.repo.create_head(branch_name, commit=self.default_branch)
+
+    def switch_to_branch(self, branch_name: str) -> None:
+        branch = next(head for head in self.repo.heads if head.name == branch_name)
+        branch.checkout()
 
 
 def go_to_main() -> None:
