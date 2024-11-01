@@ -56,9 +56,17 @@ def load_and_validate_yaml(file_path: Path, patch: str) -> dict:
             f"Schema additionalProperties must be False in patch file {patch}.yaml"
         )
 
+    # Check that properties in schema are also in required
+    if "required" in schema:
+        for required in schema["required"]:
+            if required not in schema["properties"]:
+                raise ValueError(
+                    f"Required field {required} not found in schema.properties"
+                )
+
     # Find all variables enclosed in <> in the file content
     file_content = file_path.read_text()
-    variables = set(re.findall(r"<\s*(\w+)\s*>", file_content))
+    variables = set(re.findall(r"(?<!/)<\s*(\w+)\s*>", file_content))
     # Remove 'resource' as it's a special case handled separately
     variables.discard("resource")
 
@@ -118,7 +126,7 @@ def apply_patch(
     # Replace <resource_name> with the actual resource name
     # Scan through the patch_data file and replace all matches of <resource_name>
     # with the corresponding value in the arguments dictionary
-    variables = dict(arguments)
+    variables = dict(arguments)  # make a copy of the arguments
     variables["resource"] = resource_mappings[resource]
     patch_data_str = patch_file.read_text()
     for arg, arg_value in variables.items():

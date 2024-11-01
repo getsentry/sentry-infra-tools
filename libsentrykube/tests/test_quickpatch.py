@@ -26,17 +26,6 @@ CLUSTER = "default"
 TEST_NUM_REPLICAS = 10
 
 
-def print_service_dir_contents(service_dir: Path) -> None:
-    """Print all files recursively from the given directory"""
-    for root, dirs, files in os.walk(service_dir):
-        level = root.replace(str(service_dir), "").count(os.sep)
-        indent = "  " * level
-        print(f"{indent}{os.path.basename(root)}/")
-        sub_indent = "  " * (level + 1)
-        for file in files:
-            print(f"{sub_indent}{file}")
-
-
 # Before each test, use a temporary directory
 @pytest.fixture(autouse=True)
 def reset_configs(initialized_config_structure) -> Generator[str, None, None]:
@@ -55,7 +44,6 @@ def reset_configs(initialized_config_structure) -> Generator[str, None, None]:
     # Copy all files from values directory
     values_source = template_dir / "values"
     for file in values_source.iterdir():
-        print(f"Copying {file} to {values_dir / file.name}")
         shutil.copy(file, values_dir / file.name)
 
     # Copy all files from quickpatches directory
@@ -63,7 +51,6 @@ def reset_configs(initialized_config_structure) -> Generator[str, None, None]:
     for file in quickpatches_source.iterdir():
         shutil.copy(file, quickpatches_dir / file.name)
 
-    print_service_dir_contents(tmp_path)
     yield initialized_config_structure  # This allows the test to run with the temporary directory
 
 
