@@ -41,6 +41,33 @@ def load_and_validate_yaml(file_path: Path, patch: str) -> dict:
         raise ValueError(f"Schema not found in patch file {patch}.yaml")
     if "patches" not in patch_data:
         raise ValueError(f"Patches not found in patch file {patch}.yaml")
+
+    # Validate the schema
+    schema = patch_data.get("schema")
+    if (
+        "additionalProperties" not in schema
+        or schema["additionalProperties"] is not False
+    ):
+        raise ValueError(
+            f"Schema additionalProperties must be False in patch file {patch}.yaml"
+        )
+
+    # Find all variables enclosed in <> in the file content
+    file_content = file_path.read_text()
+    variables = set(re.findall(r"<\s*(\w+)\s*>", file_content))
+    # Remove 'resource' as it's a special case handled separately
+    variables.discard("resource")
+
+    # Get required fields from schema
+    required_fields = set(schema.get("required", []))
+
+    # Check if all variables are in required fields
+    missing_required = variables - required_fields
+    if missing_required:
+        raise ValueError(
+            f"Variables {missing_required} found in patch file but not listed in schema.required"
+        )
+
     return patch_data
 
 
@@ -84,9 +111,9 @@ def apply_patch(
     except ValidationError as e:
         raise ValidationError(f"Invalid arguments: {e.message}") from e
 
-    # Replace %resource_name% with the actual resource name
-    # Scan through the patch_data file and replace all matches of %resource_name% with the corresponding value in the
-    # arguments dictionary
+    # Replace <resource_name> with the actual resource name
+    # Scan through the patch_data file and replace all matches of <resource_name>
+    # with the corresponding value in the arguments dictionary
     variables = dict(arguments)
     variables["resource"] = resource_mappings[resource]
     patch_data_str = patch_file.read_text()

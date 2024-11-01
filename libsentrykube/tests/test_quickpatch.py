@@ -24,6 +24,60 @@ TEST_PATCH = "test-patch"
 TEST_RESOURCE = "test-consumer-prod"
 TEST_NUM_REPLICAS = 10
 
+CLUSTER_1 = {
+    "id": "cluster1",
+    "services": [
+        "k8s/services/my_service",
+        "k8s/services/another_service",
+    ],
+    "my_service": {"key1": "value1"},
+}
+
+CLUSTER_2 = {
+    "id": "cluster2",
+    "services": [
+        "k8s/services/my_service",
+    ],
+}
+
+CONFIGURATION = {
+    "sites": {
+        "test_site": {
+            "name": "us",
+            "region": "us-central1",
+            "zone": "b",
+            "network": "global/networks/sentry",
+            "subnetwork": "regions/us-central1/subnetworks/sentry-default",
+        }
+    },
+    "silo_regions": {
+        "customer1": {
+            "bastion": {
+                "spawner_endpoint": "FIXME",
+                "site": "test_site",
+            },
+            "k8s": {
+                "root": "k8s",
+                "cluster_def_root": "clusters",
+                "services_in_cluster_config": "True",
+                "materialized_manifests": "materialized_manifests",
+            },
+        },
+        "customer2": {
+            "bastion": {
+                "spawner_endpoint": "FIXME",
+                "site": "test_site",
+            },
+            "k8s": {
+                "root": "k8s",
+                "cluster_def_root": "clusters",
+                "services_in_cluster_config": "True",
+                "materialized_manifests": "materialized_manifests",
+            },
+        },
+    },
+}
+
 
 # Before each test, use a temporary directory
 @pytest.fixture(autouse=True)
@@ -230,6 +284,34 @@ def test_missing_schema():
             REGION,
             TEST_RESOURCE,
             "test-patch-missing-schema",
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        )
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        pytest.param(
+            "invalid-schema1",
+        ),
+        pytest.param(
+            "invalid-schema2",
+        ),
+        pytest.param(
+            "invalid-schema3",
+        ),
+    ],
+)
+def test_invalid_schema(patch):
+    with pytest.raises(ValueError):
+        apply_patch(
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            patch,
             {
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
