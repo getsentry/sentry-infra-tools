@@ -1,4 +1,5 @@
 from libsentrykube.context import init_cluster_context
+import os
 from libsentrykube.service import (
     get_service_data,
     get_service_values,
@@ -6,7 +7,10 @@ from libsentrykube.service import (
     get_managed_service_value_overrides,
     get_service_value_override_path,
     get_service_path,
+    write_managed_values_overrides,
 )
+from libsentrykube.utils import set_workspace_root_start
+from libsentrykube.utils import workspace_root
 
 
 expected_service_data = {
@@ -146,3 +150,39 @@ def test_get_service_data_present():
         customer_name=region, service_name=service, cluster_name=cluster
     )
     assert service_data == expected_service_data[region][cluster][service]
+
+
+def test_write_managed_file(config_structure) -> None:
+    # TODO: Refactor the other tests to use a temporary dir as config
+    # and follow this pattern, then remove the autouse fixture.
+    start_workspace_root = workspace_root().as_posix()
+    set_workspace_root_start(config_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    write_managed_values_overrides(
+        {"key2": "value2"}, "my_service", "customer1", "cluster1"
+    )
+    assert get_managed_service_value_overrides(
+        service_name="my_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        external=False,
+    ) == {
+        "key2": "value2",
+    }
+
+    path = (
+        get_service_value_override_path(
+            service_name="my_service",
+            region_name="customer1",
+            external=False,
+        )
+        / "cluster1.managed.yaml"
+    )
+    assert path.exists()
+    assert path.is_file()
+
+    set_workspace_root_start(start_workspace_root)
