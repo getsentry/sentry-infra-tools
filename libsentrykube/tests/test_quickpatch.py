@@ -71,7 +71,7 @@ def test_get_arguments_missing_schema():
 
 def test_missing_patch_path1():
     with pytest.raises(FileNotFoundError):
-        get_arguments(SERVICE, "test-patch2")
+        get_arguments(SERVICE, "test-patch-definitely-does-not-exist")
 
 
 def test_missing_patch_path2():
@@ -188,6 +188,28 @@ def test_correct_patch():
         {
             "replicas1": TEST_NUM_REPLICAS,
             "replicas2": TEST_NUM_REPLICAS,
+        },
+    )
+    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
+    assert expected == actual
+
+
+def test_correct_patch2():
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": TEST_NUM_REPLICAS,
+            },
+        },
+    }
+    apply_patch(
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        "test-patch2",
+        {
+            "replicas-1": TEST_NUM_REPLICAS,
+            "replicas_2": TEST_NUM_REPLICAS,
         },
     )
     actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)

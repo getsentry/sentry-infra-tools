@@ -66,7 +66,7 @@ def load_and_validate_yaml(file_path: Path, patch: str) -> dict:
 
     # Find all variables enclosed in <> in the file content
     file_content = file_path.read_text()
-    variables = set(re.findall(r"(?<!/)<\s*(\w+)\s*>", file_content))
+    variables = set(re.findall(r"(?<!\\)<\s*([\w-]+)\s*>", file_content))
     # Remove 'resource' as it's a special case handled separately
     variables.discard("resource")
 
