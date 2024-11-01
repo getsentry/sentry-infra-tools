@@ -1,3 +1,10 @@
+## 0.0.18
+
+### Various fixes & improvements
+
+- feat(quickpatch): Add apply patch module (#46) by @brian-lou
+- Introduce an added override file to be managed by tools (#49) by @fpacifici
+
 ## 0.0.17
 
 ### Various fixes & improvements

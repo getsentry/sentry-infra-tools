@@ -3,7 +3,7 @@ from libsentrykube.git import go_to_main, pull_main, create_branch
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.kube import render_templates
 from sentry_kube.cli.apply import _diff_kubectl
-from typing import Sequence, Mapping
+from typing import Sequence, MutableMapping
 
 __all__ = ("quickpatch",)
 
@@ -48,8 +48,15 @@ def quickpatch(
 
     get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
-    populated_arguments: Mapping[str, str] = {}
-    apply_patch(service, resource, patch, populated_arguments)
+    populated_arguments: MutableMapping[str, str] = {}
+    apply_patch(
+        service,
+        ctx.obj.customer_name,
+        resource,
+        patch,
+        populated_arguments,
+        cluster=ctx.obj.cluster_name,
+    )
 
     ctx.obj["service"] = service
     ctx.obj["resource"] = resource
