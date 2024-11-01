@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+from typing import Generator
 import git
 
 
@@ -18,15 +20,13 @@ class Git:
         if self.repo.active_branch.name == self.default_branch:
             return
 
-        # check if there are any changes
+        self.stash(force=force)
+        self.switch_to_branch(self.default_branch)
+
+    def stash(self, *, force: bool = False) -> None:
         if self.repo.is_dirty() and not force:
             raise RepoNotCleanException
 
-        self.stash()
-
-        self.switch_to_branch(self.default_branch)
-
-    def stash(self) -> None:
         self.repo.git.stash()
         self.stashed = True
 
@@ -50,5 +50,30 @@ class Git:
         self.repo.create_head(branch_name, commit=self.default_branch)
 
     def switch_to_branch(self, branch_name: str) -> None:
+        self.previous_branch = self.repo.active_branch.name
         branch = next(head for head in self.repo.heads if head.name == branch_name)
         branch.checkout()
+
+    def fetch_origin(self) -> None:
+        self.repo.git.fetch("origin")
+
+    def merge_origin(self, branch_name: str) -> None:
+        self.repo.git.merge("origin/" + branch_name)
+
+    def set_upstream(self, branch_name: str) -> None:
+        self.repo.git.push("--set-upstream", "origin/" + branch_name)
+
+    @contextmanager
+    def setup_new_branch(self, branch_name: str) -> Generator[None, None, None]:
+        """
+        Create a new branch, switch to it, set it as upstream, fetch origin, and merge origin into it.
+        """
+        self.create_branch(branch_name)
+        self.stash()
+        self.switch_to_branch(branch_name)
+        self.set_upstream(branch_name)
+        self.fetch_origin()
+        self.merge_origin(self.default_branch)
+        yield
+        self.pop_stash()
+        self.switch_to_branch(self.previous_branch)
