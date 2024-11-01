@@ -6,7 +6,7 @@ import yaml
 import jsonpatch
 
 from libsentrykube.service import (
-    get_managed_service_value_overrides,
+    get_tools_managed_service_value_overrides,
     get_service_path,
     write_managed_values_overrides,
 )
@@ -131,7 +131,7 @@ def apply_patch(
     json_patch = jsonpatch.JsonPatch(patches)
 
     # Finally, apply the patch
-    resource_data = get_managed_service_value_overrides(
+    resource_data = get_tools_managed_service_value_overrides(
         service, region, cluster_name=cluster
     )
     if resource_data == {}:

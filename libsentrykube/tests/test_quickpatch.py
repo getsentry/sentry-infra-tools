@@ -5,7 +5,7 @@ import pytest
 from libsentrykube.context import init_cluster_context
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.service import (
-    get_managed_service_value_overrides,
+    get_tools_managed_service_value_overrides,
     get_service_path,
 )
 import yaml
@@ -203,7 +203,7 @@ def test_correct_patch():
             "replicas2": TEST_NUM_REPLICAS,
         },
     )
-    actual = get_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
+    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
     assert expected == actual
 
 
