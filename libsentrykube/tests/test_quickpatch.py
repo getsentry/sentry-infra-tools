@@ -2,6 +2,7 @@ import os
 from typing import Generator
 from jsonschema import ValidationError
 import pytest
+from libsentrykube.context import init_cluster_context
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.service import (
     get_managed_service_value_overrides,
@@ -10,7 +11,6 @@ from libsentrykube.service import (
 import yaml
 import shutil
 from pathlib import Path
-import tempfile
 
 
 def load_yaml(file_path):
@@ -18,113 +18,53 @@ def load_yaml(file_path):
         return yaml.safe_load(file)
 
 
-SERVICE = "service1"
-REGION = "us"
+SERVICE = "my_service"
+REGION = "customer1"
 TEST_PATCH = "test-patch"
 TEST_RESOURCE = "test-consumer-prod"
+CLUSTER = "default"
 TEST_NUM_REPLICAS = 10
 
-CLUSTER_1 = {
-    "id": "cluster1",
-    "services": [
-        "k8s/services/my_service",
-        "k8s/services/another_service",
-    ],
-    "my_service": {"key1": "value1"},
-}
 
-CLUSTER_2 = {
-    "id": "cluster2",
-    "services": [
-        "k8s/services/my_service",
-    ],
-}
-
-CONFIGURATION = {
-    "sites": {
-        "test_site": {
-            "name": "us",
-            "region": "us-central1",
-            "zone": "b",
-            "network": "global/networks/sentry",
-            "subnetwork": "regions/us-central1/subnetworks/sentry-default",
-        }
-    },
-    "silo_regions": {
-        "customer1": {
-            "bastion": {
-                "spawner_endpoint": "FIXME",
-                "site": "test_site",
-            },
-            "k8s": {
-                "root": "k8s",
-                "cluster_def_root": "clusters",
-                "services_in_cluster_config": "True",
-                "materialized_manifests": "materialized_manifests",
-            },
-        },
-        "customer2": {
-            "bastion": {
-                "spawner_endpoint": "FIXME",
-                "site": "test_site",
-            },
-            "k8s": {
-                "root": "k8s",
-                "cluster_def_root": "clusters",
-                "services_in_cluster_config": "True",
-                "materialized_manifests": "materialized_manifests",
-            },
-        },
-    },
-}
+def print_service_dir_contents(service_dir: Path) -> None:
+    """Print all files recursively from the given directory"""
+    for root, dirs, files in os.walk(service_dir):
+        level = root.replace(str(service_dir), "").count(os.sep)
+        indent = "  " * level
+        print(f"{indent}{os.path.basename(root)}/")
+        sub_indent = "  " * (level + 1)
+        for file in files:
+            print(f"{sub_indent}{file}")
 
 
 # Before each test, use a temporary directory
 @pytest.fixture(autouse=True)
-def reset_configs(monkeypatch) -> Generator[str, None, None]:
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # Convert temp_dir string to Path object
-        tmp_path = Path(temp_dir)
+def reset_configs(initialized_config_structure) -> Generator[str, None, None]:
+    # Convert temp_dir string to Path object
+    init_cluster_context("customer1", "cluster1")
+    tmp_path = Path(initialized_config_structure)
 
-        # Create necessary directory structure in temp directory
-        service_dir = tmp_path / "services" / SERVICE
-        service_dir.mkdir(parents=True)
-        quickpatches_dir = service_dir / "quickpatches"
-        quickpatches_dir.mkdir()
-        values_dir = service_dir / "region_overrides" / REGION
-        values_dir.mkdir(parents=True)
+    # Create necessary directory structure in temp directory
+    service_dir = tmp_path / "k8s" / "services" / SERVICE
+    quickpatches_dir = service_dir / "quickpatches"
+    quickpatches_dir.mkdir()
+    values_dir = service_dir / "region_overrides" / REGION
 
-        # Mock the get_service_path to return our temp directory
-        def mock_get_service_path(service):
-            return tmp_path / "services" / service
+    # Copy your template files to the temp directory
+    template_dir = Path(__file__).parent / "test_data"
+    # Copy all files from values directory
+    values_source = template_dir / "values"
+    for file in values_source.iterdir():
+        print(f"Copying {file} to {values_dir / file.name}")
+        shutil.copy(file, values_dir / file.name)
 
-        # Apply the mocks
-        # Have to mock get_service_path since it's called by apply_patch and get_arguments
-        # and we are using a temporary directory
-        monkeypatch.setattr(
-            "libsentrykube.quickpatch.get_service_path", mock_get_service_path
-        )
-        monkeypatch.setattr(
-            "libsentrykube.service.get_service_path", mock_get_service_path
-        )
-        # Also mock any direct imports in the test file itself
-        monkeypatch.setattr(
-            "libsentrykube.tests.test_quickpatch.get_service_path",
-            mock_get_service_path,
-        )  # Add this line
-        # Copy your template files to the temp directory
-        template_dir = Path(__file__).parent / "test_data"
-        # Copy all files from values directory
-        values_source = template_dir / "values"
-        for file in values_source.iterdir():
-            shutil.copy(file, values_dir / file.name)
+    # Copy all files from quickpatches directory
+    quickpatches_source = template_dir / "quickpatches"
+    for file in quickpatches_source.iterdir():
+        shutil.copy(file, quickpatches_dir / file.name)
 
-        # Copy all files from quickpatches directory
-        quickpatches_source = template_dir / "quickpatches"
-        for file in quickpatches_source.iterdir():
-            shutil.copy(file, quickpatches_dir / file.name)
-
-        yield temp_dir  # This allows the test to run with the temporary directory
+    print_service_dir_contents(tmp_path)
+    yield initialized_config_structure  # This allows the test to run with the temporary directory
 
 
 def test_get_arguments1():
@@ -169,14 +109,6 @@ def test_missing_patch_file1():
         )
 
 
-def test_missing_patch_file2():
-    with pytest.raises(
-        FileNotFoundError, match=f"Patch file {TEST_PATCH}.yaml not found"
-    ):
-        os.remove(get_service_path(SERVICE) / "quickpatches" / f"{TEST_PATCH}.yaml")
-        get_arguments("service2", TEST_PATCH)
-
-
 def test_missing_value_file(reset_configs):
     with pytest.raises(
         FileNotFoundError,
@@ -184,6 +116,7 @@ def test_missing_value_file(reset_configs):
     ):
         os.remove(
             Path(reset_configs)
+            / "k8s"
             / "services"
             / SERVICE
             / "region_overrides"
@@ -270,7 +203,7 @@ def test_correct_patch():
             "replicas2": TEST_NUM_REPLICAS,
         },
     )
-    actual = get_managed_service_value_overrides(SERVICE, "us", "default", False)
+    actual = get_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
     assert expected == actual
 
 

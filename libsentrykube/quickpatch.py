@@ -1,6 +1,7 @@
 from pathlib import Path
 import re
 from typing import MutableMapping, Sequence
+import click
 import yaml
 import jsonpatch
 
@@ -16,7 +17,10 @@ def find_patch_file(service: str, patch: str) -> Path:
     """
     Finds the patch file for the given service and patch name
     """
-    base_path = get_service_path(service)
+    try:
+        base_path = get_service_path(service)
+    except click.Abort:
+        raise FileNotFoundError(f"Service {service} not found")
     expected_path = Path(base_path) / "quickpatches"
 
     if expected_path.exists() and expected_path.is_dir():
