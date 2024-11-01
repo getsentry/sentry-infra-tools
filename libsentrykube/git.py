@@ -7,7 +7,7 @@ class RepoNotCleanException(Exception):
     pass
 
 
-class GitOperations:
+class Git:
     def __init__(self, repo_path: str):
         self.repo = git.Repo(repo_path)
         self.__heads = [head.name for head in self.repo.heads]
