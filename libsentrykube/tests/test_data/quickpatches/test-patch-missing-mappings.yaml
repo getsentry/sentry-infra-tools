@@ -1,0 +1,26 @@
+# Each patch file defines a patch for a single resource
+name: Scale Example
+schema:
+  type: object
+  properties:
+    replicas1:
+      type: integer
+      minimum: 1
+      maximum: 10
+    replicas2:
+      type: integer
+      minimum: 1
+      maximum: 10
+  required:
+    - replicas1
+    - replicas2
+  additionalProperties: false
+--- # This separator is used to separate the pure yaml from the {{ variables }}
+patches:
+  # Key-Values should follow jsonpatch format
+  - op: replace
+    path: /consumers/{{ resource }}/replicas
+    value: {{ replicas1 }}
+  - op: replace
+    path: /consumers/{{ resource }}/replicas
+    value: {{ replicas2 }}

@@ -152,6 +152,40 @@ def test_missing_value_file(reset_configs):
         )
 
 
+def test_missing_patches():
+    with pytest.raises(
+        ValueError,
+        match="Patches not found in patch file test-patch-missing-patches.yaml",
+    ):
+        apply_patch(
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            "test-patch-missing-patches",
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        )
+
+
+def test_missing_resource_mappings():
+    with pytest.raises(
+        ValueError,
+        match="Resource mappings not found in patch file test-patch-missing-mappings.yaml",
+    ):
+        apply_patch(
+            SERVICE,
+            REGION,
+            TEST_RESOURCE,
+            "test-patch-missing-mappings",
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        )
+
+
 def test_invalid_resource():
     with pytest.raises(
         ValueError, match="Resource test-consumer-invalid is not allowed to be patched"

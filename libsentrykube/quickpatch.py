@@ -73,8 +73,9 @@ def apply_patch(
     # Check that the resource is allowed to be patched
     resource_mappings = {}
     pure_yaml_data = load_pure_yaml(patch_file)
-    for k, v in pure_yaml_data.get("mappings", {}).items():
-        resource_mappings[k] = v
+    resource_mappings = pure_yaml_data.get("mappings", None)
+    if resource_mappings is None:
+        raise ValueError(f"Resource mappings not found in patch file {patch}.yaml")
     if resource not in resource_mappings.keys():
         raise ValueError(f"Resource {resource} is not allowed to be patched")
 
@@ -102,9 +103,9 @@ def apply_patch(
     patch_data = yaml.safe_load(patch_data_str)
 
     # Load the patch
-    patches = []
-    for patch in patch_data.get("patches", [{}]):
-        patches.append(patch)
+    patches = patch_data.get("patches", None)
+    if patches is None:
+        raise ValueError(f"Patches not found in patch file {patch}.yaml")
     json_patch = jsonpatch.JsonPatch(patches)
 
     # Finally, apply the patch
