@@ -320,3 +320,85 @@ def test_validations(expected_message, arguments):
             TEST_PATCH,
             arguments,
         )
+
+
+# tests if you can add partial path resources
+def test_add_resource():
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": 4,
+            },
+            "consumer2": {
+                "replicas": TEST_NUM_REPLICAS,
+            },
+        },
+    }
+    apply_patch(
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        "test-add-patch",
+        {
+            "replicas1": TEST_NUM_REPLICAS,
+        },
+        cluster="default2",
+    )
+    actual = get_tools_managed_service_value_overrides(
+        SERVICE, REGION, "default2", False
+    )
+    assert expected == actual
+
+
+# tests if adding partial path resources overwrites existing resources
+def test_add_resource3():
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": 4,
+            },
+            "consumer2": {
+                "replicas": TEST_NUM_REPLICAS,
+            },
+        },
+    }
+    apply_patch(
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        "test-add-patch3",
+        {
+            "replicas1": TEST_NUM_REPLICAS,
+        },
+        cluster="default4",
+    )
+    actual = get_tools_managed_service_value_overrides(
+        SERVICE, REGION, "default4", False
+    )
+    assert expected == actual
+
+
+# tests if you can add full path resources
+def test_add_resource2():
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": TEST_NUM_REPLICAS,
+            },
+        },
+    }
+    apply_patch(
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        "test-add-patch2",
+        {
+            "replicas1": TEST_NUM_REPLICAS,
+        },
+        cluster="default3",
+    )
+    actual = get_tools_managed_service_value_overrides(
+        SERVICE, REGION, "default3", False
+    )
+    print(actual)
+    assert expected == actual

@@ -1,0 +1,5 @@
+consumers:
+  consumer:
+    replicas: 4
+  consumer2:
+    replicas: 4

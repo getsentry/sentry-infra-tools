@@ -146,5 +146,7 @@ def apply_patch(
         raise FileNotFoundError(
             f"Resource value file not found for service {service} in region {region}"
         )
+    if resource_data is None:  # If the .yaml file is empty
+        resource_data = {}
     resource_data = json_patch.apply(resource_data)
     write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
