@@ -3,12 +3,11 @@ name: Scale Example
 mappings:
   # Only the keys here are valid resources which patches can be applied to
   test-consumer-prod: consumer
---- # This separator is used to separate the pure yaml from the {{ variables }}
 patches:
   # Key-Values should follow jsonpatch format
   - op: replace
-    path: /consumers/{{ resource }}/replicas
-    value: {{ replicas1 }}
+    path: /consumers/<resource>/replicas
+    value: <replicas1>
   - op: replace
-    path: /consumers/{{ resource }}/replicas
-    value: {{ replicas2 }}
+    path: /consumers/<resource>/replicas
+    value: <replicas2>

@@ -84,7 +84,7 @@ def test_get_arguments_missing_service():
 
 
 def test_get_arguments_missing_schema():
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(ValueError):
         get_arguments(SERVICE, "test-patch-missing-schema")
 
 
@@ -128,16 +128,12 @@ def test_missing_value_file(reset_configs):
         FileNotFoundError,
         match=f"Resource value file not found for service {SERVICE} in region {REGION}",
     ):
-        if REGION == "saas":
-            region_name = "us"
-        else:
-            region_name = REGION
         os.remove(
             Path(reset_configs)
             / "services"
             / SERVICE
             / "region_overrides"
-            / region_name
+            / REGION
             / "default.managed.yaml"
         )
         apply_patch(
@@ -203,11 +199,13 @@ def test_invalid_resource():
 
 
 def test_correct_patch():
-    expected_data = """
-                    consumers:
-                        consumer:
-                            replicas: 10
-                    """
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": TEST_NUM_REPLICAS,
+            },
+        },
+    }
     apply_patch(
         SERVICE,
         REGION,
@@ -219,7 +217,6 @@ def test_correct_patch():
         },
     )
     actual = get_managed_service_value_overrides(SERVICE, "us", "default", False)
-    expected = yaml.safe_load(expected_data)
     assert expected == actual
 
 

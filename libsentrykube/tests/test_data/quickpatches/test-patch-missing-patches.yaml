@@ -18,4 +18,3 @@ schema:
 mappings:
   # Only the keys here are valid resources which patches can be applied to
   test-consumer-prod: consumer
---- # This separator is used to separate the pure yaml from the {{ variables }}
