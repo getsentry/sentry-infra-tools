@@ -22,7 +22,7 @@ class Git:
         if self.repo.is_dirty() and not force:
             raise RepoNotCleanException
 
-            self.stash()
+        self.stash()
 
         self.switch_to_branch(self.default_branch)
 
