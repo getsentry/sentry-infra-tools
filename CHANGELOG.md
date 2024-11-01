@@ -1,3 +1,9 @@
+## 0.0.17
+
+### Various fixes & improvements
+
+- Add quickpatch tool scaffolding (#45) by @fpacifici
+
 ## 0.0.16
 
 ### Various fixes & improvements
