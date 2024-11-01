@@ -19,14 +19,11 @@ class Git:
             return
 
         # check if there are any changes
-        if self.repo.is_dirty():
-            if not force:
-                print("Repo not clean. Cannot switch to default branch")
-                raise RepoNotCleanException
+        if self.repo.is_dirty() and not force:
+            raise RepoNotCleanException
 
             self.stash()
 
-        print(f"Checking out {self.default_branch}")
         self.switch_to_branch(self.default_branch)
 
     def stash(self) -> None:
