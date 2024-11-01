@@ -2,12 +2,13 @@ import click
 from libsentrykube.git import go_to_main, pull_main, create_branch
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.kube import render_templates
+from sentry_kube.cli.apply import _diff_kubectl
 from typing import Sequence, Mapping
 
 __all__ = ("quickpatch",)
 
 
-@click.command()
+@click.group()
 @click.option("--service", "-s", help="Sentry kube service name")
 @click.option(
     "--resource", "-r", help="K8s resource to patch. This must match the k8s name."
@@ -50,11 +51,43 @@ def quickpatch(
     populated_arguments: Mapping[str, str] = {}
     apply_patch(service, resource, patch, populated_arguments)
 
+    ctx.obj["service"] = service
+    ctx.obj["resource"] = resource
+
+    # TODO: File PR
+
+
+@quickpatch.command()
+@click.pass_context
+def render(ctx: click.Context) -> None:
     render_templates(
         ctx.obj.customer_name,
-        service,
+        ctx.obj["service"],
         ctx.obj.cluster_name,
-        filters=[f"metadata.name={resource}"],
+        filters=[f"metadata.name={ctx.obj['resource']}"],
     )
+
+
+@quickpatch.command()
+@click.pass_context
+def diff(ctx: click.Context) -> None:
+    definitions = "".join(
+        render_templates(
+            ctx.obj.customer_name,
+            ctx.obj["service"],
+            ctx.obj.cluster_name,
+            filters=[f"metadata.name={ctx.obj['resource']}"],
+        )
+    ).encode("utf-8")
+    return _diff_kubectl(
+        ctx=ctx,
+        definitions=definitions,
+    )
+
+
+@quickpatch.command()
+@click.pass_context
+def apply(ctx: click.Context) -> None:
+    pass
+
     # TODO: Apply to prod
-    # TODO: File PR
