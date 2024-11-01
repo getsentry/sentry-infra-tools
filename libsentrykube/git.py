@@ -8,9 +8,7 @@ class RepoNotCleanException(Exception):
 class Git:
     def __init__(self, repo_path: str):
         self.repo = git.Repo(repo_path)
-        print(self.repo.heads)
         self.__heads = [head.name for head in self.repo.heads]
-        print(self.__heads)
         if "main" in self.__heads:
             self.default_branch = "main"
         else:
@@ -26,16 +24,10 @@ class Git:
                 print("Repo not clean. Cannot switch to default branch")
                 raise RepoNotCleanException
 
-            print("Stashing current work since force is true")
-            self.repo.git.stash()
-            self.stashed = True
+            self.stash()
 
         print(f"Checking out {self.default_branch}")
-        print(self.repo.heads)
         self.switch_to_branch(self.default_branch)
-        print(f"Active branch: {self.repo.active_branch.name}")
-        print(f"Default branch: {self.default_branch}")
-        assert self.repo.active_branch.name == self.default_branch
 
     def stash(self) -> None:
         self.repo.git.stash()
