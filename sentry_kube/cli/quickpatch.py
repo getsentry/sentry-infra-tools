@@ -1,8 +1,12 @@
+import random
+import string
 import click
-from libsentrykube.git import go_to_main, pull_main, create_branch
+from libsentrykube.git import Git
 from libsentrykube.quickpatch import apply_patch, get_arguments
 from libsentrykube.kube import render_templates
 from typing import Sequence, Mapping
+
+from libsentrykube.utils import workspace_root
 
 __all__ = ("quickpatch",)
 
@@ -20,6 +24,12 @@ __all__ = ("quickpatch",)
 )
 @click.option("--no-pull", is_flag=True, help="Skip pulling master before patching.")
 @click.option("--no-pr", is_flag=True, help="Skip the creation of the PR.")
+@click.option(
+    "--force-branch-creation",
+    is_flag=True,
+    default=False,
+    help="Force the creation of the new branch.",
+)
 @click.pass_context
 def quickpatch(
     ctx: click.core.Context,
@@ -29,6 +39,7 @@ def quickpatch(
     arguments: Sequence[str],
     no_pull: bool,
     no_pr: bool,
+    force_branch_creation: bool,
 ):
     """
     Applies pre-defined patches to the value files of our Kubernetes services.
@@ -41,9 +52,17 @@ def quickpatch(
     # TODO: Validate parameters
 
     if not no_pull:
-        go_to_main()
-        pull_main()
-        create_branch()
+        git = Git(repo_path=str(workspace_root()))
+        branch_name = "".join(
+            random.choices(string.ascii_lowercase + string.digits, k=6)
+        )
+        branch_name = f"quickpatch-{branch_name}"
+        git.create_branch(branch_name)
+        git.stash(force=force_branch_creation)
+        git.switch_to_branch(branch_name)
+        git.set_upstream(branch_name)
+        git.fetch_origin()
+        git.merge_origin(git.default_branch)
 
     get_arguments(service, patch)
     # TODO: Validate all arguments are passed and prompt for the missing ones.
@@ -56,5 +75,13 @@ def quickpatch(
         ctx.obj.cluster_name,
         filters=[f"metadata.name={resource}"],
     )
+
+    # Clean up the branch
+    # TODO: At some point we should make this a context manager so cleanup
+    # happens automatically.
+    if not no_pull:
+        git.pop_stash()
+        git.switch_to_branch(git.previous_branch)
+
     # TODO: Apply to prod
     # TODO: File PR

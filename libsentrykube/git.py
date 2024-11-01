@@ -1,5 +1,3 @@
-from contextlib import contextmanager
-from typing import Generator
 import git
 
 
@@ -62,20 +60,3 @@ class Git:
 
     def set_upstream(self, branch_name: str) -> None:
         self.repo.git.push("--set-upstream", "origin/" + branch_name)
-
-    @contextmanager
-    def setup_new_branch(
-        self, branch_name: str, force: bool = False
-    ) -> Generator[None, None, None]:
-        """
-        Create a new branch, switch to it, set it as upstream, fetch origin, and merge origin into it.
-        """
-        self.create_branch(branch_name)
-        self.stash(force=force)
-        self.switch_to_branch(branch_name)
-        self.set_upstream(branch_name)
-        self.fetch_origin()
-        self.merge_origin(self.default_branch)
-        yield
-        self.pop_stash()
-        self.switch_to_branch(self.previous_branch)
