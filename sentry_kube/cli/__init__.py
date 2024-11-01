@@ -182,7 +182,12 @@ Customers include:
 
         set_service_paths(cluster.services)
 
-        if ctx.invoked_subcommand in ("rendervalues", "render", "lint", "validate"):
+        if ctx.invoked_subcommand in (
+            "rendervalues",
+            "render",
+            "lint",
+            "validate",
+        ):
             if not customer:
                 die(
                     f"Please pass in a customer to {ctx.invoked_subcommand} "

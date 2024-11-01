@@ -8,7 +8,7 @@ from typing import Sequence, MutableMapping
 __all__ = ("quickpatch",)
 
 
-@click.group()
+@click.command()
 @click.option("--service", "-s", help="Sentry kube service name")
 @click.option(
     "--resource", "-r", help="K8s resource to patch. This must match the k8s name."
@@ -21,15 +21,21 @@ __all__ = ("quickpatch",)
 )
 @click.option("--no-pull", is_flag=True, help="Skip pulling master before patching.")
 @click.option("--no-pr", is_flag=True, help="Skip the creation of the PR.")
+# We cannot make `quickpatch` a group and render/diff/apply sub-commands as we should
+# because sentry-kube does not store a dictionary in click.ctx. It uses a data class
+# which is the same for all commands, so we cannot easily customize it for a specific
+# command.
+@click.argument("action", type=click.Choice(["render", "diff", "apply"]))
 @click.pass_context
 def quickpatch(
-    ctx: click.core.Context,
+    ctx: click.Context,
     service: str,
     resource: str,
     patch: str,
     arguments: Sequence[str],
     no_pull: bool,
     no_pr: bool,
+    action: str,
 ):
     """
     Applies pre-defined patches to the value files of our Kubernetes services.
@@ -47,8 +53,12 @@ def quickpatch(
         create_branch()
 
     get_arguments(service, patch)
+
     # TODO: Validate all arguments are passed and prompt for the missing ones.
     populated_arguments: MutableMapping[str, str] = {}
+    for arg in arguments:
+        key, value = arg.split("=", 2)
+        populated_arguments[key] = value
     apply_patch(
         service,
         ctx.obj.customer_name,
@@ -58,43 +68,29 @@ def quickpatch(
         cluster=ctx.obj.cluster_name,
     )
 
-    ctx.obj["service"] = service
-    ctx.obj["resource"] = resource
-
-    # TODO: File PR
-
-
-@quickpatch.command()
-@click.pass_context
-def render(ctx: click.Context) -> None:
-    render_templates(
-        ctx.obj.customer_name,
-        ctx.obj["service"],
-        ctx.obj.cluster_name,
-        filters=[f"metadata.name={ctx.obj['resource']}"],
-    )
-
-
-@quickpatch.command()
-@click.pass_context
-def diff(ctx: click.Context) -> None:
-    definitions = "".join(
-        render_templates(
-            ctx.obj.customer_name,
-            ctx.obj["service"],
-            ctx.obj.cluster_name,
-            filters=[f"metadata.name={ctx.obj['resource']}"],
+    if action == "render":
+        print(
+            render_templates(
+                ctx.obj.customer_name,
+                service,
+                ctx.obj.cluster_name,
+                filters=[f"metadata.name={resource}"],
+            )
         )
-    ).encode("utf-8")
-    return _diff_kubectl(
-        ctx=ctx,
-        definitions=definitions,
-    )
-
-
-@quickpatch.command()
-@click.pass_context
-def apply(ctx: click.Context) -> None:
-    pass
-
-    # TODO: Apply to prod
+    elif action == "diff":
+        definitions = "".join(
+            render_templates(
+                ctx.obj.customer_name,
+                service,
+                ctx.obj.cluster_name,
+                filters=[f"metadata.name={resource}"],
+            )
+        ).encode("utf-8")
+        return _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+        )
+    elif action == "apply":
+        raise NotImplementedError("Apply is not implemented yet")
+    else:
+        raise ValueError(f"Invalid action {action}")
