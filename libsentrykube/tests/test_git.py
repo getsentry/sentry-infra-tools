@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 import pytest
-from libsentrykube.git import Git, RepoNotCleanException
+from libsentrykube.git import GitOperations, RepoNotCleanException
 
 
 @pytest.fixture
@@ -29,12 +29,12 @@ def mock_repo():
 
 def test_default_branch(mock_repo):
     mock_repo.return_value.heads = ["main", "develop"]
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     assert git_instance.default_branch == "main"
 
 
 def test_switch_to_default_branch_already_on_default(mock_repo):
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     mock_repo.active_branch.name = "main"
     git_instance.switch_to_default_branch(force=False)
     # Should not call checkout since we're already on main
@@ -42,7 +42,7 @@ def test_switch_to_default_branch_already_on_default(mock_repo):
 
 
 def test_switch_to_default_branch_clean_repo(mock_repo):
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     mock_repo.active_branch.name = "develop"
     mock_repo.is_dirty.return_value = False
     git_instance.switch_to_default_branch(force=False)
@@ -50,7 +50,7 @@ def test_switch_to_default_branch_clean_repo(mock_repo):
 
 
 def test_switch_to_default_branch_dirty_repo_no_force(mock_repo):
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     mock_repo.active_branch.name = "develop"
     mock_repo.is_dirty.return_value = True
 
@@ -59,7 +59,7 @@ def test_switch_to_default_branch_dirty_repo_no_force(mock_repo):
 
 
 def test_switch_to_default_branch_dirty_repo_force(mock_repo):
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     mock_repo.active_branch.name = "develop"
     mock_repo.is_dirty.return_value = True
 
@@ -70,7 +70,7 @@ def test_switch_to_default_branch_dirty_repo_force(mock_repo):
 
 
 def test_pop_stash_when_stashed(mock_repo):
-    git_instance = Git("a/b/c")
+    git_instance = GitOperations("a/b/c")
     git_instance.stashed = True
     git_instance.pop_stash()
     mock_repo.git.stash.assert_called_once_with("pop")
