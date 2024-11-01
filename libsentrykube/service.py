@@ -117,7 +117,7 @@ def get_service_value_overrides(
     return values
 
 
-def get_managed_service_value_overrides(
+def get_tools_managed_service_value_overrides(
     service_name: str,
     region_name: str,
     cluster_name: str = "default",
@@ -166,6 +166,15 @@ def write_managed_values_overrides(
     )
 
     with open(service_override_file, "w") as file:
+        file.write("# This file contains override value managed by tools\n")
+        file.write("# \n")
+        file.write("# It is discouraged to update it manually. Use the tool instead\n")
+        file.write("# unless you really have to.\n")
+        file.write("# Updating this manually is safe as long as:\n")
+        file.write("# - you do not add comments. They are going to be erased\n")
+        file.write("# - you do not turn it into a Jinja template. That breaks tools\n")
+        file.write("# - you keep the structure intact and only change literals\n")
+        file.write("\n")
         yaml.dump(values, file)
 
 

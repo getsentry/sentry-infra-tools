@@ -4,7 +4,7 @@ from libsentrykube.service import (
     get_service_data,
     get_service_values,
     get_service_value_overrides,
-    get_managed_service_value_overrides,
+    get_tools_managed_service_value_overrides,
     get_service_value_override_path,
     get_service_path,
     write_managed_values_overrides,
@@ -118,7 +118,7 @@ def test_get_service_value_managed_overrides():
 
     init_cluster_context(region, cluster)
     for service in ["service1", "service2"]:
-        returned = get_managed_service_value_overrides(
+        returned = get_tools_managed_service_value_overrides(
             service_name=service,
             region_name=region,
             cluster_name=cluster,
@@ -165,7 +165,7 @@ def test_write_managed_file(config_structure) -> None:
     write_managed_values_overrides(
         {"key2": "value2"}, "my_service", "customer1", "cluster1"
     )
-    assert get_managed_service_value_overrides(
+    assert get_tools_managed_service_value_overrides(
         service_name="my_service",
         region_name="customer1",
         cluster_name="cluster1",
