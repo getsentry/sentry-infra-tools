@@ -117,7 +117,7 @@ def get_service_value_overrides(
     return values
 
 
-def get_managed_service_value_overrides(
+def get_tools_managed_service_value_overrides(
     service_name: str,
     region_name: str,
     cluster_name: str = "default",

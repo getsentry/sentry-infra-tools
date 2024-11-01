@@ -20,7 +20,7 @@ from libsentrykube.service import (
     get_service_template_files,
     get_service_values,
     get_service_value_overrides,
-    get_managed_service_value_overrides,
+    get_tools_managed_service_value_overrides,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -126,7 +126,7 @@ def _consolidate_variables(
     deep_merge_dict(service_values, service_value_overrides)
 
     # Override files managed by tools
-    managed_values = get_managed_service_value_overrides(
+    managed_values = get_tools_managed_service_value_overrides(
         service_name, customer_name, cluster_name, external
     )
     deep_merge_dict(service_values, managed_values)
