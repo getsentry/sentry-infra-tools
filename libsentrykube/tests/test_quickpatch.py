@@ -97,29 +97,34 @@ def test_missing_patch_file1():
 
 
 def test_missing_value_file(reset_configs):
-    with pytest.raises(
-        FileNotFoundError,
-        match=f"Resource value file not found for service {SERVICE} in region {REGION}",
-    ):
-        os.remove(
-            Path(reset_configs)
-            / "k8s"
-            / "services"
-            / SERVICE
-            / "region_overrides"
-            / REGION
-            / "default.managed.yaml"
-        )
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas1": TEST_NUM_REPLICAS,
-                "replicas2": TEST_NUM_REPLICAS,
+    os.remove(
+        Path(reset_configs)
+        / "k8s"
+        / "services"
+        / SERVICE
+        / "region_overrides"
+        / REGION
+        / "default.managed.yaml"
+    )
+    apply_patch(
+        SERVICE,
+        REGION,
+        TEST_RESOURCE,
+        "test-patch-no-file",
+        {
+            "replicas1": TEST_NUM_REPLICAS,
+            "replicas2": TEST_NUM_REPLICAS,
+        },
+    )
+    expected = {
+        "consumers": {
+            "consumer": {
+                "replicas": TEST_NUM_REPLICAS,
             },
-        )
+        },
+    }
+    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
+    assert expected == actual
 
 
 def test_missing_patches():
@@ -254,20 +259,6 @@ def test_invalid_schema(patch):
             REGION,
             TEST_RESOURCE,
             patch,
-            {
-                "replicas1": TEST_NUM_REPLICAS,
-                "replicas2": TEST_NUM_REPLICAS,
-            },
-        )
-
-
-def test_missing_resource_file():
-    with pytest.raises(FileNotFoundError, match="Resource value file not found"):
-        apply_patch(
-            SERVICE,
-            "invalid-region",  # Non-existent region
-            TEST_RESOURCE,
-            TEST_PATCH,
             {
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
