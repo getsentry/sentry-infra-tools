@@ -133,12 +133,9 @@ def apply_patch(
         pattern = r"<\s*" + re.escape(arg) + r"\s*>"
         patch_data_str = re.sub(pattern, str(arg_value), patch_data_str)
 
-    # Load the patch
+    # Load the patch & apply
     patch_data = yaml.safe_load(patch_data_str)
-    patches = patch_data.get("patches")
-    json_patch = jsonpatch.JsonPatch(patches)
-
-    # Finally, apply the patch
+    patches = patch_data.get("patches", [])
     resource_data = get_tools_managed_service_value_overrides(
         service, region, cluster_name=cluster
     )
@@ -146,5 +143,10 @@ def apply_patch(
         raise FileNotFoundError(
             f"Resource value file not found for service {service} in region {region}"
         )
-    resource_data = json_patch.apply(resource_data)
+
+    # This is to allow for more complexity in the patches such as test ops
+    for patch in patches:
+        json_patch = jsonpatch.JsonPatch(patch)
+        resource_data = json_patch.apply(resource_data)
+
     write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)

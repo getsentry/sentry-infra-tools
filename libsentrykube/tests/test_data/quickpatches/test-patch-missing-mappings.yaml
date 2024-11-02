@@ -17,9 +17,9 @@ schema:
   additionalProperties: false
 patches:
   # Key-Values should follow jsonpatch format
-  - op: replace
-    path: /consumers/<resource>/replicas
-    value: <replicas1>
-  - op: replace
-    path: /consumers/<resource>/replicas
-    value: <replicas2>
+  - - op: replace
+      path: /consumers/<resource>/replicas
+      value: <replicas1>
+    - op: replace
+      path: /consumers/<resource>/replicas
+      value: <replicas2>
