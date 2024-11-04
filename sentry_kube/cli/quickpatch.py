@@ -82,13 +82,19 @@ def quickpatch(
     if not no_pull:
         # Quickpatch could either modify existing files or add new ones. Both
         # cases are handled here.
-        if git.get_unstaged_files():
-            git.add(git.get_unstaged_files())
+        unstaged_files = git.get_unstaged_files()
+        untracked_files = git.get_untracked_files()
+        if unstaged_files:
+            files_to_add = [
+                file for file in unstaged_files if file.endswith(".managed.yaml")
+            ]
+            git.add(files_to_add)
             git.commit(f"fix: Quickpatch for {service} {resource}")
-        elif git.get_untracked_files():
-            for file in git.get_untracked_files():
-                if file.endswith(".managed.yaml"):
-                    git.add(list(file))
+        elif untracked_files:
+            files_to_add = [
+                file for file in untracked_files if file.endswith(".managed.yaml")
+            ]
+            git.add(files_to_add)
             git.commit(f"fix: Quickpatch for {service} {resource}")
 
         # Rewind local setup to what it was before we started
