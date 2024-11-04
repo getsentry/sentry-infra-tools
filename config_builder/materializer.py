@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+import site
 from typing import Generator
 
 import yaml
@@ -45,8 +46,17 @@ def materialize_file(
     materialized_path = root_dir / materialized_root / relative_path
     os.makedirs(materialized_path.parent, exist_ok=True)
 
+    def import_callback(base_dirs, rel_path):
+        # Add the site-packages path to the search path
+        search_paths = site.getsitepackages() + base_dirs
+        return jsonnet.JsonnetImportCallback(search_paths)
+
     try:
-        content = jsonnet(jsonnet_file.name, base_dir=jsonnet_file.parent.absolute())
+        content = jsonnet(
+            jsonnet_file.name,
+            base_dir=jsonnet_file.parent.absolute(),
+            import_callback=import_callback,
+        )
     except RuntimeError as e:
         raise JsonnetException() from e
 
