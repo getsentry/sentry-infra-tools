@@ -196,6 +196,21 @@ def test_invalid_resource():
         ),  # Test with missing .managed.yaml file (it should auto-generate)
         pytest.param(
             "test-patch",
+            "empty",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        ),  # Test with empty .managed.yaml file (it should auto-generate)
+        pytest.param(
+            "test-patch",
             "default2",
             {
                 "consumers": {
