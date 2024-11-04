@@ -38,6 +38,18 @@ class Git:
     def pull_latest_changes(self) -> None:
         self.repo.git.pull()
 
+    def get_staged_files(self) -> list[str]:
+        """Gets list of files staged for commit"""
+        return [item.a_path for item in self.repo.index.diff("HEAD")]
+
+    def get_unstaged_files(self) -> list[str]:
+        """Gets list of modified but unstaged files"""
+        return [item.a_path for item in self.repo.index.diff(None)]
+
+    def get_untracked_files(self) -> list[str]:
+        """Gets list of untracked files"""
+        return self.repo.untracked_files
+
     def add(self, files: list[str]) -> None:
         self.repo.index.add(files)
 

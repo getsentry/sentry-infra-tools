@@ -78,10 +78,22 @@ def quickpatch(
 
     # Clean up the branch
     # TODO: At some point we should make this a context manager so cleanup
-    # happens automatically.
+    # happens autoatically.
     if not no_pull:
-        git.pop_stash()
+        # Quickpatch could either modify existing files or add new ones. Both
+        # cases are handled here.
+        if git.get_unstaged_files():
+            git.add(git.get_unstaged_files())
+            git.commit(f"fix: Quickpatch for {service} {resource}")
+        elif git.get_untracked_files():
+            for file in git.get_untracked_files():
+                if file.endswith(".managed.yaml"):
+                    git.add(list(file))
+            git.commit(f"fix: Quickpatch for {service} {resource}")
+
+        # Rewind local setup to what it was before we started
         git.switch_to_branch(git.previous_branch)
+        git.pop_stash()
 
     # TODO: Apply to prod
     # TODO: File PR
