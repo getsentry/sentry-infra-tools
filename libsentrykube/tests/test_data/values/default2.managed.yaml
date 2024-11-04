@@ -1,0 +1,3 @@
+consumers:
+  existing-consumer:
+    replicas: 4

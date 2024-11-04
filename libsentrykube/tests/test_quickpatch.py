@@ -96,32 +96,6 @@ def test_missing_patch_file1():
         )
 
 
-def test_missing_value_file(reset_configs):
-    with pytest.raises(
-        FileNotFoundError,
-        match=f"Resource value file not found for service {SERVICE} in region {REGION}",
-    ):
-        os.remove(
-            Path(reset_configs)
-            / "k8s"
-            / "services"
-            / SERVICE
-            / "region_overrides"
-            / REGION
-            / "default.managed.yaml"
-        )
-        apply_patch(
-            SERVICE,
-            REGION,
-            TEST_RESOURCE,
-            TEST_PATCH,
-            {
-                "replicas1": TEST_NUM_REPLICAS,
-                "replicas2": TEST_NUM_REPLICAS,
-            },
-        )
-
-
 def test_missing_patches():
     with pytest.raises(
         ValueError,
@@ -172,47 +146,100 @@ def test_invalid_resource():
         )
 
 
-def test_correct_patch():
-    expected = {
-        "consumers": {
-            "consumer": {
-                "replicas": TEST_NUM_REPLICAS,
+@pytest.mark.parametrize(
+    "patch, cluster, expected, args",
+    [
+        pytest.param(
+            TEST_PATCH,
+            CLUSTER,
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
             },
-        },
-    }
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        ),  # Normal patch test
+        pytest.param(
+            "test-patch2",
+            CLUSTER,
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas-1": TEST_NUM_REPLICAS,
+                "replicas_2": TEST_NUM_REPLICAS,
+            },
+        ),  # Normal patch test
+        pytest.param(
+            "test-patch",
+            "missing-file",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        ),  # Test with missing .managed.yaml file (it should auto-generate)
+        pytest.param(
+            "test-patch",
+            "default2",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                    "existing-consumer": {
+                        "replicas": 4,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        ),  # Test with missing resources in yaml file (it should auto-generate)
+        pytest.param(
+            "test-patch-override",
+            "default2",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        ),  # Test override of existing resource.
+        # Expects to override all resources at the same path level with the value
+    ],
+)
+def test_correct_patch(patch, cluster, expected, args):
     apply_patch(
         SERVICE,
         REGION,
         TEST_RESOURCE,
-        TEST_PATCH,
-        {
-            "replicas1": TEST_NUM_REPLICAS,
-            "replicas2": TEST_NUM_REPLICAS,
-        },
+        patch,
+        args,
+        cluster,
     )
-    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
-    assert expected == actual
-
-
-def test_correct_patch2():
-    expected = {
-        "consumers": {
-            "consumer": {
-                "replicas": TEST_NUM_REPLICAS,
-            },
-        },
-    }
-    apply_patch(
-        SERVICE,
-        REGION,
-        TEST_RESOURCE,
-        "test-patch2",
-        {
-            "replicas-1": TEST_NUM_REPLICAS,
-            "replicas_2": TEST_NUM_REPLICAS,
-        },
-    )
-    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
+    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, cluster, False)
     assert expected == actual
 
 
@@ -262,7 +289,7 @@ def test_invalid_schema(patch):
 
 
 def test_missing_resource_file():
-    with pytest.raises(FileNotFoundError, match="Resource value file not found"):
+    with pytest.raises(FileNotFoundError):
         apply_patch(
             SERVICE,
             "invalid-region",  # Non-existent region

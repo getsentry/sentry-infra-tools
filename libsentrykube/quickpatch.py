@@ -1,9 +1,8 @@
 from pathlib import Path
 import re
-from typing import MutableMapping, Sequence
+from typing import List, MutableMapping, Sequence
 import click
 import yaml
-import jsonpatch
 
 from libsentrykube.service import (
     get_tools_managed_service_value_overrides,
@@ -92,6 +91,27 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     return patch_data["schema"].get("required", [])
 
 
+def patch_json(patch_data: List[dict], resource_data: dict) -> dict:
+    """
+    Applies the patch to the json data
+    Assumes the patch & json data have a hierarchy of nested dictionaries
+    """
+    for patch in patch_data:
+        data = resource_data
+        op = patch.get("op")
+        path: str = patch.get("path", "")
+        value = patch.get("value")
+        if op == "replace" and path != "":
+            paths = path.strip("/").split("/")
+            for path in paths[:-1]:
+                if path not in data:
+                    data[path] = {}
+                data = data[path]
+            data[paths[-1]] = value
+
+    return resource_data
+
+
 def apply_patch(
     service: str,
     region: str,
@@ -135,16 +155,13 @@ def apply_patch(
 
     # Load the patch
     patch_data = yaml.safe_load(patch_data_str)
-    patches = patch_data.get("patches")
-    json_patch = jsonpatch.JsonPatch(patches)
+    patches = patch_data.get("patches", [])
 
     # Finally, apply the patch
     resource_data = get_tools_managed_service_value_overrides(
         service, region, cluster_name=cluster
     )
-    if resource_data == {}:
-        raise FileNotFoundError(
-            f"Resource value file not found for service {service} in region {region}"
-        )
-    resource_data = json_patch.apply(resource_data)
+    if resource_data is None:  # If the .yaml file is empty
+        resource_data = {}
+    resource_data = patch_json(patches, resource_data)
     write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
