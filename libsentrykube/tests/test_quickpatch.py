@@ -3,7 +3,7 @@ from typing import Generator
 from jsonschema import ValidationError
 import pytest
 from libsentrykube.context import init_cluster_context
-from libsentrykube.quickpatch import apply_patch, get_arguments
+from libsentrykube.quickpatch import apply_patch, get_arguments, patch_json
 from libsentrykube.service import (
     get_tools_managed_service_value_overrides,
     get_service_path,
@@ -362,3 +362,93 @@ def test_validations(expected_message, arguments):
             TEST_PATCH,
             arguments,
         )
+
+
+@pytest.mark.parametrize(
+    "patch, resource, expected",
+    [
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+        ),  # Whole path is not present, should create
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": {}},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+        ),  # Part of path is not present, should create
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+        ),  # Update existing value
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": {"d": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
+        ),  # Apply a dict
+        pytest.param(
+            [
+                {
+                    "path": "a/b/d",
+                    "value": {"e": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": 0, "d": {"e": TEST_NUM_REPLICAS}}}},
+        ),  # Apply a dict with an existing dict
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c/////////",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+        ),  # Weird path
+    ],
+)
+def test_patch_json(patch, resource, expected):
+    actual = patch_json(patch, resource)
+    assert expected == actual
+
+
+def test_patch_json_invalid_path():
+    with pytest.raises(ValueError):
+        patch_json(
+            [
+                {"value": TEST_NUM_REPLICAS},
+            ],
+            {},
+        )  # missing path value
+    with pytest.raises(ValueError):
+        patch_json(
+            [
+                {
+                    "path": "/",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+        )  # invalid path value

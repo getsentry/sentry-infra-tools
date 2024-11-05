@@ -106,10 +106,7 @@ def patch_json(
     Patches should be a list of PatchOperations with the following keys:
         path: The path to the value to be patched
         value: The value to be patched
-    Paths are relative to the resource root
-    and are separated by / . Each / denotes a new level of nesting
-    and assumes the current level is a json object.
-    The final level is the key to be replaced. Currently, the only supported
+    Currently, the only supported
     operations are replacement & creation of new objects.
 
     jsonpatch was not used because it does not support creation of new objects
@@ -117,13 +114,29 @@ def patch_json(
     and the patch specifies path /a/b/c, then jsonpatch will error and not create
     the object { "a": { "b": { "c": "value" } } }. This function will create
     the object in this case.
+
+    Semantics:
+    - Paths are relative to the resource root and are separated by /
+    - The / separates keys in the path. Each / denotes a new level of nesting
+    and assumes the current level is a json object.
+    - The final level is the key to be replaced.
+    - If the key does not exist at the current level, this function creates and
+    assigns the object to the key, then traverses down the object.
+    - If the path exists, this function traverses the resource along the path
+    and replaces the value at the final level.
+    - The value of the final key in the path will be replaced with the value
+    specified in the patch. So, to avoid overwriting existing values, the
+    path should contain the full path to the key to be replaced.
     """
     for patch in patches:
         data = resource
         path = patch.get("path", None)
         value = patch.get("value")
         if path is not None:
-            paths = path.strip("/").split("/")
+            stripped_path = path.strip("/")
+            if stripped_path == "":
+                raise ValueError("Path cannot be empty or just contain/")
+            paths = stripped_path.split("/")
             for path in paths[:-1]:
                 if path not in data:
                     data[path] = {}

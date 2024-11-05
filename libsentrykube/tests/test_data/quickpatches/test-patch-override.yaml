@@ -20,9 +20,7 @@ mappings:
   test-consumer-prod: consumer
 patches:
   # Key-Values should follow jsonpatch format
-  - op: replace
-    path: /consumers
+  - path: /consumers
     value: { "<resource>": { "replicas": <replicas1> } }
-  - op: replace
-    path: /consumers
+  - path: /consumers
     value: { "<resource>": { "replicas": <replicas2> } }
