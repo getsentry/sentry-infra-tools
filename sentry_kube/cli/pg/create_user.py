@@ -2,7 +2,7 @@ import hmac
 import json
 from base64 import standard_b64decode, standard_b64encode
 from hashlib import pbkdf2_hmac, sha256
-from os import urandom
+import os
 from secrets import token_urlsafe
 
 import click
@@ -94,7 +94,7 @@ def b64enc(b: bytes) -> str:
 
 
 def pg_scram_sha256(passwd: str) -> str:
-    salt = urandom(salt_size)
+    salt = os.urandom(salt_size)
     digest_key = pbkdf2_hmac(
         "sha256", passwd.encode("utf8"), salt, iterations, digest_len
     )
@@ -135,8 +135,7 @@ def upload_plaintext_to_k8s_secret(
             body = V1Secret()
             body.metadata = {"name": secret_name}
             body.data = {}
-            api.create_namespaced_secret(namespace="default", body=body)
-            secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+            secret = api.create_namespaced_secret(namespace="default", body=body)
         else:
             raise
 
@@ -169,6 +168,7 @@ def upload_plaintext_to_k8s_secret(
     api.patch_namespaced_secret(
         namespace="default", name=secret_name, body={"data": secret_data}
     )
+    print("Updated successfully.")
 
 
 def merge_userlists(
@@ -236,6 +236,7 @@ def upload_userlist_to_k8s_secret(
             name=secret_name,
             body={"data": {"userlist": merged_userlist}},
         )
+        print("Updated successfully.")
 
 
 def upload_userlist_to_google_secret(
@@ -273,9 +274,9 @@ def upload_userlist_to_google_secret(
         client.add_secret_version(
             request={"parent": parent, "payload": {"data": secret_data}}
         )
+        print("Updated successfully.")
 
 
-# @click.option("--project-id", required=True, help="The GCP project to add the secret to")
 @click.option("--username", required=False, multiple=True, type=str)
 @click.option("--generate-plaintext", type=bool, default=False, is_flag=True)
 @click.option("--generate-userlist", type=bool, default=False, is_flag=True)
