@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from devenv.lib import config, venv
+from devenv.lib import venv, gcloud, config
+from devenv.constants import SYSTEM_MACHINE
 
 
 def main(context: dict[str, str]) -> int:
     repo = context["repo"]
     reporoot = context["reporoot"]
+
+    cfg = config.get_repo(reporoot)
+    gcloud.install(
+        cfg["gcloud"]["version"],
+        cfg["gcloud"][SYSTEM_MACHINE],
+        cfg["gcloud"][f"{SYSTEM_MACHINE}_sha256"],
+        reporoot,
+    )
 
     venv_dir, python_version, requirements, editable_paths, bins = venv.get(
         reporoot, repo
