@@ -1,6 +1,6 @@
 from pathlib import Path
 import re
-from typing import List, MutableMapping, Sequence
+from typing import Any, List, MutableMapping, Sequence, TypedDict, Union
 import click
 import yaml
 
@@ -91,25 +91,47 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     return patch_data["schema"].get("required", [])
 
 
-def patch_json(patch_data: List[dict], resource_data: dict) -> dict:
+class PatchOperation(TypedDict):
+    path: str
+    value: Union[str, int, float]
+
+
+def patch_json(
+    patches: List[PatchOperation], resource: dict[str, Any]
+) -> dict[str, Any]:
     """
-    Applies the patch to the json data
-    Assumes the patch & json data have a hierarchy of nested dictionaries
+    This function applies the patch to the resource json object
+    in-place.
+    It assumes resource has a hierarchy of nested dictionaries.
+    Patches should be a list of PatchOperations with the following keys:
+        path: The path to the value to be patched
+        value: The value to be patched
+    Paths are relative to the resource root
+    and are separated by / . Each / denotes a new level of nesting
+    and assumes the current level is a json object.
+    The final level is the key to be replaced. Currently, the only supported
+    operations are replacement & creation of new objects.
+
+    jsonpatch was not used because it does not support creation of new objects
+    along the specified path. For example: if resource is an empty obj
+    and the patch specifies path /a/b/c, then jsonpatch will error and not create
+    the object { "a": { "b": { "c": "value" } } }. This function will create
+    the object in this case.
     """
-    for patch in patch_data:
-        data = resource_data
-        op = patch.get("op")
-        path: str = patch.get("path", "")
+    for patch in patches:
+        data = resource
+        path = patch.get("path", None)
         value = patch.get("value")
-        if op == "replace" and path != "":
+        if path is not None:
             paths = path.strip("/").split("/")
             for path in paths[:-1]:
                 if path not in data:
                     data[path] = {}
                 data = data[path]
             data[paths[-1]] = value
-
-    return resource_data
+        else:
+            raise ValueError("Path must be specified for all patches")
+    return resource
 
 
 def apply_patch(
