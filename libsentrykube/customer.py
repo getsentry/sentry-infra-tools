@@ -8,11 +8,15 @@ from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config
 from libsentrykube.utils import die
 
-ALLOYDB_DISCOVERY_SERVICEURL = "https://{api}.googleapis.com/$discovery/rest?version={apiVersion}"
+ALLOYDB_DISCOVERY_SERVICEURL = (
+    "https://{api}.googleapis.com/$discovery/rest?version={apiVersion}"
+)
 
 
 @cache
-def load_customer_data(config: Config, customer_name: str, cluster_name: str) -> Dict[str, Any]:
+def load_customer_data(
+    config: Config, customer_name: str, cluster_name: str
+) -> Dict[str, Any]:
     try:
         customer_config = config.silo_regions[customer_name]
     except KeyError:
@@ -40,14 +44,17 @@ def get_compute_instance_ips(project: str) -> List[str]:
     customer_instances = [
         i
         for i in available_instances
-        if i["status"] == "RUNNING" and not i["name"].startswith("gke-primary-node-pool")
+        if i["status"] == "RUNNING"
+        and not i["name"].startswith("gke-primary-node-pool")
     ]
     return [i["networkInterfaces"][0]["networkIP"] for i in customer_instances]
 
 
 # This is needed to connect bastion to Alloydb Clusters so Postgres Terraform Provider
 # can interact with Alloydb Postgres Databases
-def alloydb_instance_aggregated_list(project: str, region: Optional[str] = None) -> List[Any]:
+def alloydb_instance_aggregated_list(
+    project: str, region: Optional[str] = None
+) -> List[Any]:
     instances = []
     try:
         alloydb = googleapiclient.discovery.build(
@@ -77,7 +84,9 @@ def alloydb_instance_aggregated_list(project: str, region: Optional[str] = None)
     return instances
 
 
-def get_alloydb_instance_ips(project: str, region: Optional[str] = None) -> Sequence[str]:
+def get_alloydb_instance_ips(
+    project: str, region: Optional[str] = None
+) -> Sequence[str]:
     instances = alloydb_instance_aggregated_list(project, region)
     return [i["ipAddress"] for i in instances]
 
@@ -90,7 +99,9 @@ def get_service_ip_mapping(project: str, region: Optional[str] = None) -> List[s
 
 
 def get_region(config: Config, customer_name: str, cluster_name: str):
-    region = load_customer_data(config, customer_name, cluster_name)["region"].rsplit("-", 1)[0]
+    region = load_customer_data(config, customer_name, cluster_name)["region"].rsplit(
+        "-", 1
+    )[0]
     assert isinstance(region, str)
     return region
 

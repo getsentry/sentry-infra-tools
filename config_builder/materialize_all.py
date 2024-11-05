@@ -6,9 +6,17 @@ from pathlib import Path
 from sys import stderr
 from typing import Sequence
 
-from config_builder.combined_generator import Outcome, generate_all_files, validate_all_files
+from config_builder.combined_generator import (
+    Outcome,
+    generate_all_files,
+    validate_all_files,
+)
 from config_builder.json_schema_validator import ValidationException
-from config_builder.materializer import JsonnetException, iterate_jsonnet_configs, materialize_file
+from config_builder.materializer import (
+    JsonnetException,
+    iterate_jsonnet_configs,
+    materialize_file,
+)
 
 GREEN = "\033[92m"
 RED = "\033[31m"

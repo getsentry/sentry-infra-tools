@@ -11,7 +11,9 @@ __all__ = ("k9s",)
 def ensure_k9s() -> str:
     executable_name = "k9s"
     if not shutil.which(executable_name):
-        click.echo("> k9s binary is missing, install it from https://k9scli.io/topics/install/")
+        click.echo(
+            "> k9s binary is missing, install it from https://k9scli.io/topics/install/"
+        )
         sys.exit(1)
     return executable_name
 

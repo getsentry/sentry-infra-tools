@@ -80,7 +80,11 @@ def combine_and_write(
     else:
         with open(generated_file_path) as f:
             existing_content = f.read()
-            outcome = Outcome.UNCHANGED if existing_content == generated_file else Outcome.UPDATED
+            outcome = (
+                Outcome.UNCHANGED
+                if existing_content == generated_file
+                else Outcome.UPDATED
+            )
 
     if outcome != Outcome.UNCHANGED:
         with open(generated_file_path, "w") as f:

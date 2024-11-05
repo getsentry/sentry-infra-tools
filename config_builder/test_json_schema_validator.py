@@ -98,10 +98,15 @@ def valid_structure() -> Generator[str, None, None]:
             / "consumer_groups"
             / "regional_override_consumer_group.schema.json"
         )
-        regional_schema_schema.write_text(json.dumps(REGIONAL_CONSUMER_GROUP_SCHEMA, indent=4))
+        regional_schema_schema.write_text(
+            json.dumps(REGIONAL_CONSUMER_GROUP_SCHEMA, indent=4)
+        )
 
         default_schema = (
-            Path(temp_dir) / "schemas" / "consumer_groups" / "default_consumer_group.schema.json"
+            Path(temp_dir)
+            / "schemas"
+            / "consumer_groups"
+            / "default_consumer_group.schema.json"
         )
         default_schema.write_text(json.dumps(DEFAULT_CONSUMER_GROUP_SCHEMA, indent=4))
 
@@ -112,7 +117,13 @@ def valid_structure() -> Generator[str, None, None]:
         common2.write_text(json.dumps(COMMON2, indent=4))
 
         # make valid yaml files
-        os.makedirs(Path(temp_dir) / "kafka" / "consumer_groups" / "regional_overrides" / "disney")
+        os.makedirs(
+            Path(temp_dir)
+            / "kafka"
+            / "consumer_groups"
+            / "regional_overrides"
+            / "disney"
+        )
         regional_override_snuba = (
             Path(temp_dir)
             / "kafka"
@@ -130,7 +141,9 @@ def valid_structure() -> Generator[str, None, None]:
         consumer_type_fail1 = (
             Path(temp_dir) / "kafka" / "consumer_types" / "consumer_type_fail1.yaml"
         )
-        consumer_type_fail1.write_text(yaml.dump(FAILURE_CASE_WRONG_TYPE_IN_REF, indent=4))
+        consumer_type_fail1.write_text(
+            yaml.dump(FAILURE_CASE_WRONG_TYPE_IN_REF, indent=4)
+        )
 
         consumer_type_fail2 = (
             Path(temp_dir) / "kafka" / "consumer_types" / "consumer_type_fail2.yaml"
@@ -140,7 +153,9 @@ def valid_structure() -> Generator[str, None, None]:
         consumer_type_fail3 = (
             Path(temp_dir) / "kafka" / "consumer_types" / "consumer_type_fail3.yaml"
         )
-        consumer_type_fail3.write_text(yaml.dump(FAILURE_CASE_MISSING_REQUIRED, indent=4))
+        consumer_type_fail3.write_text(
+            yaml.dump(FAILURE_CASE_MISSING_REQUIRED, indent=4)
+        )
 
         # make yaml file that should NOT be validated
         os.makedirs(Path(temp_dir) / "kafka" / "unrelated_dir")
@@ -172,7 +187,11 @@ def valid_structure() -> Generator[str, None, None]:
     "file, return_code",
     [
         pytest.param(
-            Path("kafka") / "consumer_groups" / "regional_overrides" / "disney" / "snuba.yaml",
+            Path("kafka")
+            / "consumer_groups"
+            / "regional_overrides"
+            / "disney"
+            / "snuba.yaml",
             0,
             id="Validate valid yaml file (regional override)",
         ),
@@ -198,7 +217,9 @@ def valid_structure() -> Generator[str, None, None]:
         ),
     ],
 )
-def test_json_schema_validator(valid_structure: str, file: Path, return_code: int | None) -> None:
+def test_json_schema_validator(
+    valid_structure: str, file: Path, return_code: int | None
+) -> None:
     validator = JsonSchemaValidator(Path(valid_structure), SCHEMAS)
     assert validator.validate_yaml(Path(valid_structure) / file) == return_code
 

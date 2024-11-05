@@ -82,9 +82,14 @@ def test_iteration(config_struct: str) -> None:
     ],
 )
 def test_materialize_file(
-    config_struct: str, materialized_root: Path | None, expected_path: Path, is_yaml: bool
+    config_struct: str,
+    materialized_root: Path | None,
+    expected_path: Path,
+    is_yaml: bool,
 ) -> None:
-    jsonnet_file_path = f"{expected_path}.jsonnet" if is_yaml else "feature1/combined/file1.jsonnet"
+    jsonnet_file_path = (
+        f"{expected_path}.jsonnet" if is_yaml else "feature1/combined/file1.jsonnet"
+    )
 
     materialize_file(
         Path(config_struct),

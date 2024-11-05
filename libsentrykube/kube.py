@@ -20,6 +20,7 @@ from libsentrykube.service import (
     get_service_template_files,
     get_service_values,
     get_service_value_overrides,
+    get_tools_managed_service_value_overrides,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -100,6 +101,21 @@ def _consolidate_variables(
     cluster_name: str = "default",
     external: bool = False,
 ) -> dict:
+    """
+    We have multiple levels of overrides for our value files.
+    1. The values defined inside the service directory as values.yaml.
+    2. overridden by the regional overrides in
+       `service/region_override/region/cluster.yaml`
+    3. overridden by the managed override file. This is like point 2. Conceptually
+       there is no difference, practically this is managed by tools while region
+       overrides are managed manually and they can contain comments. Tools cannot
+       preserve comments.
+    4. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
+
+    TODO: write the minimum components of a yaml parser to remove step 3 and
+          patch the regional override preserving comments.
+    """
+
     # Service defaults from _values
     service_values = get_service_values(service_name, external)
 
@@ -108,6 +124,12 @@ def _consolidate_variables(
         service_name, customer_name, cluster_name, external
     )
     deep_merge_dict(service_values, service_value_overrides)
+
+    # Override files managed by tools
+    managed_values = get_tools_managed_service_value_overrides(
+        service_name, customer_name, cluster_name, external
+    )
+    deep_merge_dict(service_values, managed_values)
 
     # Service data overrides from clusters/
     customer_values, _ = get_service_data(

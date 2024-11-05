@@ -89,19 +89,21 @@ sentry-kube -q -C s4s edit-secret service-pgbouncer
 """
 
 
-
 def b64enc(b: bytes) -> str:
     return standard_b64encode(b).decode("utf-8")
 
 
 def pg_scram_sha256(passwd: str) -> str:
     salt = urandom(salt_size)
-    digest_key = pbkdf2_hmac("sha256", passwd.encode("utf8"), salt, iterations, digest_len)
+    digest_key = pbkdf2_hmac(
+        "sha256", passwd.encode("utf8"), salt, iterations, digest_len
+    )
     client_key = hmac.digest(digest_key, "Client Key".encode("UTF-8"), "sha256")
     stored_key = sha256(client_key).digest()
     server_key = hmac.digest(digest_key, "Server Key".encode("UTF-8"), "sha256")
     return (
-        f"SCRAM-SHA-256${iterations}:{b64enc(salt)}" f"${b64enc(stored_key)}:{b64enc(server_key)}"
+        f"SCRAM-SHA-256${iterations}:{b64enc(salt)}"
+        f"${b64enc(stored_key)}:{b64enc(server_key)}"
     )
 
 
@@ -123,9 +125,7 @@ def decode_userlist(userlist: str):
 
 
 def upload_plaintext_to_k8s_secret(
-    api: CoreV1Api,
-    users: dict[str, dict[str, str]],
-    secret_name: str
+    api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
 ) -> None:
     try:
         secret = api.read_namespaced_secret(namespace="default", name=secret_name)
@@ -166,10 +166,14 @@ def upload_plaintext_to_k8s_secret(
         print("WARNING: This change was not applied.")
         return
 
-    api.patch_namespaced_secret(namespace="default", name=secret_name, body={"data": secret_data})
+    api.patch_namespaced_secret(
+        namespace="default", name=secret_name, body={"data": secret_data}
+    )
 
 
-def merge_userlists(encoded_userlist: str, users: dict[str, dict[str, str]], label: str):
+def merge_userlists(
+    encoded_userlist: str, users: dict[str, dict[str, str]], label: str
+):
     userlist = standard_b64decode(encoded_userlist).decode("utf-8")
 
     print(f"### {label}, BEFORE")
@@ -206,10 +210,7 @@ def merge_userlists(encoded_userlist: str, users: dict[str, dict[str, str]], lab
 
 
 def upload_userlist_to_k8s_secret(
-    api: CoreV1Api,
-    users: dict[str,
-    dict[str, str]],
-    secret_name: str
+    api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
 ) -> None:
     try:
         secret = api.read_namespaced_secret(namespace="default", name=secret_name)
@@ -238,9 +239,7 @@ def upload_userlist_to_k8s_secret(
 
 
 def upload_userlist_to_google_secret(
-    project_id: str,
-    users: dict[str, dict[str, str]],
-    secret_id: str
+    project_id: str, users: dict[str, dict[str, str]], secret_id: str
 ) -> None:
     # run gcloud auth application-default login for the gcloud python lib
 
@@ -271,7 +270,9 @@ def upload_userlist_to_google_secret(
         data["userlist"] = merged_userlist
         secret_data = json.dumps(data).encode("utf-8")
         parent = client.secret_path(project_id, secret_id)
-        client.add_secret_version(request={"parent": parent, "payload": {"data": secret_data}})
+        client.add_secret_version(
+            request={"parent": parent, "payload": {"data": secret_data}}
+        )
 
 
 # @click.option("--project-id", required=True, help="The GCP project to add the secret to")
@@ -291,8 +292,7 @@ def create_user(
     userlist_k8s_secret,
     userlist_sm_secret_id,
 ):
-
-    project_id = ctx.obj.cluster.services_data['project']
+    project_id = ctx.obj.cluster.services_data["project"]
     client = kube_get_client()
     api = CoreV1Api(client)
 
@@ -308,7 +308,9 @@ def create_user(
     users = {}
     secret_data = {}
     try:
-        secret = api.read_namespaced_secret(namespace="default", name=plaintext_k8s_secret)
+        secret = api.read_namespaced_secret(
+            namespace="default", name=plaintext_k8s_secret
+        )
         secret_data = secret.data
     except ApiException as exc:
         if exc.status != 404:

@@ -1,3 +1,36 @@
+## 0.0.18
+
+### Various fixes & improvements
+
+- feat(quickpatch): Add apply patch module (#46) by @brian-lou
+- Introduce an added override file to be managed by tools (#49) by @fpacifici
+
+## 0.0.17
+
+### Various fixes & improvements
+
+- Add quickpatch tool scaffolding (#45) by @fpacifici
+
+## 0.0.16
+
+### Various fixes & improvements
+
+- Update min Python version and sentry-jsonnet dependency version (#44) by @brian-lou
+- [pre-commit.ci] pre-commit autoupdate (#43) by @pre-commit-ci
+- chore(formatting): Fix formatting of all code (#42) by @nikhars
+
+## 0.0.15
+
+### Various fixes & improvements
+
+- feat: Initial support for alternative kubectls (#40) by @rgibert
+
+## 0.0.14
+
+### Various fixes & improvements
+
+- fix(service-registry): Use the correct path to find JSON file (#41) by @nikhars
+
 ## 0.0.13
 
 ### Various fixes & improvements

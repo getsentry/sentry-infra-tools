@@ -22,7 +22,9 @@ def accept_pr(pr_number: int, body: str, token: str) -> None:
         assert response.status
 
 
-def dismiss_acceptance(pr_number: int, body: str, user_login: str, token: str) -> Sequence[int]:
+def dismiss_acceptance(
+    pr_number: int, body: str, user_login: str, token: str
+) -> Sequence[int]:
     """
     Dismiss all the approved reviews done by the provided user
     on a specific PR.
@@ -42,7 +44,8 @@ def dismiss_acceptance(pr_number: int, body: str, user_login: str, token: str) -
     ids_to_dismiss = [
         review["id"]
         for review in resp
-        if review.get("user", {}).get("login") == user_login and review["state"] == "APPROVED"
+        if review.get("user", {}).get("login") == user_login
+        and review["state"] == "APPROVED"
     ]
 
     for id in ids_to_dismiss:

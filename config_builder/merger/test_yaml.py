@@ -47,7 +47,8 @@ def files_structure() -> Generator[str, None, None]:
 def test_merger(files_structure: str) -> None:
     path = Path(files_structure)
     merger = YamlMerger(
-        CONFIG_GENERATOR_SETTINGS, YamlFileLoader(path / "feature1" / "regional_overrides" / "us")
+        CONFIG_GENERATOR_SETTINGS,
+        YamlFileLoader(path / "feature1" / "regional_overrides" / "us"),
     )
     merger.add_file(path / "feature1" / "regional_overrides" / "us" / "file1.yaml")
     merger.add_file(path / "feature1" / "regional_overrides" / "us" / "file4.json")

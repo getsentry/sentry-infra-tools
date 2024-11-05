@@ -1,0 +1,28 @@
+# Each patch file defines a patch for a single resource
+name: Scale Example
+schema:
+  type: object
+  properties:
+    replicas-1:
+      type: integer
+      minimum: 1
+      maximum: 10
+    replicas_2:
+      type: integer
+      minimum: 1
+      maximum: 10
+  required:
+    - replicas-1
+    - replicas_2
+  additionalProperties: false
+mappings:
+  # Only the keys here are valid resources which patches can be applied to
+  test-consumer-prod: consumer
+patches:
+  # Key-Values should follow jsonpatch format
+  - op: replace
+    path: /consumers/<resource>/replicas
+    value: <replicas-1>
+  - op: replace
+    path: /consumers/<resource>/replicas
+    value: <replicas_2>

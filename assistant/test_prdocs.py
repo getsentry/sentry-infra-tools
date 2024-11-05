@@ -39,15 +39,21 @@ def valid_structure() -> Generator[str, None, None]:
 
 def test_empty(valid_structure) -> None:
     message = InstructionsMessage(Path(valid_structure))
-    message.add_path(Path(valid_structure) / "shared_config/kafka/more_files/something.yaml")
+    message.add_path(
+        Path(valid_structure) / "shared_config/kafka/more_files/something.yaml"
+    )
 
     assert message.produce_message() is None
 
 
 def test_full_message(valid_structure) -> None:
     message = InstructionsMessage(Path(valid_structure))
-    message.add_path(Path(valid_structure) / "shared_config/kafka/generated_files/topic1.yaml")
-    message.add_path(Path(valid_structure) / "shared_config/kafka/generated_files/topic2.yaml")
+    message.add_path(
+        Path(valid_structure) / "shared_config/kafka/generated_files/topic1.yaml"
+    )
+    message.add_path(
+        Path(valid_structure) / "shared_config/kafka/generated_files/topic2.yaml"
+    )
 
     two_files_comment = f"""# Ops Assistant
 
@@ -67,7 +73,9 @@ Files changed:
 """
     assert message.produce_message() == two_files_comment
 
-    message.add_path(Path(valid_structure) / "shared_config/kafka/other_files/topic3.yaml")
+    message.add_path(
+        Path(valid_structure) / "shared_config/kafka/other_files/topic3.yaml"
+    )
 
     three_files_comment = f"""# Ops Assistant
 

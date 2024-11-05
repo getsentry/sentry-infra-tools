@@ -73,7 +73,9 @@ def serialize_error(err: KubelintError) -> str:
     )
 
 
-def get_kubelinter_config(customer: str, cluster: str, service: str) -> Tuple[Set[str], Set[str]]:
+def get_kubelinter_config(
+    customer: str, cluster: str, service: str
+) -> Tuple[Set[str], Set[str]]:
     """
     Load the service specific kubelinter configuration. This config excludes and
     includes specific checks across a service for a cluster/customer.
@@ -111,7 +113,8 @@ def get_kubelinter_config(customer: str, cluster: str, service: str) -> Tuple[Se
     else:
         # st style clusters. one file per cluster
         kubelint_config_path = (
-            Path(cluster_def_root) / f"{k8s_config.cluster_name}/kubelinter/{service}.yaml"
+            Path(cluster_def_root)
+            / f"{k8s_config.cluster_name}/kubelinter/{service}.yaml"
         )
 
     full_path = workspace_root() / k8s_config.root / kubelint_config_path
@@ -120,7 +123,10 @@ def get_kubelinter_config(customer: str, cluster: str, service: str) -> Tuple[Se
         with open(full_path, "r") as config_file:
             data = yaml.safe_load(config_file)
             checks = data.get("checks", {})
-            return (set(checks.get("include", set())), set(checks.get("exclude", set())))
+            return (
+                set(checks.get("include", set())),
+                set(checks.get("exclude", set())),
+            )
     return (set(), set())
 
 
@@ -137,13 +143,17 @@ def kube_linter(
     exclusions = exclusions if exclusions is not None else set()
     inclusions = inclusions if inclusions is not None else set()
     cmd = ["kube-linter", "lint", "--format=json"]
-    checks_to_exclude = (DEFAULT_EXCLUSIONS | EXCLUSIONS_TO_CLEANUP | exclusions) - inclusions
+    checks_to_exclude = (
+        DEFAULT_EXCLUSIONS | EXCLUSIONS_TO_CLEANUP | exclusions
+    ) - inclusions
 
     for exclude in checks_to_exclude:
         cmd.append(f"--exclude={exclude}")
     cmd.append("-")
 
-    child_process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    child_process = subprocess.Popen(
+        cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True
+    )
     stdout, stderr = child_process.communicate(input=rendered_manifest)
 
     if not stdout and child_process.returncode:

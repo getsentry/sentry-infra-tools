@@ -23,5 +23,7 @@ class LibsonnetMerger(FileMerger):
             self.__content.append(file)
 
     def serialize_content(self) -> str:
-        content = [LINE_FORMAT % {"file_name": file.stem} for file in sorted(self.__content)]
+        content = [
+            LINE_FORMAT % {"file_name": file.stem} for file in sorted(self.__content)
+        ]
         return HEADER + "\n{\n" + "".join(content) + "}\n"

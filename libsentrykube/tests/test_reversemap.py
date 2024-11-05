@@ -62,7 +62,9 @@ TEST_CASES = [
 
 
 @pytest.mark.parametrize("content, queried_path, expected_result", TEST_CASES)
-def test_trie(content: Sequence[Path], queried_path: Path, expected_result: Optional[Path]) -> None:
+def test_trie(
+    content: Sequence[Path], queried_path: Path, expected_result: Optional[Path]
+) -> None:
     trie = TrieNode(None, {})
     for p in content:
         trie.add_descendents(p)
@@ -121,7 +123,9 @@ TRIE_TEST_CASES = [
                 cluster_name="default",
                 service_name="service3",
             ),
-            ResourceReference(customer_name="saas", cluster_name="pop", service_name="service3"),
+            ResourceReference(
+                customer_name="saas", cluster_name="pop", service_name="service3"
+            ),
         },
         id="One symlinked service in multiple clusters",
     ),

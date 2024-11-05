@@ -201,7 +201,9 @@ APPROVAL_TEST = [
     APPROVAL_TEST,
 )
 def test_approval(
-    base: Mapping[str, Any] | None, pr: Mapping[str, Any] | None, expected_result: ApprovalDecision
+    base: Mapping[str, Any] | None,
+    pr: Mapping[str, Any] | None,
+    expected_result: ApprovalDecision,
 ) -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         base_dir = Path(temp_dir) / "base"
