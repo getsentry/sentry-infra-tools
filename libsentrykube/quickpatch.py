@@ -129,10 +129,10 @@ def patch_json(
     path should contain the full path to the key to be replaced.
 
     Example Patches:
-    [{"path": "a/b/c", "value": 1}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": 1}}}
-    [{"path": "a/b/c", "value": {"d": 1}}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": {"d": 1}}}}
-    [{"path": "a/c", "value": 1}] + {"a": {"b": 0}} -> {"a": {"b": 0, "c": 1}}
-    [{"path": "a/b", "value": {"d": 1}}] + {"a": {"b": {"f": 2}}} -> {"a": {"b": {"d": 1}}}
+    [{"path": "a/b/c", "value": 1}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": 1}}} # Overwrite existing value
+    [{"path": "a/b/c", "value": {"d": 1}}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": {"d": 1}}}} # Overwrite existing value with a dict
+    [{"path": "a/c", "value": 1}] + {"a": {"b": 0}} -> {"a": {"b": 0, "c": 1}} # Create new key-value
+    [{"path": "a/b", "value": {"d": 1}}] + {"a": {"b": {"f": 2}}} -> {"a": {"b": {"d": 1}}} # Overwrite existing dict with a dict
     """
     for patch in patches:
         data = resource
