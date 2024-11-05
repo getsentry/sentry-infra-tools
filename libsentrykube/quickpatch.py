@@ -127,6 +127,12 @@ def patch_json(
     - The value of the final key in the path will be replaced with the value
     specified in the patch. So, to avoid overwriting existing values, the
     path should contain the full path to the key to be replaced.
+
+    Example Patches:
+    [{"path": "a/b/c", "value": 1}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": 1}}}
+    [{"path": "a/b/c", "value": {"d": 1}}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": {"d": 1}}}}
+    [{"path": "a/c", "value": 1}] + {"a": {"b": 0}} -> {"a": {"b": 0, "c": 1}}
+    [{"path": "a/b", "value": {"d": 1}}] + {"a": {"b": {"f": 2}}} -> {"a": {"b": {"d": 1}}}
     """
     for patch in patches:
         data = resource

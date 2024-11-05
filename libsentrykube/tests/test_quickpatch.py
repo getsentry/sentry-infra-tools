@@ -406,7 +406,7 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {"b": {"c": 0}}},
             {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
-        ),  # Apply a dict
+        ),  # Apply a dict, should override existing value
         pytest.param(
             [
                 {
@@ -427,6 +427,16 @@ def test_validations(expected_message, arguments):
             {},
             {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
         ),  # Weird path
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": {"d": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
+        ),  # Should replace existing value
     ],
 )
 def test_patch_json(patch, resource, expected):
