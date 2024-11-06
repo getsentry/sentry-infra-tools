@@ -191,7 +191,7 @@ def apply_patch(
     variables["resource"] = resource_mappings[resource]
     patch_data_str = patch_file.read_text()
     for arg, arg_value in variables.items():
-        pattern = r"<\s*" + re.escape(arg) + r"\s*>"
+        pattern = r"(?<!\\)<\s*" + re.escape(arg) + r"\s*>"
         patch_data_str = re.sub(pattern, str(arg_value), patch_data_str)
 
     # Load the patch
