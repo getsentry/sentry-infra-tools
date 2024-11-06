@@ -49,21 +49,15 @@ def materialize_file(
     materialized_path = root_dir / materialized_root / relative_path
     os.makedirs(materialized_path.parent, exist_ok=True)
 
-    if len(ext_packages) > 0:
-        import_paths = []
-        for ext_package in ext_packages:
-            imported_module = importlib.import_module(ext_package)
-            if (
-                not hasattr(imported_module, "__file__")
-                or imported_module.__file__ is None
-            ):
-                raise ValueError(f"Cannot determine path for module {ext_package}")
-            ext_package_path = Path(
-                imported_module.__file__
-            ).parent.parent.resolve()  # The directory where all pkgs are stored
-            import_paths.append(ext_package_path)
-    else:
-        import_paths = []
+    import_paths = []
+    for ext_package in ext_packages:
+        imported_module = importlib.import_module(ext_package)
+        if not hasattr(imported_module, "__file__") or imported_module.__file__ is None:
+            raise ValueError(f"Cannot determine path for module {ext_package}")
+        ext_package_path = Path(
+            imported_module.__file__
+        ).parent.parent.resolve()  # The directory where all pkgs are stored
+        import_paths.append(ext_package_path)
 
     try:
         content = jsonnet(
