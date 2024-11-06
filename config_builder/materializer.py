@@ -35,7 +35,7 @@ def materialize_file(
     root_dir: Path,
     jsonnet_file: Path,
     materialized_root: Path | None,
-    ext_packages: list = [],
+    ext_packages: list[str] = [],
 ) -> None:
     """
     Materialize a single jsonnet file
