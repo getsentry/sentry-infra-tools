@@ -58,7 +58,9 @@ def materialize_file(
                 or imported_module.__file__ is None
             ):
                 raise ValueError(f"Cannot determine path for module {ext_package}")
-            ext_package_path = Path(imported_module.__file__).parent.resolve()
+            ext_package_path = Path(
+                imported_module.__file__
+            ).parent.parent.resolve()  # The directory where all pkgs are stored
             import_paths.append(ext_package_path)
     else:
         import_paths = []
