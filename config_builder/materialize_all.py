@@ -77,10 +77,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         """,
     )
     parser.add_argument(
-        "--ext-package",
-        type=str,
-        action="store",
-        default="",
+        "-p",
+        "--ext-packages",
+        action="append",
+        default=[],
         help="""
             Name of external package to add to jsonnet import paths.
         """,
@@ -113,7 +113,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     for file in iterate_jsonnet_configs(Path(args.root_dir), args.exclude_dirs):
         try:
             materialize_file(
-                Path(args.root_dir), file, materialized_root, args.ext_package
+                Path(args.root_dir), file, materialized_root, args.ext_packages
             )
         except JsonnetException as e:
             print(f"{RED}Jsonnet Error occurred while materializing {file}{RESET}")
