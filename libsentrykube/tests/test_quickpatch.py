@@ -474,3 +474,16 @@ def test_patch_json_invalid_path():
             ],
             {},
         )  # invalid path value
+    with pytest.raises(
+        ValueError,
+        match="Cannot traverse path 'a' as it points to a non-dictionary value",
+    ):
+        patch_json(
+            [
+                {
+                    "path": "a/b",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": []},
+        )  # invalid path value

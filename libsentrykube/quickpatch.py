@@ -146,6 +146,10 @@ def patch_json(
             for path in paths[:-1]:
                 if path not in data:
                     data[path] = {}
+                elif not isinstance(data[path], dict):
+                    raise ValueError(
+                        f"Cannot traverse path '{path}' as it points to a non-dictionary value"
+                    )
                 data = data[path]
             data[paths[-1]] = value
         else:
