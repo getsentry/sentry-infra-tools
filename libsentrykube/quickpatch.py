@@ -93,12 +93,12 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
 
 class PatchOperation(TypedDict):
     path: str
-    value: Union[str, int, float]
+    value: Union[str, int, float, bool]
 
 
 def patch_json(
-    patches: List[PatchOperation], resource: dict[str, Any]
-) -> dict[str, Any]:
+    patches: List[PatchOperation], resource: MutableMapping[str, Any]
+) -> MutableMapping:
     """
     This function applies the patch to the resource json object
     in-place.
@@ -204,5 +204,5 @@ def apply_patch(
     )
     if resource_data is None:  # If the .yaml file is empty
         resource_data = {}
-    resource_data = patch_json(patches, resource_data)
-    write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
+    patched_data = patch_json(patches, resource_data)
+    write_managed_values_overrides(patched_data, service, region, cluster_name=cluster)
