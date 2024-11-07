@@ -49,21 +49,30 @@ def materialize_file(
     materialized_path = root_dir / materialized_root / relative_path
     os.makedirs(materialized_path.parent, exist_ok=True)
 
-    import_paths = []
-    for ext_package in ext_packages:
-        imported_module = importlib.import_module(ext_package)
-        if not hasattr(imported_module, "__file__") or imported_module.__file__ is None:
-            raise ValueError(f"Cannot determine path for module {ext_package}")
-        ext_package_path = Path(
-            imported_module.__file__
-        ).parent.parent.resolve()  # The directory where all pkgs are stored
-        import_paths.append(ext_package_path)
+    def _import_callback(module: Path):
+        if module.is_file():
+            content = module.read_text()
+        elif module.exists():
+            raise RuntimeError("Attempted to import a directory")
+        else:  # cache the import-path miss
+            module = module.resolve()
+            rel_path = str(module).strip("/").split("/")
+            ext_package = rel_path[0]
+            if ext_package in ext_packages:
+                package = importlib.resources.files(ext_package)
+                # Join all path components after the package name
+                resource_path = "/".join(rel_path[1:])
+                # Use joinpath with the full resource path
+                with package.joinpath(resource_path).open("r") as f:
+                    content = f.read()
+                return content
+        return content
 
     try:
         content = jsonnet(
             jsonnet_file.name,
             base_dir=jsonnet_file.parent.absolute(),
-            import_paths=import_paths,
+            import_callback=_import_callback,
         )
     except RuntimeError as e:
         raise JsonnetException() from e
