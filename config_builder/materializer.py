@@ -49,6 +49,12 @@ def materialize_file(
     materialized_path = root_dir / materialized_root / relative_path
     os.makedirs(materialized_path.parent, exist_ok=True)
 
+    for ext_package in ext_packages:
+        try:
+            importlib.import_module(ext_package)
+        except ImportError:
+            raise ModuleNotFoundError(f"Package '{ext_package}' not found")
+
     def _import_callback(module: Path):
         if module.is_file():
             content = module.read_text()
