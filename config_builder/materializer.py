@@ -2,7 +2,7 @@ import importlib
 import json
 import os
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Union
 
 import yaml
 from sentry_jsonnet import jsonnet
@@ -55,12 +55,13 @@ def materialize_file(
         except ImportError:
             raise ModuleNotFoundError(f"Package '{ext_package}' not found")
 
-    def _import_callback(module: Path):
+    def _import_callback(module: Path) -> Union[str, bytes, None]:
         if module.is_file():
             content = module.read_text()
         elif module.exists():
             raise RuntimeError("Attempted to import a directory")
         else:  # cache the import-path miss
+            content = None
             module = module.resolve()
             rel_path = str(module).strip("/").split("/")
             ext_package = rel_path[0]
