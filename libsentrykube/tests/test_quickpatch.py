@@ -3,7 +3,7 @@ from typing import Generator
 from jsonschema import ValidationError
 import pytest
 from libsentrykube.context import init_cluster_context
-from libsentrykube.quickpatch import apply_patch, get_arguments
+from libsentrykube.quickpatch import apply_patch, get_arguments, patch_json
 from libsentrykube.service import (
     get_tools_managed_service_value_overrides,
     get_service_path,
@@ -96,37 +96,6 @@ def test_missing_patch_file1():
         )
 
 
-def test_missing_value_file(reset_configs):
-    os.remove(
-        Path(reset_configs)
-        / "k8s"
-        / "services"
-        / SERVICE
-        / "region_overrides"
-        / REGION
-        / "default.managed.yaml"
-    )
-    apply_patch(
-        SERVICE,
-        REGION,
-        TEST_RESOURCE,
-        "test-patch-no-file",
-        {
-            "replicas1": TEST_NUM_REPLICAS,
-            "replicas2": TEST_NUM_REPLICAS,
-        },
-    )
-    expected = {
-        "consumers": {
-            "consumer": {
-                "replicas": TEST_NUM_REPLICAS,
-            },
-        },
-    }
-    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
-    assert expected == actual
-
-
 def test_missing_patches():
     with pytest.raises(
         ValueError,
@@ -177,47 +146,120 @@ def test_invalid_resource():
         )
 
 
-def test_correct_patch():
-    expected = {
-        "consumers": {
-            "consumer": {
-                "replicas": TEST_NUM_REPLICAS,
+@pytest.mark.parametrize(
+    "patch, cluster, expected, args",
+    [
+        pytest.param(
+            TEST_PATCH,
+            CLUSTER,
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
             },
-        },
-    }
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="Normal patch test",
+        ),
+        pytest.param(
+            "test-patch2",
+            CLUSTER,
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas-1": TEST_NUM_REPLICAS,
+                "replicas_2": TEST_NUM_REPLICAS,
+            },
+            id="Normal patch test2",
+        ),
+        pytest.param(
+            "test-patch",
+            "missing-file",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="Test with missing .managed.yaml file (it should auto-generate)",
+        ),
+        pytest.param(
+            "test-patch",
+            "empty",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="Test with empty .managed.yaml file (it should auto-generate)",
+        ),
+        pytest.param(
+            "test-patch",
+            "default2",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                    "existing-consumer": {
+                        "replicas": 4,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="Test with missing resources in yaml file (it should auto-generate)",
+        ),
+        pytest.param(
+            "test-patch-override",
+            "default2",
+            {
+                "consumers": {
+                    "consumer": {
+                        "replicas": TEST_NUM_REPLICAS,
+                    },
+                },
+            },
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+            id="Test override of existing resource.",
+        ),  # Expects to override all resources at the same path level with the value
+    ],
+)
+def test_correct_patch(patch, cluster, expected, args):
     apply_patch(
         SERVICE,
         REGION,
         TEST_RESOURCE,
-        TEST_PATCH,
-        {
-            "replicas1": TEST_NUM_REPLICAS,
-            "replicas2": TEST_NUM_REPLICAS,
-        },
+        patch,
+        args,
+        cluster,
     )
-    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
-    assert expected == actual
-
-
-def test_correct_patch2():
-    expected = {
-        "consumers": {
-            "consumer": {
-                "replicas": TEST_NUM_REPLICAS,
-            },
-        },
-    }
-    apply_patch(
-        SERVICE,
-        REGION,
-        TEST_RESOURCE,
-        "test-patch2",
-        {
-            "replicas-1": TEST_NUM_REPLICAS,
-            "replicas_2": TEST_NUM_REPLICAS,
-        },
-    )
-    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, CLUSTER, False)
+    actual = get_tools_managed_service_value_overrides(SERVICE, REGION, cluster, False)
     assert expected == actual
 
 
@@ -259,6 +301,20 @@ def test_invalid_schema(patch):
             REGION,
             TEST_RESOURCE,
             patch,
+            {
+                "replicas1": TEST_NUM_REPLICAS,
+                "replicas2": TEST_NUM_REPLICAS,
+            },
+        )
+
+
+def test_missing_resource_file():
+    with pytest.raises(FileNotFoundError):
+        apply_patch(
+            SERVICE,
+            "invalid-region",  # Non-existent region
+            TEST_RESOURCE,
+            TEST_PATCH,
             {
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
@@ -311,3 +367,136 @@ def test_validations(expected_message, arguments):
             TEST_PATCH,
             arguments,
         )
+
+
+@pytest.mark.parametrize(
+    "patch, resource, expected",
+    [
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+            id="Whole path is not present, should create",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": {}},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+            id="Part of path is not present, should create",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+            id="Update existing value",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": {"d": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
+            id="Apply a dict, should override existing value",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/d",
+                    "value": {"e": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": 0, "d": {"e": TEST_NUM_REPLICAS}}}},
+            id="Apply a dict with an existing dict",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c/////////",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+            {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
+            id="Weird path",
+        ),
+        pytest.param(
+            [
+                {
+                    "path": "a/b/c",
+                    "value": {"d": TEST_NUM_REPLICAS},
+                }
+            ],
+            {"a": {"b": {"c": 0}}},
+            {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
+            id="Should replace existing value",
+        ),
+    ],
+)
+def test_patch_json(patch, resource, expected):
+    actual = patch_json(patch, resource)
+    assert expected == actual
+
+
+def test_patch_json_invalid_path():
+    with pytest.raises(ValueError):
+        patch_json(
+            [
+                {"value": TEST_NUM_REPLICAS},
+            ],
+            {},
+        )  # missing path value
+    with pytest.raises(ValueError):
+        patch_json(
+            [
+                {
+                    "path": "/",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {},
+        )  # invalid path value
+    with pytest.raises(
+        ValueError,
+        match="Cannot traverse path 'a' as it points to a non-dictionary value",
+    ):
+        patch_json(
+            [
+                {
+                    "path": "a/b",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            {"a": []},
+        )  # not a dict
+    with pytest.raises(
+        ValueError,
+        match="resource must be a dict",
+    ):
+        patch_json(
+            [
+                {
+                    "path": "a",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            [],
+        )  # not a dict
