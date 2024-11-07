@@ -136,6 +136,8 @@ def patch_json(
     """
     for patch in patches:
         data = resource
+        if not isinstance(data, dict):
+            raise ValueError("resource must be a dict")
         path = patch.get("path", None)
         value = patch.get("value")
         if path is not None:

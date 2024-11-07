@@ -486,4 +486,17 @@ def test_patch_json_invalid_path():
                 }
             ],
             {"a": []},
-        )  # invalid path value
+        )  # not a dict
+    with pytest.raises(
+        ValueError,
+        match="resource must be a dict",
+    ):
+        patch_json(
+            [
+                {
+                    "path": "a",
+                    "value": TEST_NUM_REPLICAS,
+                }
+            ],
+            [],
+        )  # not a dict
