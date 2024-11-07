@@ -163,7 +163,8 @@ def test_invalid_resource():
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
             },
-        ),  # Normal patch test
+            id="Normal patch test",
+        ),
         pytest.param(
             "test-patch2",
             CLUSTER,
@@ -178,7 +179,8 @@ def test_invalid_resource():
                 "replicas-1": TEST_NUM_REPLICAS,
                 "replicas_2": TEST_NUM_REPLICAS,
             },
-        ),  # Normal patch test
+            id="Normal patch test2",
+        ),
         pytest.param(
             "test-patch",
             "missing-file",
@@ -193,7 +195,8 @@ def test_invalid_resource():
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
             },
-        ),  # Test with missing .managed.yaml file (it should auto-generate)
+            id="Test with missing .managed.yaml file (it should auto-generate)",
+        ),
         pytest.param(
             "test-patch",
             "empty",
@@ -208,7 +211,8 @@ def test_invalid_resource():
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
             },
-        ),  # Test with empty .managed.yaml file (it should auto-generate)
+            id="Test with empty .managed.yaml file (it should auto-generate)",
+        ),
         pytest.param(
             "test-patch",
             "default2",
@@ -226,7 +230,8 @@ def test_invalid_resource():
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
             },
-        ),  # Test with missing resources in yaml file (it should auto-generate)
+            id="Test with missing resources in yaml file (it should auto-generate)",
+        ),
         pytest.param(
             "test-patch-override",
             "default2",
@@ -241,8 +246,8 @@ def test_invalid_resource():
                 "replicas1": TEST_NUM_REPLICAS,
                 "replicas2": TEST_NUM_REPLICAS,
             },
-        ),  # Test override of existing resource.
-        # Expects to override all resources at the same path level with the value
+            id="Test override of existing resource.",
+        ),  # Expects to override all resources at the same path level with the value
     ],
 )
 def test_correct_patch(patch, cluster, expected, args):
@@ -376,7 +381,8 @@ def test_validations(expected_message, arguments):
             ],
             {},
             {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
-        ),  # Whole path is not present, should create
+            id="Whole path is not present, should create",
+        ),
         pytest.param(
             [
                 {
@@ -386,7 +392,8 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {}},
             {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
-        ),  # Part of path is not present, should create
+            id="Part of path is not present, should create",
+        ),
         pytest.param(
             [
                 {
@@ -396,7 +403,8 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {"b": {"c": 0}}},
             {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
-        ),  # Update existing value
+            id="Update existing value",
+        ),
         pytest.param(
             [
                 {
@@ -406,7 +414,8 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {"b": {"c": 0}}},
             {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
-        ),  # Apply a dict, should override existing value
+            id="Apply a dict, should override existing value",
+        ),
         pytest.param(
             [
                 {
@@ -416,7 +425,8 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {"b": {"c": 0}}},
             {"a": {"b": {"c": 0, "d": {"e": TEST_NUM_REPLICAS}}}},
-        ),  # Apply a dict with an existing dict
+            id="Apply a dict with an existing dict",
+        ),
         pytest.param(
             [
                 {
@@ -426,7 +436,8 @@ def test_validations(expected_message, arguments):
             ],
             {},
             {"a": {"b": {"c": TEST_NUM_REPLICAS}}},
-        ),  # Weird path
+            id="Weird path",
+        ),
         pytest.param(
             [
                 {
@@ -436,7 +447,8 @@ def test_validations(expected_message, arguments):
             ],
             {"a": {"b": {"c": 0}}},
             {"a": {"b": {"c": {"d": TEST_NUM_REPLICAS}}}},
-        ),  # Should replace existing value
+            id="Should replace existing value",
+        ),
     ],
 )
 def test_patch_json(patch, resource, expected):
