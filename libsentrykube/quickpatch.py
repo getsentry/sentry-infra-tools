@@ -1,9 +1,8 @@
 from pathlib import Path
 import re
-from typing import MutableMapping, Sequence
+from typing import Any, List, MutableMapping, Sequence, TypedDict, Union
 import click
 import yaml
-import jsonpatch
 
 from libsentrykube.service import (
     get_tools_managed_service_value_overrides,
@@ -92,6 +91,74 @@ def get_arguments(service: str, patch: str) -> Sequence[str]:
     return patch_data["schema"].get("required", [])
 
 
+class PatchOperation(TypedDict):
+    path: str
+    value: Union[str, int, float, bool]
+
+
+def patch_json(
+    patches: List[PatchOperation], resource: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """
+    This function applies the patch to the resource json object
+    in-place.
+    It assumes resource has a hierarchy of nested dictionaries.
+    Patches should be a list of PatchOperations with the following keys:
+        path: The path to the value to be patched
+        value: The value to be patched
+    Currently, the only supported
+    operations are replacement & creation of new objects.
+
+    jsonpatch was not used because it does not support creation of new objects
+    along the specified path. For example: if resource is an empty obj
+    and the patch specifies path /a/b/c, then jsonpatch will error and not create
+    the object { "a": { "b": { "c": "value" } } }. This function will create
+    the object in this case.
+
+    Semantics:
+    - Paths are relative to the resource root and are separated by /
+    - The / separates keys in the path. Each / denotes a new level of nesting
+    and assumes the current level is a json object.
+    - The final level is the key to be replaced.
+    - If the key does not exist at the current level, this function creates and
+    assigns the object to the key, then traverses down the object.
+    - If the path exists, this function traverses the resource along the path
+    and replaces the value at the final level.
+    - The value of the final key in the path will be replaced with the value
+    specified in the patch. So, to avoid overwriting existing values, the
+    path should contain the full path to the key to be replaced.
+
+    Example Patches:
+    [{"path": "a/b/c", "value": 1}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": 1}}} # Overwrite existing value
+    [{"path": "a/b/c", "value": {"d": 1}}] + {"a": {"b": {"c": 0}}} -> {"a": {"b": {"c": {"d": 1}}}} # Overwrite existing value with a dict
+    [{"path": "a/c", "value": 1}] + {"a": {"b": 0}} -> {"a": {"b": 0, "c": 1}} # Create new key-value
+    [{"path": "a/b", "value": {"d": 1}}] + {"a": {"b": {"f": 2}}} -> {"a": {"b": {"d": 1}}} # Overwrite existing dict with a dict
+    """
+    for patch in patches:
+        data = resource
+        if not isinstance(data, dict):
+            raise ValueError("resource must be a dict")
+        path = patch.get("path", None)
+        value = patch.get("value")
+        if path is not None:
+            stripped_path = path.strip("/")
+            if stripped_path == "":
+                raise ValueError("Path cannot be empty or just contain/")
+            paths = stripped_path.split("/")
+            for path in paths[:-1]:
+                if path not in data:
+                    data[path] = {}
+                elif not isinstance(data[path], dict):
+                    raise ValueError(
+                        f"Cannot traverse path '{path}' as it points to a non-dictionary value"
+                    )
+                data = data[path]
+            data[paths[-1]] = value
+        else:
+            raise ValueError("Path must be specified for all patches")
+    return resource
+
+
 def apply_patch(
     service: str,
     region: str,
@@ -130,18 +197,18 @@ def apply_patch(
     variables["resource"] = resource_mappings[resource]
     patch_data_str = patch_file.read_text()
     for arg, arg_value in variables.items():
-        pattern = r"<\s*" + re.escape(arg) + r"\s*>"
+        pattern = r"(?<!\\)<\s*" + re.escape(arg) + r"\s*>"
         patch_data_str = re.sub(pattern, str(arg_value), patch_data_str)
 
     # Load the patch
     patch_data = yaml.safe_load(patch_data_str)
-    patches = patch_data.get("patches")
-    json_patch = jsonpatch.JsonPatch(patches)
+    patches = patch_data.get("patches", [])
 
     # Finally, apply the patch
     resource_data = get_tools_managed_service_value_overrides(
         service, region, cluster_name=cluster
     )
-
-    resource_data = json_patch.apply(resource_data)
-    write_managed_values_overrides(resource_data, service, region, cluster_name=cluster)
+    if resource_data is None:  # If the .yaml file is empty
+        resource_data = {}
+    modified_data = patch_json(patches, resource_data)
+    write_managed_values_overrides(modified_data, service, region, cluster_name=cluster)

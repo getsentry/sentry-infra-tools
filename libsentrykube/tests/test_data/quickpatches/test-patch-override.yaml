@@ -14,13 +14,13 @@ schema:
   required:
     - replicas1
     - replicas2
-  additionalProperties: True
+  additionalProperties: false
 mappings:
   # Only the keys here are valid resources which patches can be applied to
   test-consumer-prod: consumer
 patches:
   # Key-Values should follow jsonpatch format
-  - path: /consumers/<resource>/replicas
-    value: <replicas1>
-  - path: /consumers/<resource>/replicas
-    value: <replicas2>
+  - path: /consumers
+    value: { "<resource>": { "replicas": <replicas1> } }
+  - path: /consumers
+    value: { "<resource>": { "replicas": <replicas2> } }
