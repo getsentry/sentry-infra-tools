@@ -1,3 +1,9 @@
+## 0.0.20
+
+### Various fixes & improvements
+
+- chore(service-registry): Add python package import solution (#56) by @brian-lou
+
 ## 0.0.19
 
 ### Various fixes & improvements
