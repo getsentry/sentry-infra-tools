@@ -98,7 +98,7 @@ class PatchOperation(TypedDict):
 
 def patch_json(
     patches: List[PatchOperation], resource: MutableMapping[str, Any]
-) -> MutableMapping:
+) -> MutableMapping[str, Any]:
     """
     This function applies the patch to the resource json object
     in-place.
