@@ -204,5 +204,5 @@ def apply_patch(
     )
     if resource_data is None:  # If the .yaml file is empty
         resource_data = {}
-    patched_data = patch_json(patches, resource_data)
-    write_managed_values_overrides(patched_data, service, region, cluster_name=cluster)
+    modified_data = patch_json(patches, resource_data)
+    write_managed_values_overrides(modified_data, service, region, cluster_name=cluster)
