@@ -1,3 +1,13 @@
+## 0.0.19
+
+### Various fixes & improvements
+
+- Use own jsonpatch implementation (#55) by @brian-lou
+- Add the gcloud CLI to the devenev setup (#57) by @fpacifici
+- Wire up patches into sentry-kube quickpatch (#52) by @fpacifici
+- [pre-commit.ci] pre-commit autoupdate (#54) by @pre-commit-ci
+- feat(git): Allow git operations (#50) by @nikhars
+
 ## 0.0.18
 
 ### Various fixes & improvements
