@@ -31,6 +31,29 @@ def iterate_jsonnet_configs(
             yield file
 
 
+def pkg_import_callback(
+    module: Path, ext_packages: list[str]
+) -> Union[str, bytes, None]:
+    if module.is_file():
+        content = module.read_text()
+    elif module.exists():
+        raise RuntimeError("Attempted to import a directory")
+    else:  # cache the import-path miss
+        content = None
+        module = module.resolve()
+        rel_path = str(module).strip("/").split("/")
+        ext_package = rel_path[0]
+        if ext_package in ext_packages:
+            package = importlib.resources.files(ext_package)
+            # Join all path components after the package name
+            resource_path = "/".join(rel_path[1:])
+            # Use joinpath with the full resource path
+            with package.joinpath(resource_path).open("r") as f:
+                content = f.read()
+            return content
+    return content
+
+
 def materialize_file(
     root_dir: Path,
     jsonnet_file: Path,
@@ -56,24 +79,7 @@ def materialize_file(
             raise ModuleNotFoundError(f"Package '{ext_package}' not found")
 
     def _import_callback(module: Path) -> Union[str, bytes, None]:
-        if module.is_file():
-            content = module.read_text()
-        elif module.exists():
-            raise RuntimeError("Attempted to import a directory")
-        else:  # cache the import-path miss
-            content = None
-            module = module.resolve()
-            rel_path = str(module).strip("/").split("/")
-            ext_package = rel_path[0]
-            if ext_package in ext_packages:
-                package = importlib.resources.files(ext_package)
-                # Join all path components after the package name
-                resource_path = "/".join(rel_path[1:])
-                # Use joinpath with the full resource path
-                with package.joinpath(resource_path).open("r") as f:
-                    content = f.read()
-                return content
-        return content
+        return pkg_import_callback(module, ext_packages)
 
     try:
         content = jsonnet(
