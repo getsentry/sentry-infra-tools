@@ -1,3 +1,9 @@
+## 0.0.21
+
+### Various fixes & improvements
+
+- Move out the callback (#58) by @brian-lou
+
 ## 0.0.20
 
 ### Various fixes & improvements
