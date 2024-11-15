@@ -89,6 +89,7 @@ def kubectl(ctx, quiet, yes):
                     ctx.obj.cluster_name,
                     operation=f"kubectl {recordable_token}",
                     service_name="kubectl",
+                    quiet=ctx.obj.quiet_mode,
                 )
             except Exception as e:
                 click.echo("!! Could not report an event to DataDog:")

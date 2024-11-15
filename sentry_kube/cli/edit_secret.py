@@ -95,6 +95,7 @@ def edit_secret(ctx, secret_name, namespace, no_backup):
             ctx.obj.cluster_name,
             operation="edit-secret",
             secret_name=secret_name,
+            quiet=ctx.obj.quiet_mode,
         )
     except Exception as e:
         click.echo("!! Could not report an event to DataDog:")
