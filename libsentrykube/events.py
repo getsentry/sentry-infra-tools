@@ -77,16 +77,13 @@ def report_terragrunt_event(
     if "terraform/" in os.getcwd():
         tgroot = "terraform"
         tgslice = os.getcwd().split("terraform/")[1]
-        region = "saas"
+        region = "us"
     elif "terragrunt/" in os.getcwd():
         tgroot = "terragrunt"
         tgslice = os.getcwd().split("terragrunt/")[1].split("/.terragrunt-cache/")[0]
         region = tgslice.split("/")[-1]
     else:
         raise RuntimeError("Unable to determine what slice you're running in.")
-
-    if region == "us":
-        region = "saas"
 
     sentry_region = Config().silo_regions[region].sentry_region
 

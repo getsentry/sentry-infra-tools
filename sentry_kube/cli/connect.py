@@ -38,7 +38,7 @@ The default TTL for created bastions is 3600 seconds.
 You may specify up to {TTL_MAX} and as low as {TTL_MIN}.
 """
 )
-@click.argument("customer", default="saas")
+@click.argument("customer", default="us")
 @click.option("--ttl", type=int, required=False, default=TTL_DEFAULT)
 @click.option("--site", "site_name", type=click.Choice(Site.names()), required=False)
 @click.option("--zone", "zone_override", type=str, required=False, default=None)
@@ -60,7 +60,12 @@ def connect(ctx, *, customer, ttl, site_name, zone_override, use_standard_ssh_po
     click.echo(f"Operating on google project '{customer_google_project}'")
 
     service_ips = []
-    if customer != "saas" and customer != "test-control" and customer != "de":
+    if (
+        customer != "saas"
+        and customer != "test-control"
+        and customer != "de"
+        and customer != "us"
+    ):
         service_ips = [
             f"{ip}/32"
             for ip in get_service_ip_mapping(
