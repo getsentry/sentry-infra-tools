@@ -106,7 +106,7 @@ xds -mode bootstrap {XDS_BASE_ARGS}
 """  # noqa: E501
 
 IPTABLES_ENTRYPOINT = """
-iptables -t nat -A OUTPUT      -m addrtype --src-type LOCAL --dst-type LOCAL -p udp --dport 8126 -j DNAT --to-destination $HOST_IP:8126
+iptables -t nat -A OUTPUT -m addrtype --src-type LOCAL --dst-type LOCAL -p udp --dport 8126 -j DNAT --to-destination $HOST_IP:8126
 iptables -t nat -C POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE 2>/dev/null >/dev/null || iptables -t nat -A POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE
 """  # noqa: E501
 
