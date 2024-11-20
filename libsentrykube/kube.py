@@ -20,7 +20,7 @@ from libsentrykube.service import (
     get_service_template_files,
     get_service_values,
     get_service_value_overrides,
-    get_tools_managed_service_value_overrides,
+    get_tools_managed_service_value_overrides, get_hierarchical_value_overrides,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -111,6 +111,13 @@ def _consolidate_variables(
        overrides are managed manually and they can contain comments. Tools cannot
        preserve comments.
     4. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
+    5. overridden by creating a hierarchical structure. Adding an intermediate directory
+       in 'region_override' with a '_values.yaml' file allows to have a common config
+       between a set of regions. This is useful if regions in a service are different, but
+       subset of them are similar.
+       It works like point 1 and 2 but with an additional layer in between
+    6. overridden by a common '_values.yaml' within a region folder that has a shared config
+       between all clusters in the region. Values in point 2 will still override those values
 
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
@@ -130,6 +137,9 @@ def _consolidate_variables(
         service_name, customer_name, cluster_name, external
     )
     deep_merge_dict(service_values, managed_values)
+
+    nested_values = get_hierarchical_value_overrides(service_name, customer_name, cluster_name, external)
+    deep_merge_dict(service_values, nested_values)
 
     # Service data overrides from clusters/
     customer_values, _ = get_service_data(
@@ -239,6 +249,8 @@ def render_templates(
 
     return "\n---\n".join(rendered_templates)
 
+def materialize1(customer_name: str, service_name: str, cluster_name: str) -> bool:
+    materialize(customer_name, service_name, cluster_name)
 
 def materialize(customer_name: str, service_name: str, cluster_name: str) -> bool:
     """

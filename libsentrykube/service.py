@@ -7,7 +7,7 @@ import yaml
 from collections import OrderedDict
 from libsentrykube.config import Config
 from libsentrykube.customer import load_customer_data
-from libsentrykube.utils import workspace_root
+from libsentrykube.utils import workspace_root, deep_merge_dict
 
 _services = OrderedDict()
 
@@ -100,9 +100,21 @@ def get_service_value_overrides(
     external: bool = False,
 ) -> dict:
     """
-    For the given service, return the values specified in the corresponding _values.yaml.
+    Loads service configuration with regional and cluster-specific overrides.
 
-    If "external=True" is specified, treat the service name as the full service path.
+    This function implements a two-level configuration system where common regional settings
+    can be shared across all clusters, with cluster-specific overrides on top.
+
+    Directory Structure:
+        region_overrides/
+        └── {region_name}/
+            ├── _values.yaml           # Common settings for all clusters in this region
+            ├── cluster1.yaml          # Cluster-specific overrides
+            └── cluster2.yaml          # Cluster-specific overrides
+
+    Override Precedence (highest to lowest):
+    1. {cluster_name}.yaml            # Cluster-specific settings
+    2. _values.yaml                   # Common regional settings
     """
     try:
         service_override_file = (
@@ -112,9 +124,105 @@ def get_service_value_overrides(
 
         with open(service_override_file, "rb") as f:
             values = yaml.safe_load(f)
+
+        # Try to load the config only after {cluster_name}.yaml was successfully loaded because the common override
+        # only makes sense if there is a cluster config
+        common_override_values = get_common_regional_override(service_name, region_name, external)
+
+        if common_override_values:
+            deep_merge_dict(common_override_values, values)
+            return common_override_values
+
+        return values
     except FileNotFoundError:
-        values = {}
-    return values
+        return {}
+
+def get_common_regional_override(
+        service_name: str,
+        region_name: str,
+        external: bool = False
+) -> dict:
+    """
+    Helper function to load common regional configuration values.
+
+    Looks for a '_values.yaml' file in the region's override directory that contains
+    settings shared across all clusters in that region.
+    """
+    try:
+        common_service_override_file = get_service_value_override_path(service_name, region_name, external) / "_values.yaml"
+
+        with open(common_service_override_file, "rb") as f:
+            common_override_values = yaml.safe_load(f)
+
+        return common_override_values
+    except FileNotFoundError:
+        return {}
+
+def get_hierarchical_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False
+) -> dict:
+    """
+    Enables hierarchical configuration overrides with shared base values.
+
+    This function extends the standard region_overrides system by adding support for
+    shared base configurations. This helps reduce duplication across region-specific
+    configurations.
+
+    Directory Structure:
+        region_overrides/
+        └── common_shared_config/      # Arbitrary name for the shared config group
+            ├── _values.yaml           # Base values for this group
+            └── {region_name}/         # Region-specific overrides
+                └── {cluster_name}.yaml # Cluster-specific overrides
+
+    Override Precedence (highest to lowest):
+    1. region_name/cluster_name.yaml
+    2. common_shared_config/_values.yaml
+    3. Top-level configuration
+    """
+    if external:
+        service_regions_path = workspace_root() / service_name
+    else:
+        service_regions_path = get_service_path(service_name)
+
+    service_regions_path = service_regions_path / "region_overrides"
+
+    if not service_regions_path.exists():
+        return {}
+
+    for override_group in service_regions_path.iterdir():
+        if not override_group.is_dir():
+            continue
+
+        try:
+            service_override_file = (
+                get_service_value_override_path(service_name, override_group.name, external)
+                / "_values.yaml"
+            )
+
+            with open(service_override_file, "rb") as f:
+                base_values = yaml.safe_load(f)
+        except FileNotFoundError:
+            base_values = {}
+
+        region_path = f"{override_group.name}/{region_name}"
+        region_values = get_service_value_overrides(
+            service_name,
+            region_path,
+            cluster_name,
+            external
+        )
+
+        if not region_values:
+            continue
+
+        deep_merge_dict(base_values, region_values)
+        return base_values
+
+    return {}
 
 
 def get_tools_managed_service_value_overrides(
