@@ -138,8 +138,8 @@ def _consolidate_variables(
     )
     deep_merge_dict(service_values, managed_values)
 
-    nested_values = get_hierarchical_value_overrides(service_name, customer_name, cluster_name, external)
-    deep_merge_dict(service_values, nested_values)
+    hierarchical_values = get_hierarchical_value_overrides(service_name, customer_name, cluster_name, external)
+    deep_merge_dict(service_values, hierarchical_values)
 
     # Service data overrides from clusters/
     customer_values, _ = get_service_data(
