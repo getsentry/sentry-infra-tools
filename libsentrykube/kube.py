@@ -249,9 +249,6 @@ def render_templates(
 
     return "\n---\n".join(rendered_templates)
 
-def materialize1(customer_name: str, service_name: str, cluster_name: str) -> bool:
-    materialize(customer_name, service_name, cluster_name)
-
 def materialize(customer_name: str, service_name: str, cluster_name: str) -> bool:
     """
     Render a service and saves it to a file.
