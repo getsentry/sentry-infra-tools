@@ -105,20 +105,19 @@ def _consolidate_variables(
     """
     We have multiple levels of overrides for our value files.
     1. The values defined inside the service directory as values.yaml.
-    2. overridden by the regional overrides in
-       `service/region_override/region/cluster.yaml`
-    3. overridden by the managed override file. This is like point 2. Conceptually
-       there is no difference, practically this is managed by tools while region
-       overrides are managed manually and they can contain comments. Tools cannot
-       preserve comments.
-    4. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
-    5. overridden by creating a hierarchical structure. Adding an intermediate directory
+    2. overridden by creating a hierarchical structure. Adding an intermediate directory
        in 'region_override' with a '_values.yaml' file allows to have a common config
        between a set of regions. This is useful if regions in a service are different, but
        subset of them are similar.
-       It works like point 1 and 2 but with an additional layer in between
-    6. overridden by a common '_values.yaml' within a region folder that has a shared config
-       between all clusters in the region. Values in point 2 will still override those values
+    3. overridden by a common '_values.yaml' within a region folder that has a shared config
+       between all clusters in the region.
+    4. overridden by the regional overrides in
+       `service/region_override/region/cluster.yaml`
+    5. overridden by the managed override file. This is like point 2. Conceptually
+       there is no difference, practically this is managed by tools while region
+       overrides are managed manually and they can contain comments. Tools cannot
+       preserve comments.
+    6. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
 
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
