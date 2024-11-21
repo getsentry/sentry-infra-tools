@@ -127,7 +127,9 @@ def get_service_value_overrides(
 
         # Try to load the config only after {cluster_name}.yaml was successfully loaded because the common override
         # only makes sense if there is a cluster config
-        common_override_values = get_common_regional_override(service_name, region_name, external)
+        common_override_values = get_common_regional_override(
+            service_name, region_name, external
+        )
 
         if common_override_values:
             deep_merge_dict(common_override_values, values)
@@ -137,10 +139,9 @@ def get_service_value_overrides(
     except FileNotFoundError:
         return {}
 
+
 def get_common_regional_override(
-        service_name: str,
-        region_name: str,
-        external: bool = False
+    service_name: str, region_name: str, external: bool = False
 ) -> dict:
     """
     Helper function to load common regional configuration values.
@@ -149,7 +150,10 @@ def get_common_regional_override(
     settings shared across all clusters in that region.
     """
     try:
-        common_service_override_file = get_service_value_override_path(service_name, region_name, external) / "_values.yaml"
+        common_service_override_file = (
+            get_service_value_override_path(service_name, region_name, external)
+            / "_values.yaml"
+        )
 
         with open(common_service_override_file, "rb") as f:
             common_override_values = yaml.safe_load(f)
@@ -158,11 +162,12 @@ def get_common_regional_override(
     except FileNotFoundError:
         return {}
 
+
 def get_hierarchical_value_overrides(
     service_name: str,
     region_name: str,
     cluster_name: str = "default",
-    external: bool = False
+    external: bool = False,
 ) -> dict:
     """
     Enables hierarchical configuration overrides with shared base values.
@@ -199,7 +204,9 @@ def get_hierarchical_value_overrides(
 
         try:
             service_override_file = (
-                get_service_value_override_path(service_name, override_group.name, external)
+                get_service_value_override_path(
+                    service_name, override_group.name, external
+                )
                 / "_values.yaml"
             )
 
@@ -210,10 +217,7 @@ def get_hierarchical_value_overrides(
 
         region_path = f"{override_group.name}/{region_name}"
         region_values = get_service_value_overrides(
-            service_name,
-            region_path,
-            cluster_name,
-            external
+            service_name, region_path, cluster_name, external
         )
 
         if not region_values:
