@@ -208,9 +208,9 @@ def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) 
     assert returned == expected_hierarchical_and_regional_cluster_values
 
 
-def test_regional_cluster_value_overrides(regional_override_structure: str) -> None:
+def test_regional_cluster_value_overrides(test_regional_cluster_value_overrides: str) -> None:
     start_workspace_root = workspace_root().as_posix()
-    set_workspace_root_start(regional_override_structure)
+    set_workspace_root_start(test_regional_cluster_value_overrides)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
         workspace_root() / "cli_config/configuration.yaml"
     )
