@@ -80,24 +80,10 @@ CONFIGURATION = {
 }
 
 COMMON_SHARED_CONFIG = {
-    "config": {
-        "foo": "123",
-        "baz": "test",
-        "settings": {
-            "abc": 10,
-            "def": "test"
-        }
-    }
+    "config": {"foo": "123", "baz": "test", "settings": {"abc": 10, "def": "test"}}
 }
 
-CLUSTER_OVERRIDE_CONFIG = {
-    "config": {
-        "foo": "not-foo",
-        "settings": {
-            "abc": 20
-        }
-    }
-}
+CLUSTER_OVERRIDE_CONFIG = {"config": {"foo": "not-foo", "settings": {"abc": 20}}}
 
 
 @pytest.fixture
@@ -133,6 +119,7 @@ def config_structure() -> Generator[str, None, None]:
 
         yield temp_dir
 
+
 @pytest.fixture
 def hierarchical_override_structure() -> Generator[str, None, None]:
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -147,11 +134,11 @@ def hierarchical_override_structure() -> Generator[str, None, None]:
         service_dir = k8s / "services" / "my_service"
         region_overrides = service_dir / "region_overrides"
         os.makedirs(region_overrides)
-        
+
         os.makedirs(k8s / "services" / "another_service")
         common_config = region_overrides / "common_shared_config"
         os.makedirs(common_config)
-        
+
         with open(common_config / "_values.yaml", "w") as f:
             f.write(safe_dump(COMMON_SHARED_CONFIG))
 
@@ -165,9 +152,12 @@ def hierarchical_override_structure() -> Generator[str, None, None]:
         with open(Path(temp_dir) / "cli_config" / "configuration.yaml", "w") as f:
             f.write(safe_dump(CONFIGURATION))
 
-        os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(Path(temp_dir) / "cli_config" / "configuration.yaml")
+        os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+            Path(temp_dir) / "cli_config" / "configuration.yaml"
+        )
 
         yield temp_dir
+
 
 @pytest.fixture
 def regional_cluster_specific_override_structure() -> Generator[str, None, None]:
