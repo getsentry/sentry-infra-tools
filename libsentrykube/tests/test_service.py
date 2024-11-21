@@ -194,7 +194,6 @@ def test_write_managed_file(config_structure) -> None:
 
 
 def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) -> None:
-    start_workspace_root = workspace_root().as_posix()
     set_workspace_root_start(hierarchical_override_structure)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
         workspace_root() / "cli_config/configuration.yaml"
@@ -211,7 +210,6 @@ def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) 
 def test_regional_cluster_value_overrides(
     regional_cluster_specific_override_structure: str,
 ) -> None:
-    start_workspace_root = workspace_root().as_posix()
     set_workspace_root_start(regional_cluster_specific_override_structure)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
         workspace_root() / "cli_config/configuration.yaml"
