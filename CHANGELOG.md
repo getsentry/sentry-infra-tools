@@ -1,3 +1,11 @@
+## 0.0.22
+
+### Various fixes & improvements
+
+- chore: Print cluster when using apply/run_job (#64) by @rgibert
+- feat(pg): create k8s secrets if they do not exist (#39) by @oioki
+- fix: --quiet should mute DD echos (#48) by @rgibert
+
 ## 0.0.21
 
 ### Various fixes & improvements
