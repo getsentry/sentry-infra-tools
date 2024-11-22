@@ -517,7 +517,10 @@ def _apply(
         yes
         or click.confirm(
             "Are you sure you want to apply this for customer "
-            f"{click.style(customer_name, fg='yellow', bold=True)}?"
+            f"{click.style(customer_name, fg='yellow', bold=True)}"
+            ", cluster "
+            f"{click.style(ctx.obj.cluster_name, fg='yellow', bold=True)}"
+            "?"
         )
     ):
         raise click.Abort()
