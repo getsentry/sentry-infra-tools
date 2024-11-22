@@ -516,7 +516,7 @@ def _apply(
     if not (
         yes
         or click.confirm(
-            "Are you sure you want to apply this for customer "
+            "Are you sure you want to apply this for region "
             f"{click.style(customer_name, fg='yellow', bold=True)}"
             ", cluster "
             f"{click.style(ctx.obj.cluster_name, fg='yellow', bold=True)}"
