@@ -1,5 +1,6 @@
 from libsentrykube.context import init_cluster_context
 import os
+
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
     get_service_data,
@@ -66,6 +67,13 @@ expected_service_value_managed_overrides = {
 
 expected_hierarchical_and_regional_cluster_values = {
     "config": {"foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}
+}
+
+expected_regional_cluster_values = {
+    "config": {
+        "foo": "not-foo",
+        "settings": {"abc": 20},
+    }
 }
 
 
@@ -222,4 +230,4 @@ def test_regional_cluster_value_overrides(
         cluster_name="cluster1",
     )
 
-    assert returned == expected_hierarchical_and_regional_cluster_values
+    assert returned == expected_regional_cluster_values

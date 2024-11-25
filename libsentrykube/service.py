@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Mapping, Any
+from typing import List, Mapping, Any, Union
 
 import click
 import yaml
@@ -10,6 +10,30 @@ from libsentrykube.customer import load_customer_data
 from libsentrykube.utils import workspace_root, deep_merge_dict
 
 _services = OrderedDict()
+
+def assert_single_cluster_for_customer(service_name: str, customer_name: str, cluster_name: str, external: bool = False) -> None:
+    """
+    Make sure that a cluster can only exist once for a service.
+    Checks the `region_overrides` and every folder directly in `region_overrides`
+    """
+    if external:
+        service_regions_path = workspace_root() / service_name
+    else:
+        service_regions_path = get_service_path(service_name)
+
+    click.echo(f"{service_regions_path}")
+    click.echo(f"expecting {customer_name}/{cluster_name}.yaml")
+
+    paths = []
+    paths.extend(service_regions_path.glob(f"region_overrides/{customer_name}/{cluster_name}.yaml"))
+    paths.extend(service_regions_path.glob(f"region_overrides/*/{customer_name}/{cluster_name}.yaml"))
+
+    if len(paths) > 1:
+        click.echo(f"Expected a single cluster file for customer but got {len(paths)}")
+        click.echo("Found files in:")
+        for path in paths:
+            click.echo(path)
+        raise click.Abort()
 
 
 def set_service_paths(service_paths: List[str]):
@@ -100,21 +124,8 @@ def get_service_value_overrides(
     external: bool = False,
 ) -> dict:
     """
-    Loads service configuration with regional and cluster-specific overrides.
-
-    This function implements a two-level configuration system where common regional settings
-    can be shared across all clusters, with cluster-specific overrides on top.
-
-    Directory Structure:
-        region_overrides/
-        └── {region_name}/
-            ├── _values.yaml           # Common settings for all clusters in this region
-            ├── cluster1.yaml          # Cluster-specific overrides
-            └── cluster2.yaml          # Cluster-specific overrides
-
-    Override Precedence (highest to lowest):
-    1. {cluster_name}.yaml            # Cluster-specific settings
-    2. _values.yaml                   # Common regional settings
+    For the given service, return the values specified in the corresponding _values.yaml.
+    If "external=True" is specified, treat the service name as the full service path.
     """
     try:
         service_override_file = (
@@ -125,24 +136,13 @@ def get_service_value_overrides(
         with open(service_override_file, "rb") as f:
             values = yaml.safe_load(f)
 
-        # Try to load the config only after {cluster_name}.yaml was successfully loaded because the common override
-        # only makes sense if there is a cluster config
-        common_override_values = get_common_regional_override(
-            service_name, region_name, external
-        )
-
-        if common_override_values:
-            deep_merge_dict(common_override_values, values)
-            return common_override_values
-
         return values
     except FileNotFoundError:
         return {}
 
-
 def get_common_regional_override(
     service_name: str, region_name: str, external: bool = False
-) -> dict:
+) -> Union[dict, None]:
     """
     Helper function to load common regional configuration values.
 
@@ -160,7 +160,7 @@ def get_common_regional_override(
 
         return common_override_values
     except FileNotFoundError:
-        return {}
+        return None
 
 
 def get_hierarchical_value_overrides(
@@ -223,7 +223,14 @@ def get_hierarchical_value_overrides(
         if not region_values:
             continue
 
-        deep_merge_dict(base_values, region_values)
+        # In order to support _values.yaml files that are shared within the group
+        common_service_values = get_common_regional_override(service_name, region_path, external)
+        if common_service_values is not None:
+            deep_merge_dict(common_service_values, region_values)
+            deep_merge_dict(base_values, common_service_values)
+        else:
+            deep_merge_dict(base_values, region_values)
+
         return base_values
 
     return {}

@@ -21,7 +21,7 @@ from libsentrykube.service import (
     get_service_values,
     get_service_value_overrides,
     get_tools_managed_service_value_overrides,
-    get_hierarchical_value_overrides,
+    get_hierarchical_value_overrides, assert_single_cluster_for_customer, get_common_regional_override,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -123,6 +123,9 @@ def _consolidate_variables(
           patch the regional override preserving comments.
     """
 
+    # check that there is a single cluster file per customer
+    assert_single_cluster_for_customer(service_name, customer_name, cluster_name, external)
+
     # Service defaults from _values
     service_values = get_service_values(service_name, external)
 
@@ -130,7 +133,25 @@ def _consolidate_variables(
     service_value_overrides = get_service_value_overrides(
         service_name, customer_name, cluster_name, external
     )
-    deep_merge_dict(service_values, service_value_overrides)
+
+    if service_value_overrides:
+        # Service data overrides from services/SERVICE/region_overrides/REGION/_values.yaml
+        common_service_values = get_common_regional_override(service_name, customer_name, external)
+        if common_service_values is not None:
+            # If a common config file exists then override values with the specific values
+            # and override the less specific ones with the result
+            deep_merge_dict(common_service_values, service_value_overrides)
+            deep_merge_dict(service_values, common_service_values)
+        else:
+            # If no common config exists then just override values with the specific values
+            deep_merge_dict(service_values, service_value_overrides)
+
+    # Service data overrides from services/SERVICE/region_overrides/REGION/_values.yaml
+    hierarchical_values = get_hierarchical_value_overrides(
+        service_name, customer_name, cluster_name, external
+    )
+
+    deep_merge_dict(service_values, hierarchical_values)
 
     # Override files managed by tools
     managed_values = get_tools_managed_service_value_overrides(
@@ -138,10 +159,6 @@ def _consolidate_variables(
     )
     deep_merge_dict(service_values, managed_values)
 
-    hierarchical_values = get_hierarchical_value_overrides(
-        service_name, customer_name, cluster_name, external
-    )
-    deep_merge_dict(service_values, hierarchical_values)
 
     # Service data overrides from clusters/
     customer_values, _ = get_service_data(
