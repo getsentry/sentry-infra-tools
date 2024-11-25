@@ -132,6 +132,7 @@ def test_single_customer_cluster_file(duplicate_customer_clusters_in_service: st
             cluster_name="cluster1",
             external=False,
         )
-        pytest.fail("expected exception but got none")
+        # Fails the test if no exception is raised
+        assert False
     except click.exceptions.Abort:
         pass
