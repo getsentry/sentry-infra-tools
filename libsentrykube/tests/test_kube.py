@@ -33,12 +33,26 @@ expected_consolidated_values = {
 }
 
 expected_hierarchical_and_regional_cluster_values = {
-    "config": {"example": "example", "foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}, "key1": "value1"
+    "config": {
+        "example": "example",
+        "foo": "not-foo",
+        "baz": "test",
+        "settings": {"abc": 20, "def": "test"},
+    },
+    "key1": "value1",
 }
 
 expected_combined_cluster_values = {
-    "config": {"regional": "cool-region", "example": "example", "foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}, "key1": "value1"
+    "config": {
+        "regional": "cool-region",
+        "example": "example",
+        "foo": "not-foo",
+        "baz": "test",
+        "settings": {"abc": 20, "def": "test"},
+    },
+    "key1": "value1",
 }
+
 
 def test_consolidate_variables_not_external():
     region = "saas"
@@ -53,6 +67,7 @@ def test_consolidate_variables_not_external():
         )
         assert returned == expected_consolidated_values[region][cluster][service]
 
+
 def test_group_hierarchy_consolidation(hierarchical_override_structure: str) -> None:
     set_workspace_root_start(hierarchical_override_structure)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
@@ -64,11 +79,14 @@ def test_group_hierarchy_consolidation(hierarchical_override_structure: str) -> 
         customer_name="customer1",
         service_name="my_service",
         cluster_name="cluster1",
-        external=False
+        external=False,
     )
     assert returned == expected_hierarchical_and_regional_cluster_values
 
-def test_cluster_override_consolidation(regional_cluster_specific_override_structure) -> None:
+
+def test_cluster_override_consolidation(
+    regional_cluster_specific_override_structure,
+) -> None:
     set_workspace_root_start(regional_cluster_specific_override_structure)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
         workspace_root() / "cli_config/configuration.yaml"
@@ -79,11 +97,14 @@ def test_cluster_override_consolidation(regional_cluster_specific_override_struc
         customer_name="customer1",
         service_name="my_service",
         cluster_name="cluster1",
-        external=False
+        external=False,
     )
     assert returned == expected_hierarchical_and_regional_cluster_values
 
-def test_hierarchical_and_regional_combined_consolidation(regional_and_hierarchical_override_structure: str):
+
+def test_hierarchical_and_regional_combined_consolidation(
+    regional_and_hierarchical_override_structure: str,
+):
     set_workspace_root_start(regional_and_hierarchical_override_structure)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
         workspace_root() / "cli_config/configuration.yaml"
@@ -93,9 +114,10 @@ def test_hierarchical_and_regional_combined_consolidation(regional_and_hierarchi
         customer_name="customer1",
         service_name="my_service",
         cluster_name="cluster1",
-        external=False
+        external=False,
     )
     assert returned == expected_combined_cluster_values
+
 
 def test_single_customer_cluster_file(duplicate_customer_clusters_in_service: str):
     try:
@@ -108,7 +130,7 @@ def test_single_customer_cluster_file(duplicate_customer_clusters_in_service: st
             customer_name="customer1",
             service_name="my_service",
             cluster_name="cluster1",
-            external=False
+            external=False,
         )
         pytest.fail("expected exception but got none")
     except click.exceptions.Abort:

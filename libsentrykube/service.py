@@ -11,7 +11,10 @@ from libsentrykube.utils import workspace_root, deep_merge_dict
 
 _services = OrderedDict()
 
-def assert_single_cluster_for_customer(service_name: str, customer_name: str, cluster_name: str, external: bool = False) -> None:
+
+def assert_single_cluster_for_customer(
+    service_name: str, customer_name: str, cluster_name: str, external: bool = False
+) -> None:
     """
     Make sure that a cluster can only exist once for a service.
     Checks the `region_overrides` and every folder directly in `region_overrides`
@@ -25,8 +28,16 @@ def assert_single_cluster_for_customer(service_name: str, customer_name: str, cl
     click.echo(f"expecting {customer_name}/{cluster_name}.yaml")
 
     paths = []
-    paths.extend(service_regions_path.glob(f"region_overrides/{customer_name}/{cluster_name}.yaml"))
-    paths.extend(service_regions_path.glob(f"region_overrides/*/{customer_name}/{cluster_name}.yaml"))
+    paths.extend(
+        service_regions_path.glob(
+            f"region_overrides/{customer_name}/{cluster_name}.yaml"
+        )
+    )
+    paths.extend(
+        service_regions_path.glob(
+            f"region_overrides/*/{customer_name}/{cluster_name}.yaml"
+        )
+    )
 
     if len(paths) > 1:
         click.echo(f"Expected a single cluster file for customer but got {len(paths)}")
@@ -140,6 +151,7 @@ def get_service_value_overrides(
     except FileNotFoundError:
         return {}
 
+
 def get_common_regional_override(
     service_name: str, region_name: str, external: bool = False
 ) -> Union[dict, None]:
@@ -224,7 +236,9 @@ def get_hierarchical_value_overrides(
             continue
 
         # In order to support _values.yaml files that are shared within the group
-        common_service_values = get_common_regional_override(service_name, region_path, external)
+        common_service_values = get_common_regional_override(
+            service_name, region_path, external
+        )
         if common_service_values is not None:
             deep_merge_dict(common_service_values, region_values)
             deep_merge_dict(base_values, common_service_values)
