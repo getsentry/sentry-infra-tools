@@ -27,7 +27,7 @@ def assert_single_cluster_for_customer(
     click.echo(f"{service_regions_path}")
     click.echo(f"expecting {customer_name}/{cluster_name}.yaml")
 
-    paths = []
+    paths: List[Path] = []
     paths.extend(
         service_regions_path.glob(
             f"region_overrides/{customer_name}/{cluster_name}.yaml"
