@@ -339,12 +339,9 @@ def duplicate_customer_clusters_in_service() -> Generator[str, None, None]:
         yield temp_dir
 
 
-def create_structure(paths: list, root: Path = None) -> None:
+def create_structure(paths: list, root: Path) -> None:
     for path in paths:
-        if root is None:
-            os.makedirs(path)
-        else:
-            os.makedirs(root / path)
+        os.makedirs(root / path)
 
 
 def write_data_file(path: Path, data: dict) -> None:
