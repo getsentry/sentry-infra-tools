@@ -24,9 +24,6 @@ def assert_single_cluster_for_customer(
     else:
         service_regions_path = get_service_path(service_name)
 
-    click.echo(f"{service_regions_path}")
-    click.echo(f"expecting {customer_name}/{cluster_name}.yaml")
-
     paths: List[Path] = []
     paths.extend(
         service_regions_path.glob(
