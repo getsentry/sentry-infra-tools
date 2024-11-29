@@ -35,3 +35,14 @@ silo_regions:
       cluster_def_root: clusters/my_other_customer
       materialized_manifests: rendered_services
     sentry_region: st-my_other_customer
+  region2:
+    bastion:
+      spawner_endpoint: https://localhost:12345
+      site: saas_us
+    k8s:
+      root: k8s
+    sentry_region: region2
+  region3:
+    bastion:
+      spawner_endpoint: https://localhost:12345
+      site: saas_us

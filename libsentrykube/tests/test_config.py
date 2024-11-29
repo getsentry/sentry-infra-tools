@@ -73,4 +73,40 @@ def test_config_load() -> None:
             sentry_region="st-my_other_customer",
             service_monitors=MappingProxyType({}),
         ),
+        "region2": SiloRegion(
+            bastion_spawner_endpoint="https://localhost:12345",
+            bastion_site=Site(
+                name="us",
+                region="us-central1",
+                zone="b",
+                network="global/networks/sentry",
+                subnetwork="regions/us-central1/subnetworks/sentry-default",
+            ),
+            k8s_config=K8sConfig(
+                root="k8s",
+                cluster_def_root="clusters/region2",
+                cluster_name=None,
+                materialized_manifests="materialized_manifests/region2",
+            ),
+            sentry_region="region2",
+            service_monitors=MappingProxyType({}),
+        ),
+        "region3": SiloRegion(
+            bastion_spawner_endpoint="https://localhost:12345",
+            bastion_site=Site(
+                name="us",
+                region="us-central1",
+                zone="b",
+                network="global/networks/sentry",
+                subnetwork="regions/us-central1/subnetworks/sentry-default",
+            ),
+            k8s_config=K8sConfig(
+                root="k8s",
+                cluster_def_root="clusters/region3",
+                cluster_name=None,
+                materialized_manifests="materialized_manifests/region3",
+            ),
+            sentry_region="region3",
+            service_monitors=MappingProxyType({}),
+        ),
     }
