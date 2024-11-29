@@ -106,7 +106,7 @@ def test_lint() -> None:
     }
 
     errors = kube_linter(MANIFEST, inclusions=enabled_checks)
-    assert len(errors) == 6
+    assert len(errors) == 8
 
     assert [check["Check"] for check in errors] == [
         "latest-tag",
@@ -114,6 +114,8 @@ def test_lint() -> None:
         "no-read-only-root-fs",
         "run-as-non-root",
         "unset-cpu-requirements",
+        "unset-cpu-requirements",
+        "unset-memory-requirements",
         "unset-memory-requirements",
     ]
 
