@@ -341,6 +341,20 @@ def duplicate_customer_clusters_in_service() -> Generator[str, None, None]:
 
 @pytest.fixture
 def duplicate_customer_dirs_in_service() -> Generator[str, None, None]:
+    """
+    Creates the following folder structure:
+    temp_dir/
+    ├── cli_config/
+    │   └── configuration.yaml
+    └── k8s/
+        └── services/
+            ├── my_service/
+            │   └── region_overrides/
+            │       ├── customer1/
+            │       └── group_one/
+            │           └── customer1/
+            └── another_service/
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         k8s = Path(temp_dir) / "k8s"
         create_cluster_data_files(k8s)
@@ -363,6 +377,20 @@ def duplicate_customer_dirs_in_service() -> Generator[str, None, None]:
 def regional_without_cluster_specific_override_structure() -> (
     Generator[str, None, None]
 ):
+    """
+    Creates the following folder structure:
+    temp_dir/
+    ├── cli_config/
+    │   └── configuration.yaml
+    └── k8s/
+        └── services/
+            ├── my_service/
+            │   ├── _values.yaml
+            │   └── region_overrides/
+            │       └── customer1/
+            │           └── _values.yaml
+            └── another_service/
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         k8s = Path(temp_dir) / "k8s"
         create_cluster_data_files(k8s)
@@ -392,6 +420,21 @@ def regional_without_cluster_specific_override_structure() -> (
 def hierarchy_without_cluster_specific_override_structure() -> (
     Generator[str, None, None]
 ):
+    """
+    Creates the following folder structure:
+    temp_dir/
+    ├── cli_config/
+    │   └── configuration.yaml
+    └── k8s/
+        └── services/
+            ├── my_service/
+            │   ├── _values.yaml
+            │   └── region_overrides/
+            │       └── group1/
+            │           ├── _values.yaml
+            │           └── customer1/
+            └── another_service/
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         k8s = Path(temp_dir) / "k8s"
         create_cluster_data_files(k8s)
@@ -420,6 +463,22 @@ def hierarchy_without_cluster_specific_override_structure() -> (
 def hierarchy_with_nested_region_without_cluster_specific_override_structure() -> (
     Generator[str, None, None]
 ):
+    """
+    Creates the following folder structure:
+    temp_dir/
+    ├── cli_config/
+    │   └── configuration.yaml
+    └── k8s/
+        └── services/
+            ├── my_service/
+            │   ├── _values.yaml
+            │   └── region_overrides/
+            │       └── group1/
+            │           ├── _values.yaml
+            │           └── customer1/
+            │               └── _values.yaml
+            └── another_service/
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         k8s = Path(temp_dir) / "k8s"
         create_cluster_data_files(k8s)
