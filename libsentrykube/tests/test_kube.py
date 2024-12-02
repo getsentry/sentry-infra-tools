@@ -1,8 +1,9 @@
 import os
-import click
+import pytest
 
 from libsentrykube.context import init_cluster_context
 from libsentrykube.kube import _consolidate_variables
+from libsentrykube.service import CustomerTooOftenDefinedException
 from libsentrykube.utils import set_workspace_root_start, workspace_root
 
 expected_consolidated_values = {
@@ -135,7 +136,7 @@ def test_consolidate_variables_hierarchical_and_regional_combined(
 def test_consolidate_variables_multiple_cluster_files_same_customer(
     duplicate_customer_clusters_in_service: str,
 ):
-    try:
+    with pytest.raises(CustomerTooOftenDefinedException):
         initialize_cluster(duplicate_customer_clusters_in_service)
         _consolidate_variables(
             customer_name="customer1",
@@ -143,16 +144,12 @@ def test_consolidate_variables_multiple_cluster_files_same_customer(
             cluster_name="cluster1",
             external=False,
         )
-        # Fails the test if no exception is raised
-        assert False
-    except click.exceptions.Abort:
-        pass
 
 
 def test_consolidate_variables_multiple_dirs_same_customer(
     duplicate_customer_dirs_in_service: str,
 ):
-    try:
+    with pytest.raises(CustomerTooOftenDefinedException):
         initialize_cluster(duplicate_customer_dirs_in_service)
         _consolidate_variables(
             customer_name="customer1",
@@ -160,9 +157,6 @@ def test_consolidate_variables_multiple_dirs_same_customer(
             cluster_name="cluster1",
             external=False,
         )
-        assert False
-    except click.exceptions.Abort:
-        pass
 
 
 def test_consolidate_variables_regional_config_without_cluster_specific_file(

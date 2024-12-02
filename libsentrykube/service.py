@@ -12,6 +12,11 @@ from libsentrykube.utils import workspace_root, deep_merge_dict
 _services = OrderedDict()
 
 
+class CustomerTooOftenDefinedException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 def assert_customer_is_defined_at_most_once(
     service_name: str, customer_name: str, external: bool = False
 ) -> None:
@@ -31,11 +36,9 @@ def assert_customer_is_defined_at_most_once(
     paths.extend(service_regions_path.glob(f"region_overrides/*/{customer_name}"))
 
     if len(paths) > 1:
-        click.echo(f"Expected a single cluster file for customer but got {len(paths)}")
-        click.echo("Found files in:")
-        for path in paths:
-            click.echo(path)
-        raise click.Abort()
+        raise CustomerTooOftenDefinedException(
+            f"Expected a single '{customer_name}' directory in service but found {len(paths)}"
+        )
 
 
 def set_service_paths(service_paths: List[str]):
