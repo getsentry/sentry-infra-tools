@@ -88,7 +88,7 @@ COMMON_SHARED_CONFIG = {
 
 REGIONAL_SHARED_CONFIG = {
     "config": {
-        "foo": "regional-foo-will-be-overwritten-by-common-shared-config",
+        "foo": "regional-foo-will-be-overwritten-by-cluster-specific-config",
         "regional": "cool-region",
     }
 }
@@ -336,6 +336,115 @@ def duplicate_customer_clusters_in_service() -> Generator[str, None, None]:
 
         create_cli_config(Path(temp_dir))
 
+        yield temp_dir
+
+
+@pytest.fixture
+def duplicate_customer_dirs_in_service() -> Generator[str, None, None]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        k8s = Path(temp_dir) / "k8s"
+        create_cluster_data_files(k8s)
+
+        create_structure(
+            [
+                "services/my_service/region_overrides/customer1/",
+                "services/my_service/region_overrides/group_one/customer1/",
+                "services/another_service/",
+            ],
+            root=k8s,
+        )
+
+        create_cli_config(Path(temp_dir))
+
+        yield temp_dir
+
+
+@pytest.fixture
+def regional_without_cluster_specific_override_structure() -> (
+    Generator[str, None, None]
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        k8s = Path(temp_dir) / "k8s"
+        create_cluster_data_files(k8s)
+
+        service_dir = k8s / "services" / "my_service"
+
+        create_structure(
+            [
+                "services/my_service/region_overrides/customer1/",
+                "services/another_service",
+            ],
+            root=k8s,
+        )
+
+        write_data_file(service_dir / "_values.yaml", TOP_LEVEL_CONFIG)
+        write_data_file(
+            service_dir / "region_overrides" / "customer1" / "_values.yaml",
+            REGIONAL_SHARED_CONFIG,
+        )
+
+        create_cli_config(Path(temp_dir))
+
+        yield temp_dir
+
+
+@pytest.fixture
+def hierarchy_without_cluster_specific_override_structure() -> (
+    Generator[str, None, None]
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        k8s = Path(temp_dir) / "k8s"
+        create_cluster_data_files(k8s)
+
+        service_dir = k8s / "services" / "my_service"
+
+        create_structure(
+            [
+                "services/my_service/region_overrides/group1/customer1/",
+                "services/another_service",
+            ],
+            root=k8s,
+        )
+
+        write_data_file(service_dir / "_values.yaml", TOP_LEVEL_CONFIG)
+        write_data_file(
+            service_dir / "region_overrides" / "group1" / "_values.yaml",
+            COMMON_SHARED_CONFIG,
+        )
+
+        create_cli_config(Path(temp_dir))
+        yield temp_dir
+
+
+@pytest.fixture
+def hierarchy_with_nested_region_without_cluster_specific_override_structure() -> (
+    Generator[str, None, None]
+):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        k8s = Path(temp_dir) / "k8s"
+        create_cluster_data_files(k8s)
+
+        service_dir = k8s / "services" / "my_service"
+
+        create_structure(
+            [
+                "services/my_service/region_overrides/group1/customer1/",
+                "services/another_service",
+            ],
+            root=k8s,
+        )
+
+        write_data_file(service_dir / "_values.yaml", TOP_LEVEL_CONFIG)
+        write_data_file(
+            service_dir / "region_overrides" / "group1" / "_values.yaml",
+            COMMON_SHARED_CONFIG,
+        )
+        write_data_file(
+            service_dir / "region_overrides" / "group1" / "customer1" / "_values.yaml",
+            REGIONAL_SHARED_CONFIG,
+        )
+
+        create_cli_config(Path(temp_dir))
         yield temp_dir
 
 

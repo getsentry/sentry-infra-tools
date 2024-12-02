@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Mapping, Any, Union
+from typing import List, Mapping, Any
 
 import click
 import yaml
@@ -12,12 +12,14 @@ from libsentrykube.utils import workspace_root, deep_merge_dict
 _services = OrderedDict()
 
 
-def assert_single_cluster_for_customer(
-    service_name: str, customer_name: str, cluster_name: str, external: bool = False
+def assert_customer_is_defined_at_most_once(
+    service_name: str, customer_name: str, external: bool = False
 ) -> None:
     """
-    Make sure that a cluster can only exist once for a service.
-    Checks the `region_overrides` and every folder directly in `region_overrides`
+    Make sure that a customer directory is only defined a single time in a service.
+    Because an explicit cluster_name.yaml is not necessary we will just check for the customer directory.
+
+    This method exists to prevent different configurations for a single customer using different override methods.
     """
     if external:
         service_regions_path = workspace_root() / service_name
@@ -25,16 +27,8 @@ def assert_single_cluster_for_customer(
         service_regions_path = get_service_path(service_name)
 
     paths: List[Path] = []
-    paths.extend(
-        service_regions_path.glob(
-            f"region_overrides/{customer_name}/{cluster_name}.yaml"
-        )
-    )
-    paths.extend(
-        service_regions_path.glob(
-            f"region_overrides/*/{customer_name}/{cluster_name}.yaml"
-        )
-    )
+    paths.extend(service_regions_path.glob(f"region_overrides/{customer_name}"))
+    paths.extend(service_regions_path.glob(f"region_overrides/*/{customer_name}"))
 
     if len(paths) > 1:
         click.echo(f"Expected a single cluster file for customer but got {len(paths)}")
@@ -151,7 +145,7 @@ def get_service_value_overrides(
 
 def get_common_regional_override(
     service_name: str, region_name: str, external: bool = False
-) -> Union[dict, None]:
+) -> dict:
     """
     Helper function to load common regional configuration values.
 
@@ -169,7 +163,7 @@ def get_common_regional_override(
 
         return common_override_values
     except FileNotFoundError:
-        return None
+        return {}
 
 
 def get_hierarchical_value_overrides(
@@ -229,18 +223,16 @@ def get_hierarchical_value_overrides(
             service_name, region_path, cluster_name, external
         )
 
-        if not region_values:
-            continue
-
-        # In order to support _values.yaml files that are shared within the group
         common_service_values = get_common_regional_override(
             service_name, region_path, external
         )
-        if common_service_values is not None:
-            deep_merge_dict(common_service_values, region_values)
-            deep_merge_dict(base_values, common_service_values)
-        else:
-            deep_merge_dict(base_values, region_values)
+
+        # There must be either a cluster specific override file a _values.yaml in the region dir
+        if not region_values and not common_service_values:
+            continue
+
+        deep_merge_dict(base_values, common_service_values)
+        deep_merge_dict(base_values, region_values)
 
         return base_values
 
