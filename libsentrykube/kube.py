@@ -125,7 +125,7 @@ def _consolidate_variables(
           patch the regional override preserving comments.
     """
 
-    # check that there is a single cluster file per customer
+    # check that there is a single customer dir per service
     assert_customer_is_defined_at_most_once(service_name, customer_name, external)
 
     # Service defaults from _values
@@ -150,7 +150,7 @@ def _consolidate_variables(
         # Override with region specific cluster config if exists
         deep_merge_dict(service_values, service_value_overrides)
 
-    # Otherwise we check if it exists in a group in region_overrides/GROUP/REGION
+    # Otherwise merge service data from the within region_overrides/GROUP
     else:
         # Merged data from region_overrides/GROUP/_values.yaml,
         # region_overrides/GROUP/REGION/_values.yaml and
