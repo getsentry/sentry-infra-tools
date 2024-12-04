@@ -1,3 +1,9 @@
+## 0.0.23
+
+### Various fixes & improvements
+
+- feat(sentrykube): introduce additional possibilities to override config (#63) by @Litarnus
+
 ## 0.0.22
 
 ### Various fixes & improvements
