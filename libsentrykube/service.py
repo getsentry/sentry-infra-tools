@@ -116,8 +116,7 @@ def get_service_value_override_path(
 
     service_regions_path = service_regions_path / "region_overrides"
 
-    if region_name == "saas":
-        region_name = "us"
+    region_name = convert_region_name_if_necessary(region_name)
 
     return service_regions_path / region_name
 
@@ -220,6 +219,8 @@ def get_hierarchical_value_overrides(
                 base_values = yaml.safe_load(f)
         except FileNotFoundError:
             base_values = {}
+
+        region_name = convert_region_name_if_necessary(region_name)
 
         region_path = f"{override_group.name}/{region_name}"
         region_values = get_service_value_overrides(
@@ -356,3 +357,13 @@ def build_materialized_path(
         build_materialized_directory(customer_name, cluster_name, service_name)
         / "deployment.yaml"
     )
+
+
+def convert_region_name_if_necessary(region_name: str) -> str:
+    """
+    Converts the region name if certain conditions are met.
+    Right now it will only convert "saas" into "us"
+    """
+    if region_name == "saas":
+        return "us"
+    return region_name
