@@ -221,6 +221,9 @@ def get_hierarchical_value_overrides(
         except FileNotFoundError:
             base_values = {}
 
+        if region_name == "saas":
+            region_name = "us"
+
         region_path = f"{override_group.name}/{region_name}"
         region_values = get_service_value_overrides(
             service_name, region_path, cluster_name, external
