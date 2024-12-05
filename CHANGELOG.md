@@ -1,3 +1,9 @@
+## 0.0.24
+
+### Various fixes & improvements
+
+- fix(libsentrykube): apply name conversion in the entire config tree (#66) by @Litarnus
+
 ## 0.0.23
 
 ### Various fixes & improvements
