@@ -38,7 +38,7 @@ The default TTL for created bastions is 3600 seconds.
 You may specify up to {TTL_MAX} and as low as {TTL_MIN}.
 """
 )
-@click.argument("customer", default="us")
+@click.argument("customer")
 @click.option("--ttl", type=int, required=False, default=TTL_DEFAULT)
 @click.option("--site", "site_name", type=click.Choice(Site.names()), required=False)
 @click.option("--zone", "zone_override", type=str, required=False, default=None)
