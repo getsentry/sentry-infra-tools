@@ -414,7 +414,14 @@ def apply(
         if not soak_only:
             click.secho("\nStarting by deploying to canaries only first.\n")
             canary_applied = _apply(
-                ctx, services, yes, filters, server_side, important_diffs_only, True
+                ctx,
+                services,
+                yes,
+                filters,
+                server_side,
+                important_diffs_only,
+                True,
+                quiet=ctx.obj.quiet_mode,
             )
 
         has_soaked = False
@@ -464,7 +471,16 @@ def apply(
                     )
 
     # Deploy to all if we confirm to proceed
-    _apply(ctx, services, yes, filters, server_side, important_diffs_only, False)
+    _apply(
+        ctx,
+        services,
+        yes,
+        filters,
+        server_side,
+        important_diffs_only,
+        False,
+        quiet=ctx.obj.quiet_mode,
+    )
 
 
 def _apply(
@@ -475,6 +491,7 @@ def _apply(
     server_side,
     important_diffs_only: bool,
     use_canary: bool,
+    quiet: bool = False,
 ) -> bool:
     """
     Apply a service(s) to production, using a basic confirmation wrapper around
@@ -499,8 +516,11 @@ def _apply(
     if not (
         yes
         or click.confirm(
-            "Are you sure you want to apply this for customer "
-            f"{click.style(customer_name, fg='yellow', bold=True)}?"
+            "Are you sure you want to apply this for region "
+            f"{click.style(customer_name, fg='yellow', bold=True)}"
+            ", cluster "
+            f"{click.style(ctx.obj.cluster_name, fg='yellow', bold=True)}"
+            "?"
         )
     ):
         raise click.Abort()
@@ -521,7 +541,11 @@ def _apply(
     child_process.communicate(definitions)
     try:
         report_event_for_service_list(
-            customer_name, ctx.obj.cluster_name, operation="apply", services=services
+            customer_name,
+            ctx.obj.cluster_name,
+            operation="apply",
+            services=services,
+            quiet=quiet,
         )
     except Exception as e:
         click.echo("!! Could not report an event to DataDog:")

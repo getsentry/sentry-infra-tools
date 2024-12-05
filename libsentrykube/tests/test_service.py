@@ -1,6 +1,8 @@
 from libsentrykube.context import init_cluster_context
 import os
+
 from libsentrykube.service import (
+    get_hierarchical_value_overrides,
     get_service_data,
     get_service_values,
     get_service_value_overrides,
@@ -60,6 +62,17 @@ expected_service_value_managed_overrides = {
             },
             "service2": {},
         }
+    }
+}
+
+expected_hierarchical_and_regional_cluster_values = {
+    "config": {"foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}
+}
+
+expected_regional_cluster_values = {
+    "config": {
+        "foo": "not-foo",
+        "settings": {"abc": 20},
     }
 }
 
@@ -186,3 +199,35 @@ def test_write_managed_file(config_structure) -> None:
     assert path.is_file()
 
     set_workspace_root_start(start_workspace_root)
+
+
+def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) -> None:
+    set_workspace_root_start(hierarchical_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned = get_hierarchical_value_overrides(
+        service_name="my_service", region_name="customer1", cluster_name="cluster1"
+    )
+
+    assert returned == expected_hierarchical_and_regional_cluster_values
+
+
+def test_regional_cluster_value_overrides(
+    regional_cluster_specific_override_structure: str,
+) -> None:
+    set_workspace_root_start(regional_cluster_specific_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned = get_service_value_overrides(
+        service_name="my_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+    )
+
+    assert returned == expected_regional_cluster_values

@@ -21,6 +21,9 @@ from libsentrykube.service import (
     get_service_values,
     get_service_value_overrides,
     get_tools_managed_service_value_overrides,
+    get_hierarchical_value_overrides,
+    assert_customer_is_defined_at_most_once,
+    get_common_regional_override,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -104,26 +107,59 @@ def _consolidate_variables(
     """
     We have multiple levels of overrides for our value files.
     1. The values defined inside the service directory as values.yaml.
-    2. overridden by the regional overrides in
+    2. overridden by creating a hierarchical structure. Adding an intermediate directory
+       in 'region_override' with a '_values.yaml' file allows to have a common config
+       between a set of regions. This is useful if regions in a service are different, but
+       subset of them are similar.
+    3. overridden by a common '_values.yaml' within a region folder that has a shared config
+       between all clusters in the region.
+    4. overridden by the regional overrides in
        `service/region_override/region/cluster.yaml`
-    3. overridden by the managed override file. This is like point 2. Conceptually
+    5. overridden by the managed override file. This is like point 2. Conceptually
        there is no difference, practically this is managed by tools while region
        overrides are managed manually and they can contain comments. Tools cannot
        preserve comments.
-    4. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
+    6. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
 
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
     """
 
+    # check that there is a single customer dir per service
+    assert_customer_is_defined_at_most_once(service_name, customer_name, external)
+
     # Service defaults from _values
+    # Always gets loaded even if no region_override exists
     service_values = get_service_values(service_name, external)
 
     # Service data overrides from services/SERVICE/region_overrides/
     service_value_overrides = get_service_value_overrides(
         service_name, customer_name, cluster_name, external
     )
-    deep_merge_dict(service_values, service_value_overrides)
+
+    # Service data overrides from services/SERVICE/region_overrides/REGION/_values.yaml
+    common_service_values = get_common_regional_override(
+        service_name, customer_name, external
+    )
+
+    # If a cluster or region common config exists in region_overrides/REGION/
+    if service_value_overrides or common_service_values:
+        # Override service default config with region specific common config if exists
+        deep_merge_dict(service_values, common_service_values)
+
+        # Override with region specific cluster config if exists
+        deep_merge_dict(service_values, service_value_overrides)
+
+    # Otherwise merge service data from the within region_overrides/GROUP
+    else:
+        # Merged data from region_overrides/GROUP/_values.yaml,
+        # region_overrides/GROUP/REGION/_values.yaml and
+        # region_overrides/GROUP/REGION/{cluster_name}.yaml
+        hierarchical_values = get_hierarchical_value_overrides(
+            service_name, customer_name, cluster_name, external
+        )
+
+        deep_merge_dict(service_values, hierarchical_values)
 
     # Override files managed by tools
     managed_values = get_tools_managed_service_value_overrides(

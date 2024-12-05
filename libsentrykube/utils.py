@@ -365,7 +365,8 @@ def deep_merge_dict(
 
     for k, v in other.items():
         if v is None:
-            into.pop(k)
+            if k in into:
+                into.pop(k)
         elif k in into and isinstance(v, dict) and isinstance(into[k], dict):
             deep_merge_dict(into=into[k], other=v, overwrite=overwrite)
         elif k in into:

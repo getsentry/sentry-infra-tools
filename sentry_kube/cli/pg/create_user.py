@@ -2,13 +2,13 @@ import hmac
 import json
 from base64 import standard_b64decode, standard_b64encode
 from hashlib import pbkdf2_hmac, sha256
-from os import urandom
+import os
 from secrets import token_urlsafe
 
 import click
 from google.api_core import exceptions
 from google.cloud import secretmanager
-from kubernetes.client import CoreV1Api
+from kubernetes.client import CoreV1Api, V1Secret
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.utils import kube_get_client
@@ -94,7 +94,7 @@ def b64enc(b: bytes) -> str:
 
 
 def pg_scram_sha256(passwd: str) -> str:
-    salt = urandom(salt_size)
+    salt = os.urandom(salt_size)
     digest_key = pbkdf2_hmac(
         "sha256", passwd.encode("utf8"), salt, iterations, digest_len
     )
@@ -112,6 +112,9 @@ def decode_userlist(userlist: str):
     # the format is as follows:
     # "user1" "SCRAM-SHA-256...."
     # "user2" "SCRAM-SHA-256...."
+    if userlist == "":
+        return {}
+
     hashes = {}
     for line in userlist.rstrip("\n").split("\n"):
         (username, password_string) = line.split(" ")
@@ -124,27 +127,37 @@ def decode_userlist(userlist: str):
 def upload_plaintext_to_k8s_secret(
     api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
 ) -> None:
-    # TODO: create if not exists
-    # api.create_namespaced_secret(namespace, body)
+    try:
+        secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+    except ApiException as exc:
+        if exc.status == 404:
+            print(f"Secret `default/{secret_name}` does not exist, creating...")
+            body = V1Secret()
+            body.metadata = {"name": secret_name}
+            body.data = {}
+            secret = api.create_namespaced_secret(namespace="default", body=body)
+        else:
+            raise
 
-    secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+    secret_data = secret.data if secret.data else {}
+
     print(f"### Kubernetes secret `default/{secret_name}`, BEFORE")
-    for secret_item in secret.data:
-        print(f"{secret_item}: {secret.data[secret_item]}")
+    for secret_item in secret_data:
+        print(f"{secret_item}: {secret_data[secret_item]}")
     print()
 
     is_modified = False
     for user in users:
-        if user not in secret.data:
-            secret.data[user] = b64enc(users[user]["password"].encode("utf-8"))
+        if user not in secret_data:
+            secret_data[user] = b64enc(users[user]["password"].encode("utf-8"))
             is_modified = True
 
     if not is_modified:
         print(f"Kubernetes secret `default/{secret_name}` is up to date. No new users.")
         return
     print(f"### Kubernetes secret `default/{secret_name}`, AFTER")
-    for secret_item in secret.data:
-        print(f"{secret_item}: {secret.data[secret_item]}")
+    for secret_item in secret_data:
+        print(f"{secret_item}: {secret_data[secret_item]}")
     print()
 
     confirm = input("Type 'yes' to apply: ")
@@ -153,8 +166,9 @@ def upload_plaintext_to_k8s_secret(
         return
 
     api.patch_namespaced_secret(
-        namespace="default", name=secret_name, body={"data": secret.data}
+        namespace="default", name=secret_name, body={"data": secret_data}
     )
+    print("Updated successfully.")
 
 
 def merge_userlists(
@@ -198,8 +212,18 @@ def merge_userlists(
 def upload_userlist_to_k8s_secret(
     api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
 ) -> None:
-    # TODO: create if not exists
-    # api.create_namespaced_secret(namespace, body)
+    try:
+        secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+    except ApiException as exc:
+        if exc.status == 404:
+            print(f"Secret `default/{secret_name}` does not exist, creating...")
+            body = V1Secret()
+            body.metadata = {"name": secret_name}
+            body.data = {"userlist": ""}
+            api.create_namespaced_secret(namespace="default", body=body)
+            secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+        else:
+            raise
 
     secret = api.read_namespaced_secret(namespace="default", name=secret_name)
     encoded_userlist = secret.data["userlist"]
@@ -212,6 +236,7 @@ def upload_userlist_to_k8s_secret(
             name=secret_name,
             body={"data": {"userlist": merged_userlist}},
         )
+        print("Updated successfully.")
 
 
 def upload_userlist_to_google_secret(
@@ -249,9 +274,9 @@ def upload_userlist_to_google_secret(
         client.add_secret_version(
             request={"parent": parent, "payload": {"data": secret_data}}
         )
+        print("Updated successfully.")
 
 
-# @click.option("--project-id", required=True, help="The GCP project to add the secret to")
 @click.option("--username", required=False, multiple=True, type=str)
 @click.option("--generate-plaintext", type=bool, default=False, is_flag=True)
 @click.option("--generate-userlist", type=bool, default=False, is_flag=True)
@@ -292,12 +317,13 @@ def create_user(
         if exc.status != 404:
             raise
 
-    for secret_item in secret_data:
-        password = standard_b64decode(secret_data[secret_item]).decode("utf-8")
-        users[secret_item] = {
-            "password": password,
-            "scram": pg_scram_sha256(password),
-        }
+    if secret_data:
+        for secret_item in secret_data:
+            password = standard_b64decode(secret_data[secret_item]).decode("utf-8")
+            users[secret_item] = {
+                "password": password,
+                "scram": pg_scram_sha256(password),
+            }
 
     # Step 1: generate plaintext secrets
     if generate_plaintext:

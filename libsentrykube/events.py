@@ -35,7 +35,7 @@ def ensure_datadog_api_key_set() -> None:
         )
 
 
-def send_event_payload_to_datadog(payload) -> None:
+def send_event_payload_to_datadog(payload: dict, quiet: bool = False) -> None:
     # API docs: https://docs.datadoghq.com/api/latest/events/#post-an-event
     res = httpx.post(
         f"{DD_API_BASE}/api/v1/events",
@@ -45,11 +45,14 @@ def send_event_payload_to_datadog(payload) -> None:
         json=payload,
     )
     res.raise_for_status()
-    click.echo("\nReported the action to DataDog events:")
-    click.echo(res.json()["event"]["url"])
+    if not quiet:
+        click.echo("\nReported the action to DataDog events:")
+        click.echo(res.json()["event"]["url"])
 
 
-def report_event_to_datadog(title: str, text: str, tags: dict) -> None:
+def report_event_to_datadog(
+    title: str, text: str, tags: dict, quiet: bool = False
+) -> None:
     payload = {
         "title": title,
         "text": text,
@@ -57,7 +60,7 @@ def report_event_to_datadog(title: str, text: str, tags: dict) -> None:
         "date_happened": int(time.time()),
         "alert_type": "user_update",
     }
-    return send_event_payload_to_datadog(payload)
+    return send_event_payload_to_datadog(payload, quiet)
 
 
 def _markdown_text(text: str) -> str:
@@ -72,6 +75,7 @@ def _get_sentry_region(customer_name: str) -> str:
 def report_terragrunt_event(
     cli_args: str,
     extra_tags: Optional[dict] = None,
+    quiet: bool = False,
 ) -> None:
     # Find our slice under terragrunt/terraform
     if "terraform/" in os.getcwd():
@@ -107,6 +111,7 @@ def report_terragrunt_event(
             f"User **{user}** ran terragrunt '{cli_args}' for slice: **{tgslice}** "
         ),
         tags=tags,
+        quiet=quiet,
     )
 
 
@@ -117,6 +122,7 @@ def report_event_for_service(
     service_name: str = "",
     secret_name: str = "",
     extra_tags: Optional[dict] = None,
+    quiet: bool = False,
 ) -> None:
     user = getpass.getuser()
     sentry_region = _get_sentry_region(customer_name)
@@ -190,6 +196,7 @@ def report_event_for_service(
             f"Command line: `{command_line}`"
         ),
         tags=tags,
+        quiet=quiet,
     )
 
 
@@ -199,6 +206,7 @@ def report_event_for_service_list(
     operation: str,
     services: List[str],
     extra_tags: Optional[dict] = None,
+    quiet: bool = False,
 ) -> None:
     for service in services:
         report_event_for_service(
@@ -207,4 +215,5 @@ def report_event_for_service_list(
             operation=operation,
             service_name=service,
             extra_tags=copy.deepcopy(extra_tags),
+            quiet=quiet,
         )
