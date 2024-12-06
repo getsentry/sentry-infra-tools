@@ -210,10 +210,7 @@ def get_hierarchical_value_overrides(
 
         try:
             service_override_file = (
-                get_service_value_override_path(
-                    service_name, override_group.name, external
-                )
-                / "_values.yaml"
+                service_regions_path / override_group.name / "_values.yaml"
             )
 
             with open(service_override_file, "rb") as f:
