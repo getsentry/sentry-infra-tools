@@ -227,9 +227,12 @@ def _diff_kubectl(
         # NOTE: our dummy threading implementation might change the order of diff output.
         # If you really need sorted diff like native kubectl diff, then you would need
         # to set concurrency to 1
-        with contextlib.ExitStack() as stack, concurrent.futures.ThreadPoolExecutor(
-            max_workers=KUBECTL_DIFF_CONCURRENCY
-        ) as executor:
+        with (
+            contextlib.ExitStack() as stack,
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=KUBECTL_DIFF_CONCURRENCY
+            ) as executor,
+        ):
             chunk_size = max(len(yaml_docs) // KUBECTL_DIFF_CONCURRENCY, 1)
             kubectl_diff_cmds = [
                 cmd
