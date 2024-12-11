@@ -68,25 +68,37 @@ class K8sConfig:
 
     @classmethod
     def from_conf(cls, region_name: str, conf: Mapping[str, Any] | None) -> K8sConfig:
-        root = str(conf["root"]) if conf is not None and "root" in conf else "k8s"
+        DEFAULT_CONFIG_ROOT = "k8s"
+        DEFAULT_CONFIG_CLUSTER_DEF_ROOT = f"clusters/{region_name}"
+        DEFAULT_CONFIG_CLUSTER_NAME = None
+        DEFAULT_CONFIG_MATERIALIZED_MANIFESTS = f"materialized_manifests/{region_name}"
 
-        cluster_def_root = (
-            str(conf["cluster_def_root"])
-            if conf is not None and "cluster_def_root" in conf
-            else f"clusters/{region_name}"
-        )
+        if conf is None:
+            root = DEFAULT_CONFIG_ROOT
+            cluster_def_root = DEFAULT_CONFIG_CLUSTER_DEF_ROOT
+            cluster_name = DEFAULT_CONFIG_CLUSTER_NAME
+            materialized_manifests = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
 
-        cluster_name = (
-            str(conf.get("cluster_name"))
-            if conf is not None and "cluster_name" in conf
-            else None
-        )
+        else:
+            root = conf["root"] if "root" in conf else DEFAULT_CONFIG_ROOT
 
-        materialized_manifests = (
-            str(conf["materialized_manifests"])
-            if conf is not None and "materialized_manifests" in conf
-            else f"materialized_manifests/{region_name}"
-        )
+            cluster_def_root = (
+                conf["cluster_def_root"]
+                if "cluster_def_root" in conf
+                else DEFAULT_CONFIG_CLUSTER_DEF_ROOT
+            )
+
+            cluster_name = (
+                conf.get("cluster_name")
+                if "cluster_name" in conf
+                else DEFAULT_CONFIG_CLUSTER_NAME
+            )
+
+            materialized_manifests = (
+                conf["materialized_manifests"]
+                if "materialized_manifests" in conf
+                else DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
+            )
 
         return K8sConfig(
             root=root,
