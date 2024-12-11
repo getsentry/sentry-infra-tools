@@ -1,3 +1,21 @@
+## 0.0.25
+
+### Various fixes & improvements
+
+- feat: Allow additional locals to md5template (#69) by @untitaker
+
+## 0.0.24
+
+### Various fixes & improvements
+
+- fix(libsentrykube): apply name conversion in the entire config tree (#66) by @Litarnus
+
+## 0.0.23
+
+### Various fixes & improvements
+
+- feat(sentrykube): introduce additional possibilities to override config (#63) by @Litarnus
+
 ## 0.0.22
 
 ### Various fixes & improvements

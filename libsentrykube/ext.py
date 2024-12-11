@@ -335,11 +335,13 @@ class Md5Template(Md5File):
     """
 
     @pass_context
-    def run(self, context, template_path: str) -> str:  # type: ignore
+    def run(
+        self, context, template_path: str, extra_context: Optional[dict] = None
+    ) -> str:  # type: ignore
         return md5_fileobj(
             io.BytesIO(
                 self.environment.get_template(template_path)
-                .render(context)
+                .render(context, **(extra_context or {}))
                 .encode("utf-8")
             )
         )
