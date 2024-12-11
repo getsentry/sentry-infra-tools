@@ -67,14 +67,44 @@ class K8sConfig:
     materialized_manifests: str
 
     @classmethod
-    def from_conf(cls, conf: Mapping[str, Any]) -> K8sConfig:
+    def from_conf(cls, region_name: str, conf: Mapping[str, Any] | None) -> K8sConfig:
+        DEFAULT_CONFIG_ROOT = "k8s"
+        DEFAULT_CONFIG_CLUSTER_DEF_ROOT = f"clusters/{region_name}"
+        DEFAULT_CONFIG_CLUSTER_NAME = None
+        DEFAULT_CONFIG_MATERIALIZED_MANIFESTS = f"materialized_manifests/{region_name}"
+
+        if conf is None:
+            root = DEFAULT_CONFIG_ROOT
+            cluster_def_root = DEFAULT_CONFIG_CLUSTER_DEF_ROOT
+            cluster_name = DEFAULT_CONFIG_CLUSTER_NAME
+            materialized_manifests = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
+
+        else:
+            root = conf["root"] if "root" in conf else DEFAULT_CONFIG_ROOT
+
+            cluster_def_root = (
+                conf["cluster_def_root"]
+                if "cluster_def_root" in conf
+                else DEFAULT_CONFIG_CLUSTER_DEF_ROOT
+            )
+
+            cluster_name = (
+                conf.get("cluster_name")
+                if "cluster_name" in conf
+                else DEFAULT_CONFIG_CLUSTER_NAME
+            )
+
+            materialized_manifests = (
+                conf["materialized_manifests"]
+                if "materialized_manifests" in conf
+                else DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
+            )
+
         return K8sConfig(
-            root=str(conf["root"]),
-            cluster_def_root=str(conf["cluster_def_root"]),
-            cluster_name=str(conf.get("cluster_name"))
-            if "cluster_name" in conf
-            else None,
-            materialized_manifests=str(conf["materialized_manifests"]),
+            root=root,
+            cluster_def_root=cluster_def_root,
+            cluster_name=cluster_name,
+            materialized_manifests=materialized_manifests,
         )
 
 
@@ -88,18 +118,22 @@ class SiloRegion:
 
     @classmethod
     def from_conf(
-        cls, silo_regions_conf: Mapping[str, Any], sites: Mapping[str, Site]
+        cls,
+        region_name: str,
+        silo_regions_conf: Mapping[str, Any],
+        sites: Mapping[str, Site],
     ) -> SiloRegion:
+        name_from_conf = silo_regions_conf.get("sentry_region", region_name)
         bastion_config = silo_regions_conf["bastion"]
         assert (
             bastion_config["site"] in sites
         ), f"Undefined site {bastion_config['site']}"
-        k8s_config = silo_regions_conf["k8s"]
+        k8s_config = silo_regions_conf["k8s"] if "k8s" in silo_regions_conf else None
         return SiloRegion(
             bastion_spawner_endpoint=bastion_config["spawner_endpoint"],
             bastion_site=sites[bastion_config["site"]],
-            k8s_config=K8sConfig.from_conf(k8s_config),
-            sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
+            k8s_config=K8sConfig.from_conf(name_from_conf, k8s_config),
+            sentry_region=name_from_conf,
             service_monitors=silo_regions_conf.get("service_monitors", {}),
         )
 
@@ -123,8 +157,8 @@ class Config:
                 "silo_regions" in configuration
             ), "silo_regions entry not present in the config"
             silo_regions = {
-                name: SiloRegion.from_conf(conf, sites)
-                for name, conf in configuration["silo_regions"].items()
+                region_name: SiloRegion.from_conf(region_name, region_conf, sites)
+                for region_name, region_conf in configuration["silo_regions"].items()
             }
 
         self.sites: Mapping[str, Site] = sites
