@@ -335,7 +335,9 @@ class Md5Template(Md5File):
     """
 
     @pass_context
-    def run(self, context, template_path: str, extra_context: Optional[dict] = None) -> str:  # type: ignore
+    def run(
+        self, context, template_path: str, extra_context: Optional[dict] = None
+    ) -> str:  # type: ignore
         return md5_fileobj(
             io.BytesIO(
                 self.environment.get_template(template_path)
