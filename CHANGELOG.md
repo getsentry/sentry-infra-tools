@@ -1,3 +1,9 @@
+## 0.0.25
+
+### Various fixes & improvements
+
+- feat: Allow additional locals to md5template (#69) by @untitaker
+
 ## 0.0.24
 
 ### Various fixes & improvements
