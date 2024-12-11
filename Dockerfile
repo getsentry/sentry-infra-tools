@@ -35,7 +35,7 @@ ENV VIRTUAL_ENV=1
 ENV SENTRY_KUBE_INSTALL_GIT_HOOKS=0
 ENV SENTRY_KUBE_ROOT="/work"
 ENV SENTRY_KUBE_NO_CONTEXT="1"
-ENV SENTRY_KUBE_CUSTOMER="saas"
+ENV SENTRY_KUBE_CUSTOMER="us"
 
 RUN /install.sh && rm -rf /root/.cache
 
@@ -43,7 +43,7 @@ RUN /install.sh && rm -rf /root/.cache
 WORKDIR /work
 # Dummy context to make sentry-kube happy
 RUN mkdir -p k8s/clusters && echo '{"context": "_empty", "services": []}' > k8s/clusters/default.yaml
-RUN echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {saas: {bastion: " >> configuration.yaml
+RUN echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {us: {bastion: " >> configuration.yaml
 RUN echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cluster_def_root: " >> configuration.yaml
 RUN echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml
 
