@@ -1,3 +1,9 @@
+## 0.0.26
+
+### Various fixes & improvements
+
+- fix(libsentrykube): prevent accidental mapping of group dir name (#68) by @Litarnus
+
 ## 0.0.25
 
 ### Various fixes & improvements
