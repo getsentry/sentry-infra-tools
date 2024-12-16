@@ -1,3 +1,9 @@
+## 0.0.27
+
+### Various fixes & improvements
+
+- INC-984: allow diff/apply to spawn jobs (#70) by @bmckerry
+
 ## 0.0.26
 
 ### Various fixes & improvements
