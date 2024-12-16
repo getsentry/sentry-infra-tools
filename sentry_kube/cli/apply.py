@@ -91,7 +91,12 @@ def allow_for_all_services(f):
 
 
 def _render(
-    ctx, services, raw=False, skip_kinds=None, filters=None, use_canary: bool = False
+    ctx,
+    services,
+    raw=False,
+    skip_kinds=None,
+    filters=None,
+    use_canary: bool = False,
 ):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
@@ -219,7 +224,8 @@ def _diff_kubectl(
         cmd.append(f"--concurrency={KUBECTL_DIFF_CONCURRENCY}")
         with _dump_yaml_docs_to_tmpdir(yaml_docs) as tmpdirname:
             output = _run_kubectl_diff(
-                cmd + ["-f", tmpdirname], important_diffs_only=important_diffs_only
+                cmd + ["-f", tmpdirname],
+                important_diffs_only=important_diffs_only,
             )
     else:
         # For older kubectl version, using threading to increase concurrency
@@ -227,9 +233,12 @@ def _diff_kubectl(
         # NOTE: our dummy threading implementation might change the order of diff output.
         # If you really need sorted diff like native kubectl diff, then you would need
         # to set concurrency to 1
-        with contextlib.ExitStack() as stack, concurrent.futures.ThreadPoolExecutor(
-            max_workers=KUBECTL_DIFF_CONCURRENCY
-        ) as executor:
+        with (
+            contextlib.ExitStack() as stack,
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=KUBECTL_DIFF_CONCURRENCY
+            ) as executor,
+        ):
             chunk_size = max(len(yaml_docs) // KUBECTL_DIFF_CONCURRENCY, 1)
             kubectl_diff_cmds = [
                 cmd
@@ -321,9 +330,21 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
     help="Ignore diffs which consist only of generation, image, and configVersion",
 )
 @click.option("--use-canary", is_flag=True, default=False)
+@click.option(
+    "--allow-jobs",
+    "-j",
+    is_flag=True,
+    help="Allows regular diff/apply to spawn Jobs",
+)
 @allow_for_all_services
 def diff(
-    ctx, services, filters, server_side, important_diffs_only: bool, use_canary: bool
+    ctx,
+    services,
+    filters,
+    server_side,
+    important_diffs_only: bool,
+    use_canary: bool,
+    allow_jobs: bool,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -333,9 +354,14 @@ def diff(
     anything, with your current changes.
     """
     click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
         _render(
-            ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
         ),
     ).encode("utf-8")
 
@@ -392,6 +418,12 @@ def diff(
     default=False,
     help="Skip canary deploy and wait for soak before applying to everything.",
 )
+@click.option(
+    "--allow-jobs",
+    "-j",
+    is_flag=True,
+    help="Allows regular diff/apply to spawn Jobs",
+)
 @click.pass_context
 @allow_for_all_services
 def apply(
@@ -405,6 +437,7 @@ def apply(
     soak_time: int,
     skip_monitor_checks: bool,
     soak_only: bool,
+    allow_jobs: bool,
 ):
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
@@ -420,6 +453,7 @@ def apply(
                 filters,
                 server_side,
                 important_diffs_only,
+                allow_jobs,
                 True,
                 quiet=ctx.obj.quiet_mode,
             )
@@ -478,6 +512,7 @@ def apply(
         filters,
         server_side,
         important_diffs_only,
+        allow_jobs,
         False,
         quiet=ctx.obj.quiet_mode,
     )
@@ -490,6 +525,7 @@ def _apply(
     filters,
     server_side,
     important_diffs_only: bool,
+    allow_jobs: bool,
     use_canary: bool,
     quiet: bool = False,
 ) -> bool:
@@ -502,9 +538,14 @@ def _apply(
     """
     customer_name = ctx.obj.customer_name
     click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
         _render(
-            ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
         ),
     ).encode("utf-8")
 
