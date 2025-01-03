@@ -9,6 +9,7 @@ import urllib.error
 from functools import wraps
 from typing import Iterator, List, Sequence
 from time import sleep
+import shutil
 
 import click
 import yaml
@@ -25,7 +26,6 @@ from libsentrykube.utils import (
     ensure_kubectl,
     macos_notify,
     pretty,
-    workspace_root,
 )
 
 __all__ = (
@@ -37,7 +37,9 @@ __all__ = (
 # Number of objects to process in parallel when diffing against the live version.
 # Larger number = faster, but more memory, I/O and CPU over that shorter period of
 # time.
-KUBECTL_DIFF_CONCURRENCY: int = int(os.environ.get("SENTRY_KUBE_KUBECTL_DIFF_CONCURRENCY", 1))
+KUBECTL_DIFF_CONCURRENCY: int = int(
+    os.environ.get("SENTRY_KUBE_KUBECTL_DIFF_CONCURRENCY", 1)
+)
 DEFAULT_SOAK_TIME_S = 120
 
 
@@ -88,7 +90,14 @@ def allow_for_all_services(f):
     return wrapper
 
 
-def _render(ctx, services, raw=False, skip_kinds=None, filters=None, use_canary: bool = False):
+def _render(
+    ctx,
+    services,
+    raw=False,
+    skip_kinds=None,
+    filters=None,
+    use_canary: bool = False,
+):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
 
@@ -143,9 +152,13 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
             new_env["ORIG_KUBECTL_EXTERNAL_DIFF"] = orig_kubectl_external_diff
 
         # Inject our wrapper into KUBECTL_EXTERNAL_DIFF env to filter out unwanted info
-        kubectl_external_diff_cmd = os.path.join(
-            workspace_root(), "bin/important-diffs-only"
-        )
+
+        # Find out where the important-diffs-only script is located
+        binary_name = "important-diffs-only"
+        kubectl_external_diff_cmd = shutil.which(binary_name)
+        if not kubectl_external_diff_cmd:
+            raise click.ClickException(f"Could not find {binary_name} in PATH")
+
         new_env["KUBECTL_EXTERNAL_DIFF"] = kubectl_external_diff_cmd
 
     child_process = subprocess.Popen(
@@ -188,7 +201,9 @@ def _diff_kubectl(
     # It needs multiple files to fully utilize concurrency implementation.
     yaml_docs = [
         yaml.dump(yaml_doc)
-        for yaml_doc in yaml.load_all(definitions.decode("utf-8"), Loader=yaml.SafeLoader)
+        for yaml_doc in yaml.load_all(
+            definitions.decode("utf-8"), Loader=yaml.SafeLoader
+        )
     ]
 
     @contextlib.contextmanager
@@ -209,7 +224,8 @@ def _diff_kubectl(
         cmd.append(f"--concurrency={KUBECTL_DIFF_CONCURRENCY}")
         with _dump_yaml_docs_to_tmpdir(yaml_docs) as tmpdirname:
             output = _run_kubectl_diff(
-                cmd + ["-f", tmpdirname], important_diffs_only=important_diffs_only
+                cmd + ["-f", tmpdirname],
+                important_diffs_only=important_diffs_only,
             )
     else:
         # For older kubectl version, using threading to increase concurrency
@@ -217,9 +233,12 @@ def _diff_kubectl(
         # NOTE: our dummy threading implementation might change the order of diff output.
         # If you really need sorted diff like native kubectl diff, then you would need
         # to set concurrency to 1
-        with contextlib.ExitStack() as stack, concurrent.futures.ThreadPoolExecutor(
-            max_workers=KUBECTL_DIFF_CONCURRENCY
-        ) as executor:
+        with (
+            contextlib.ExitStack() as stack,
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=KUBECTL_DIFF_CONCURRENCY
+            ) as executor,
+        ):
             chunk_size = max(len(yaml_docs) // KUBECTL_DIFF_CONCURRENCY, 1)
             kubectl_diff_cmds = [
                 cmd
@@ -247,7 +266,9 @@ def _diff_kubectl(
     lines = output.split("\n")
     for line in lines:
         # blocking garbage output
-        if all([keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]) or any(
+        if all(
+            [keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]
+        ) or any(
             [
                 "kubectl.kubernetes.io/last-applied-configuration" in line,
                 "diff -u -N" in line,
@@ -309,8 +330,22 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
     help="Ignore diffs which consist only of generation, image, and configVersion",
 )
 @click.option("--use-canary", is_flag=True, default=False)
+@click.option(
+    "--allow-jobs",
+    "-j",
+    is_flag=True,
+    help="Allows regular diff/apply to spawn Jobs",
+)
 @allow_for_all_services
-def diff(ctx, services, filters, server_side, important_diffs_only: bool, use_canary: bool):
+def diff(
+    ctx,
+    services,
+    filters,
+    server_side,
+    important_diffs_only: bool,
+    use_canary: bool,
+    allow_jobs: bool,
+):
     """
     Render a diff between production and local configs, using a wrapper around
     "kubectl diff".
@@ -319,8 +354,15 @@ def diff(ctx, services, filters, server_side, important_diffs_only: bool, use_ca
     anything, with your current changes.
     """
     click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
-        _render(ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary),
+        _render(
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
+        ),
     ).encode("utf-8")
 
     if use_canary:
@@ -376,6 +418,12 @@ def diff(ctx, services, filters, server_side, important_diffs_only: bool, use_ca
     default=False,
     help="Skip canary deploy and wait for soak before applying to everything.",
 )
+@click.option(
+    "--allow-jobs",
+    "-j",
+    is_flag=True,
+    help="Allows regular diff/apply to spawn Jobs",
+)
 @click.pass_context
 @allow_for_all_services
 def apply(
@@ -389,6 +437,7 @@ def apply(
     soak_time: int,
     skip_monitor_checks: bool,
     soak_only: bool,
+    allow_jobs: bool,
 ):
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
@@ -398,7 +447,15 @@ def apply(
         if not soak_only:
             click.secho("\nStarting by deploying to canaries only first.\n")
             canary_applied = _apply(
-                ctx, services, yes, filters, server_side, important_diffs_only, True
+                ctx,
+                services,
+                yes,
+                filters,
+                server_side,
+                important_diffs_only,
+                allow_jobs,
+                True,
+                quiet=ctx.obj.quiet_mode,
             )
 
         has_soaked = False
@@ -406,7 +463,9 @@ def apply(
         # For each service applied, check specified monitors aren't in Warning or Alert state.
         # If no monitor IDs are available then default to a manual prompt.
         if not canary_applied:
-            click.echo(f"\nNo canary changes for {services} skipping validation/soaking.\n")
+            click.echo(
+                f"\nNo canary changes for {services} skipping validation/soaking.\n"
+            )
         else:
             for service in services:
                 if skip_monitor_checks or service not in service_monitors:
@@ -446,7 +505,17 @@ def apply(
                     )
 
     # Deploy to all if we confirm to proceed
-    _apply(ctx, services, yes, filters, server_side, important_diffs_only, False)
+    _apply(
+        ctx,
+        services,
+        yes,
+        filters,
+        server_side,
+        important_diffs_only,
+        allow_jobs,
+        False,
+        quiet=ctx.obj.quiet_mode,
+    )
 
 
 def _apply(
@@ -456,7 +525,9 @@ def _apply(
     filters,
     server_side,
     important_diffs_only: bool,
+    allow_jobs: bool,
     use_canary: bool,
+    quiet: bool = False,
 ) -> bool:
     """
     Apply a service(s) to production, using a basic confirmation wrapper around
@@ -467,8 +538,15 @@ def _apply(
     """
     customer_name = ctx.obj.customer_name
     click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
-        _render(ctx, services, skip_kinds=("Job",), filters=filters, use_canary=use_canary),
+        _render(
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
+        ),
     ).encode("utf-8")
 
     if not _diff_kubectl(ctx, definitions, server_side, important_diffs_only):
@@ -479,8 +557,11 @@ def _apply(
     if not (
         yes
         or click.confirm(
-            "Are you sure you want to apply this for customer "
-            f"{click.style(customer_name, fg='yellow', bold=True)}?"
+            "Are you sure you want to apply this for region "
+            f"{click.style(customer_name, fg='yellow', bold=True)}"
+            ", cluster "
+            f"{click.style(ctx.obj.cluster_name, fg='yellow', bold=True)}"
+            "?"
         )
     ):
         raise click.Abort()
@@ -501,7 +582,11 @@ def _apply(
     child_process.communicate(definitions)
     try:
         report_event_for_service_list(
-            customer_name, ctx.obj.cluster_name, operation="apply", services=services
+            customer_name,
+            ctx.obj.cluster_name,
+            operation="apply",
+            services=services,
+            quiet=quiet,
         )
     except Exception as e:
         click.echo("!! Could not report an event to DataDog:")

@@ -4,7 +4,11 @@ import tempfile
 from pathlib import Path
 import os
 from yaml import safe_dump
-from pr_approver.rules import assess_service_registry_change, ignore_file, ApprovalDecision
+from pr_approver.rules import (
+    assess_service_registry_change,
+    ignore_file,
+    ApprovalDecision,
+)
 from pr_approver.approver import assess_pr
 
 BASE_SERVICE = {
@@ -29,7 +33,9 @@ def create_all_files(root: Path) -> None:
     os.makedirs(service_libs / "subdir")
     (service_libs / "lib.yaml").write_text("{}")
 
-    materialized_files = Path(root) / "shared_config/_materialized_configs/service_registry"
+    materialized_files = (
+        Path(root) / "shared_config/_materialized_configs/service_registry"
+    )
     os.makedirs(materialized_files)
     (materialized_files / "services.yaml").write_text("{}")
 
@@ -77,7 +83,9 @@ def test_approver(files_structure) -> None:
             pr_dir,
             [
                 Path("shared_config/service_registry/snuba.yaml"),
-                Path("shared_config/_materialized_configs/service_registry/services.yaml"),
+                Path(
+                    "shared_config/_materialized_configs/service_registry/services.yaml"
+                ),
             ],
             config,
         )

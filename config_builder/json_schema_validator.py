@@ -36,7 +36,9 @@ class JsonSchemaValidator:
     ) -> None:
         self.root = ROOT if root is None else root
         self.schema_root = (
-            (self.root / SCHEMAS_DIR) if schemas_dir is None else (self.root / schemas_dir)
+            (self.root / SCHEMAS_DIR)
+            if schemas_dir is None
+            else (self.root / schemas_dir)
         )
         self.schemas = SCHEMAS if schemas is None else schemas
         self.registry = self.__build_registry()

@@ -72,7 +72,9 @@ def test_process_data() -> None:
     input_stream = io.StringIO(TEST_DEPLOYMENT_DATA)
     output_stream = io.StringIO()
 
-    apply_results = important_diffs.process_file("/tmp/fake_path", input_stream, output_stream)
+    apply_results = important_diffs.process_file(
+        "/tmp/fake_path", input_stream, output_stream
+    )
     data = yaml.safe_load(output_stream.getvalue())
 
     # Make sure original values are returned
@@ -99,5 +101,6 @@ def test_process_data() -> None:
         "configVersion" not in data["spec"]["template"]["metadata"]["annotations"]
     ), "configVersion should be ignored"
     assert all(
-        "image" not in container for container in data["spec"]["template"]["spec"]["containers"]
+        "image" not in container
+        for container in data["spec"]["template"]["spec"]["containers"]
     ), "image should be ignored"

@@ -6,9 +6,17 @@ from pathlib import Path
 from sys import stderr
 from typing import Sequence
 
-from config_builder.combined_generator import Outcome, generate_all_files, validate_all_files
+from config_builder.combined_generator import (
+    Outcome,
+    generate_all_files,
+    validate_all_files,
+)
 from config_builder.json_schema_validator import ValidationException
-from config_builder.materializer import JsonnetException, iterate_jsonnet_configs, materialize_file
+from config_builder.materializer import (
+    JsonnetException,
+    iterate_jsonnet_configs,
+    materialize_file,
+)
 
 GREEN = "\033[92m"
 RED = "\033[31m"
@@ -68,6 +76,15 @@ def main(argv: Sequence[str] | None = None) -> None:
             The root directory of the shared configs.
         """,
     )
+    parser.add_argument(
+        "-p",
+        "--ext-packages",
+        action="append",
+        default=[],
+        help="""
+            Name of external package to add to jsonnet import paths.
+        """,
+    )
 
     args = parser.parse_args(argv)
     if args.combine_sources:
@@ -95,7 +112,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     materialized_root = Path(args.output_directory) if args.output_directory else None
     for file in iterate_jsonnet_configs(Path(args.root_dir), args.exclude_dirs):
         try:
-            materialize_file(Path(args.root_dir), file, materialized_root)
+            materialize_file(
+                Path(args.root_dir), file, materialized_root, args.ext_packages
+            )
         except JsonnetException as e:
             print(f"{RED}Jsonnet Error occurred while materializing {file}{RESET}")
             print(f"{e.__cause__}")

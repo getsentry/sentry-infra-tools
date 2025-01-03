@@ -13,7 +13,9 @@ MAX_JIRA_DESCRIPTION_LENGTH = 32000
 
 
 @click.command()
-@click.option("--jira", "-j", is_flag=True, default=False, help="Attempts to create a jira ticket")
+@click.option(
+    "--jira", "-j", is_flag=True, default=False, help="Attempts to create a jira ticket"
+)
 @click.pass_context
 def detect_drift(ctx, jira):
     """
@@ -37,18 +39,28 @@ def detect_drift(ctx, jira):
         except TemplateError as e:
             click.secho(e, fg="red")
             if jira:
-                error_report = "{code}\n" + f"Jinja2 error for service {service}: {e}" + "\n{code}"
+                error_report = (
+                    "{code}\n" + f"Jinja2 error for service {service}: {e}" + "\n{code}"
+                )
                 drift_jira_issue(jiraConf, ctx.obj.customer_name, service, error_report)
         # _run_kubectl_diff raises kubectl errors as ClickExceptions
         except click.ClickException as e:
             click.secho(e, fg="red")
             if jira:
-                error_report = "{code}\n" + f"kubectl error for service {service}: {e}" + "\n{code}"
+                error_report = (
+                    "{code}\n"
+                    + f"kubectl error for service {service}: {e}"
+                    + "\n{code}"
+                )
                 drift_jira_issue(jiraConf, ctx.obj.customer_name, service, error_report)
 
         if output:
             click.echo(f"service {service} drifted!")
-            drift_report = "{code}\n" + "\n".join(output)[:MAX_JIRA_DESCRIPTION_LENGTH] + "\n{code}"
+            drift_report = (
+                "{code}\n"
+                + "\n".join(output)[:MAX_JIRA_DESCRIPTION_LENGTH]
+                + "\n{code}"
+            )
             if jira:
                 drift_jira_issue(jiraConf, ctx.obj.customer_name, service, drift_report)
 

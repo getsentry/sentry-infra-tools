@@ -11,9 +11,13 @@ __all__ = ("run_job",)
 
 @click.command()
 @click.option("--yes", "-y", is_flag=True)
-@click.option("--quiet", "-q", is_flag=True, help="topicctl only - silences irrelevant log lines")
+@click.option(
+    "--quiet", "-q", is_flag=True, help="topicctl only - silences irrelevant log lines"
+)
 @click.option("--arg", "-a", multiple=True, help="add additional arg to Job args")
-@click.option("--kwarg", "-k", multiple=True, help="add additional keyword arg to Job args")
+@click.option(
+    "--kwarg", "-k", multiple=True, help="add additional keyword arg to Job args"
+)
 @click.argument("service-name", nargs=1, type=str, required=True)
 @click.argument("job-name", nargs=1, type=str, required=True)
 @click.pass_context
@@ -49,7 +53,10 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
     ]
 
     if len(kube_resources) == 0:
-        die("No matching kubernetes objects were found.\n" "You may have mistyped the job name.")
+        die(
+            "No matching kubernetes objects were found.\n"
+            "You may have mistyped the job name."
+        )
 
     if len(kube_resources) > 1:
         die(
@@ -68,8 +75,11 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
     if not (
         yes
         or click.confirm(
-            "Are you sure you want to apply this for customer "
-            f"{click.style(customer_name, fg='yellow', bold=True)}?"
+            "Are you sure you want to apply this for region "
+            f"{click.style(customer_name, fg='yellow', bold=True)}"
+            ", cluster "
+            f"{click.style(ctx.obj.cluster_name, fg='yellow', bold=True)}"
+            "?"
         )
     ):
         raise click.Abort()
@@ -86,7 +96,9 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
 
     try:
         # Find our Pod that is spawned from this Job
-        pods = api.list_namespaced_pod(namespace=namespace, label_selector=f"job-name={name}").items
+        pods = api.list_namespaced_pod(
+            namespace=namespace, label_selector=f"job-name={name}"
+        ).items
         # It's possible for Jobs to spawn more than one Pod,
         # but we don't have a use case for that yet.
         assert len(pods) == 1, len(pods)
@@ -110,6 +122,7 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
                         ctx.obj.cluster_name,
                         operation=f"run-job {job_name}",
                         service_name=service_name,
+                        quiet=ctx.obj.quiet_mode,
                     )
                 except Exception as e:
                     click.echo("!! Could not report an event to DataDog:")
@@ -148,7 +161,8 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
 
                             reason = container_status.state.waiting.reason
                             click.echo(
-                                f"waiting on container {container_status.name} " f"({reason})"
+                                f"waiting on container {container_status.name} "
+                                f"({reason})"
                             )
                             if reason in ("ContainerCreating", "PodInitializing"):
                                 flag = False

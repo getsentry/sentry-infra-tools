@@ -14,7 +14,9 @@ def mock_container_resource():
 def test_get_channel_versions_success(mock_container_resource):
     # Mocking the container resource and its method 'execute'
     mock_execute = MagicMock(
-        return_value={"channels": [{"channel": "stable", "validVersions": ["1.2.3", "1.2.4"]}]}
+        return_value={
+            "channels": [{"channel": "stable", "validVersions": ["1.2.3", "1.2.4"]}]
+        }
     )
     mock_container_resource.return_value.projects.return_value.zones.return_value.getServerconfig.return_value.execute = mock_execute
 

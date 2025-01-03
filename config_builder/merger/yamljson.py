@@ -25,7 +25,10 @@ class YamlMerger(FileMerger):
         Adds a file to this merger. It also apply all the needed overrides.
         """
 
-        if file.suffix not in {".json", ".yaml", ".yml"} or file.name == self.__config_file_name:
+        if (
+            file.suffix not in {".json", ".yaml", ".yml"}
+            or file.name == self.__config_file_name
+        ):
             return
 
         file_name = file.name

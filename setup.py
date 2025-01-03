@@ -43,7 +43,7 @@ def get_requirements() -> Sequence[str]:
 
 setup(
     name="sentry-infra-tools",
-    version="0.0.11",
+    version="0.0.27",
     author="Sentry",
     author_email="oss@sentry.io",
     packages=find_packages(where=".", exclude="tests"),
@@ -64,6 +64,6 @@ setup(
         ],
         "libsentrykube.macros": macros,
     },
-    scripts=["bin/sentry-kube-pop"],
-    python_requires=">=3.10",
+    scripts=["sentry_kube/bin/sentry-kube-pop", "sentry_kube/bin/important-diffs-only"],
+    python_requires=">=3.11",
 )

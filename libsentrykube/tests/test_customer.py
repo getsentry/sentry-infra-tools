@@ -10,7 +10,9 @@ def test_config_load() -> None:
 
     config = Config()
 
-    conf = load_customer_data(config, customer_name="my_customer", cluster_name="default")
+    conf = load_customer_data(
+        config, customer_name="my_customer", cluster_name="default"
+    )
 
     assert conf["context"] == "gke_st-kube_us-west1-c_primary"
 

@@ -1,5 +1,7 @@
 import copy
 import hashlib
+import importlib
+import importlib.resources
 import json
 import os
 import platform
@@ -10,11 +12,12 @@ import subprocess
 import sys
 import time
 import warnings
+import click
+import httpx
 from functools import cache
 from pathlib import Path
 from typing import IO, Any, Iterable, Iterator, List, Tuple
 
-import click
 import kubernetes
 from yaml import SafeDumper, safe_dump_all, safe_load_all
 
@@ -22,6 +25,7 @@ from yaml import SafeDumper, safe_dump_all, safe_load_all
 # According to https://kubernetes.io/releases/version-skew-policy/#kubectl
 # kubectl is supported within one minor version (older or newer) of kube-apiserver.
 # Also, you'll want to upgrade the python kubernetes client version accordingly.
+KUBECTL_BINARY = os.environ.get("SENTRY_KUBE_KUBECTL_BINARY", "kubectl")
 KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.30.4")
 ENABLE_NOTIFICATIONS = os.environ.get("SENTRY_KUBE_ENABLE_NOTIFICATIONS", False)
 
@@ -289,19 +293,20 @@ def ensure_libsentrykube_folder() -> Path:
 
 
 @cache
-def ensure_kubectl(version: str = KUBECTL_VERSION) -> Path:
+def ensure_kubectl(
+    binary: str = KUBECTL_BINARY, version: str = KUBECTL_VERSION
+) -> Path:
     base = ensure_libsentrykube_folder() / "kubectl" / f"v{version}"
-    path = base / "kubectl"
+    path = base / binary
     if path.is_file():
         return path
 
+    if binary != "kubectl":
+        raise RuntimeError(
+            f"Unsupported binary '{binary}', please install it manually or update SENTRY_KUBE_KUBECTL_BINARY."
+        )
+
     base.mkdir(parents=True, exist_ok=True)
-
-    import hashlib
-    import platform
-
-    import click
-    import httpx
 
     click.echo(f"> kubectl v{version} is missing, so downloading")
 
@@ -339,6 +344,7 @@ def ensure_kubectl(version: str = KUBECTL_VERSION) -> Path:
 
     tmp_path.rename(path)
     path.chmod(0o755)
+
     return path
 
 
@@ -359,7 +365,8 @@ def deep_merge_dict(
 
     for k, v in other.items():
         if v is None:
-            into.pop(k)
+            if k in into:
+                into.pop(k)
         elif k in into and isinstance(v, dict) and isinstance(into[k], dict):
             deep_merge_dict(into=into[k], other=v, overwrite=overwrite)
         elif k in into:
@@ -391,12 +398,18 @@ def get_pubkey() -> Path:
 
 
 def get_service_registry_data(service_registry_id: str) -> dict:
-    filepath = (
-        workspace_root()
-        / "shared_config"
-        / "_materialized_configs"
-        / "service_registry"
-        / "combined"
-        / "service_registry.json"
-    )
+    filepath = get_service_registry_filepath()
     return json.loads(filepath.read_text())[service_registry_id]
+
+
+def get_service_registry_filepath() -> Path:
+    service_registry_pkg_name = "sentry_service_registry"
+    try:
+        importlib.import_module(service_registry_pkg_name)
+        path = str(importlib.resources.files(service_registry_pkg_name).joinpath(""))
+        return Path(path) / "config" / "combined" / "service_registry.json"
+    except ImportError:
+        root = workspace_root()
+        return Path(
+            f"{root}/shared_config/_materialized_configs/service_registry/combined/service_registry.json"
+        )

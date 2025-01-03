@@ -26,6 +26,11 @@ class MissingDataDogAppKeyException(Exception):
         super().__init__(message)
 
 
+class MissingDataDogApiKeyException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 def check_monitors(
     monitor_ids: Sequence[int],
     dd_app_key: str | None = None,
@@ -42,13 +47,22 @@ def check_monitors(
 
 
 def check_monitor(
-    monitor_id: int, dd_app_key: str | None = None, failure_states: Sequence[str] | None = None
+    monitor_id: int,
+    dd_app_key: str | None = None,
+    failure_states: Sequence[str] | None = None,
 ) -> bool:
     if dd_app_key is None:
-        dd_app_key = os.getenv("DATADOG_APP_KEY") or os.getenv("DD_APP_KEY") or None
+        dd_app_key = os.getenv("DATADOG_APP_KEY") or os.getenv("DD_APP_KEY")
 
     if dd_app_key is None:
-        raise MissingDataDogAppKeyException("DATADOG_APP_KEY must be set to check monitors.")
+        raise MissingDataDogAppKeyException(
+            "DATADOG_APP_KEY must be set to check monitors."
+        )
+
+    if DATADOG_API_KEY is None:
+        raise MissingDataDogApiKeyException(
+            "DATADOG_API_KEY must be set to check monitors."
+        )
 
     if failure_states is None:
         failure_states = ["Alert", "Warn"]
@@ -70,6 +84,8 @@ def check_monitor(
     if "overall_state" in resp_json:
         overall_state = resp_json["overall_state"]
     else:
-        raise MissingOverallStateException("'overall_state' key missing from the DataDog response.")
+        raise MissingOverallStateException(
+            "'overall_state' key missing from the DataDog response."
+        )
 
     return overall_state.lower() not in failure_states

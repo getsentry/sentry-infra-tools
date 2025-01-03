@@ -1,3 +1,111 @@
+## 0.0.27
+
+### Various fixes & improvements
+
+- INC-984: allow diff/apply to spawn jobs (#70) by @bmckerry
+
+## 0.0.26
+
+### Various fixes & improvements
+
+- fix(libsentrykube): prevent accidental mapping of group dir name (#68) by @Litarnus
+
+## 0.0.25
+
+### Various fixes & improvements
+
+- feat: Allow additional locals to md5template (#69) by @untitaker
+
+## 0.0.24
+
+### Various fixes & improvements
+
+- fix(libsentrykube): apply name conversion in the entire config tree (#66) by @Litarnus
+
+## 0.0.23
+
+### Various fixes & improvements
+
+- feat(sentrykube): introduce additional possibilities to override config (#63) by @Litarnus
+
+## 0.0.22
+
+### Various fixes & improvements
+
+- chore: Print cluster when using apply/run_job (#64) by @rgibert
+- feat(pg): create k8s secrets if they do not exist (#39) by @oioki
+- fix: --quiet should mute DD echos (#48) by @rgibert
+
+## 0.0.21
+
+### Various fixes & improvements
+
+- Move out the callback (#58) by @brian-lou
+
+## 0.0.20
+
+### Various fixes & improvements
+
+- chore(service-registry): Add python package import solution (#56) by @brian-lou
+
+## 0.0.19
+
+### Various fixes & improvements
+
+- Use own jsonpatch implementation (#55) by @brian-lou
+- Add the gcloud CLI to the devenev setup (#57) by @fpacifici
+- Wire up patches into sentry-kube quickpatch (#52) by @fpacifici
+- [pre-commit.ci] pre-commit autoupdate (#54) by @pre-commit-ci
+- feat(git): Allow git operations (#50) by @nikhars
+
+## 0.0.18
+
+### Various fixes & improvements
+
+- feat(quickpatch): Add apply patch module (#46) by @brian-lou
+- Introduce an added override file to be managed by tools (#49) by @fpacifici
+
+## 0.0.17
+
+### Various fixes & improvements
+
+- Add quickpatch tool scaffolding (#45) by @fpacifici
+
+## 0.0.16
+
+### Various fixes & improvements
+
+- Update min Python version and sentry-jsonnet dependency version (#44) by @brian-lou
+- [pre-commit.ci] pre-commit autoupdate (#43) by @pre-commit-ci
+- chore(formatting): Fix formatting of all code (#42) by @nikhars
+
+## 0.0.15
+
+### Various fixes & improvements
+
+- feat: Initial support for alternative kubectls (#40) by @rgibert
+
+## 0.0.14
+
+### Various fixes & improvements
+
+- fix(service-registry): Use the correct path to find JSON file (#41) by @nikhars
+
+## 0.0.13
+
+### Various fixes & improvements
+
+- fix: add missing __init__.py for kubectl (#38) by @bmckerry
+- fix(service_registry): Dynamic detection of path (#33) by @nikhars
+- feat(devenv): Use devenv for setup (#36) by @nikhars
+- chore(readme): sentry-infra-tools in editable mode (#34) by @nikhars
+
+## 0.0.12
+
+### Various fixes & improvements
+
+- fix(diff): Expose important-diffs-only (#37) by @nikhars
+
 ## 0.0.11
 
 ### Various fixes & improvements

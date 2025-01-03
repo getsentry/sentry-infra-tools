@@ -164,7 +164,9 @@ Customers include:
 
         cluster_to_load = customer_config.k8s_config.cluster_name or cluster_name
 
-        cluster = load_cluster_configuration(customer_config.k8s_config, cluster_to_load)
+        cluster = load_cluster_configuration(
+            customer_config.k8s_config, cluster_to_load
+        )
 
         context_name = cluster.services_data["context"]
 
@@ -180,7 +182,12 @@ Customers include:
 
         set_service_paths(cluster.services)
 
-        if ctx.invoked_subcommand in ("rendervalues", "render", "lint", "validate"):
+        if ctx.invoked_subcommand in (
+            "rendervalues",
+            "render",
+            "lint",
+            "validate",
+        ):
             if not customer:
                 die(
                     f"Please pass in a customer to {ctx.invoked_subcommand} "

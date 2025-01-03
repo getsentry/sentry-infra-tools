@@ -63,7 +63,9 @@ def yaml_renderer(rows):
 
 
 @click.command()
-@click.option("-o", "--output", type=click.Choice(["wide", "json", "yaml"]), default="wide")
+@click.option(
+    "-o", "--output", type=click.Choice(["wide", "json", "yaml"]), default="wide"
+)
 @click.argument("service", type=str, required=True)
 @click.pass_context
 def resolve_pvc(ctx, output, service):
@@ -104,4 +106,6 @@ def resolve_pvc(ctx, output, service):
                 if claim in claims:
                     findings.append((pod, claim))
 
-    {"wide": wide_renderer, "json": json_renderer, "yaml": yaml_renderer}[output](findings)
+    {"wide": wide_renderer, "json": json_renderer, "yaml": yaml_renderer}[output](
+        findings
+    )
