@@ -66,8 +66,19 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
             )
 
         _dns_check()
-        control_plane_ip = urlparse(cluster["cluster"]["server"]).hostname
-        cluster["cluster"]["server"] = f"https://kubernetes:{port}"
+        control_plane_host = urlparse(cluster["cluster"]["server"]).hostname
+
+        if "gke.goog" in control_plane_host:
+            use_dns_endpoint = True
+            if not quiet:
+                click.echo(f"GKE DNS endpoint detected ({control_plane_host})")
+        else:
+            use_dns_endpoint = False
+            if not quiet:
+                click.echo(f"GKE private IP endpoint detected ({control_plane_host})")
+
+        if not use_dns_endpoint:
+            cluster["cluster"]["server"] = f"https://kubernetes:{port}"
 
         tmp_kubeconfig_path = os.path.join(
             os.path.dirname(KUBE_CONFIG_PATH), f"sentry-kube.config.{port}.yaml"
@@ -75,50 +86,51 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
         with open(tmp_kubeconfig_path, "w") as tmp_cf:
             yaml.dump(kubeconfig, tmp_cf)
 
-    port_fwd = f"{port}:{control_plane_ip}:443"
+    port_fwd = f"{port}:{control_plane_host}:443"
 
-    if not _tcp_port_check(port):
-        if not quiet:
-            click.echo(f"Spawning port forwarding for {port_fwd}")
-
-        subprocess.Popen(
-            build_ssh_command(
-                ctx,
-                host=KUBECTL_JUMP_HOST,
-                project=None,
-                user=None,
-                ssh_key_file=None,
-                region=None,
-                zone=None,
-                # -N -- Do not execute remote command
-                # -T -- do not allocate tty
-                # -f -- go to background, before the command execution
-                # ExitOnForwardFailure=yes
-                # Terminate the connection if it cannot set up all requested dynamic,
-                # tunnel, local, and remote port forwardings.
-                ssh_args=(
-                    "-NTf",
-                    "-o",
-                    "ExitOnForwardFailure=yes",
-                    "-L",
-                    port_fwd,
-                ),
-            ),
-            # spawn as detached process
-            start_new_session=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-        )
-        # try port_check_attempts times if the port forwarding is in place
-        port_check_attempts = 10
-        for _ in range(port_check_attempts):
+    if not use_dns_endpoint:
+        if not _tcp_port_check(port):
             if not quiet:
-                click.echo("poking on port ...")
-            if _tcp_port_check(port):
+                click.echo(f"Spawning port forwarding for {port_fwd}")
+
+            subprocess.Popen(
+                build_ssh_command(
+                    ctx,
+                    host=KUBECTL_JUMP_HOST,
+                    project=None,
+                    user=None,
+                    ssh_key_file=None,
+                    region=None,
+                    zone=None,
+                    # -N -- Do not execute remote command
+                    # -T -- do not allocate tty
+                    # -f -- go to background, before the command execution
+                    # ExitOnForwardFailure=yes
+                    # Terminate the connection if it cannot set up all requested dynamic,
+                    # tunnel, local, and remote port forwardings.
+                    ssh_args=(
+                        "-NTf",
+                        "-o",
+                        "ExitOnForwardFailure=yes",
+                        "-L",
+                        port_fwd,
+                    ),
+                ),
+                # spawn as detached process
+                start_new_session=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+            # try port_check_attempts times if the port forwarding is in place
+            port_check_attempts = 10
+            for _ in range(port_check_attempts):
                 if not quiet:
-                    click.echo("port forwarding in place")
-                break
-            else:
-                time.sleep(3)
+                    click.echo("poking on port ...")
+                if _tcp_port_check(port):
+                    if not quiet:
+                        click.echo("port forwarding in place")
+                    break
+                else:
+                    time.sleep(3)
 
     return tmp_kubeconfig_path
