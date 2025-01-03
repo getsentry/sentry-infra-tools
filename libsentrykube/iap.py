@@ -40,6 +40,28 @@ def _dns_check() -> None:
         )
 
 
+def _dns_endpoint_check(control_plane_host: str, quiet: bool) -> bool:
+    """
+    GKE provides a DNS endpoint for the control plane, but also a private IP endpoint.
+    We want to use the DNS endpoint if possible as it doesn't require port forwarding or bastion hosts,
+    but if it's not available, we'll use the private IP endpoint.
+
+    We can detect the endpoint by checking if the control plane host contains "gke.goog".
+    Example DNS endpoint: gke-22df3be7a2d24d7eb1935c53b5cfaa2337ea-249720712700.us-east1.gke.goog
+    """
+
+    if "gke.goog" in control_plane_host:
+        use_dns_endpoint = True
+        if not quiet:
+            click.echo(f"GKE DNS endpoint detected ({control_plane_host})")
+    else:
+        use_dns_endpoint = False
+        if not quiet:
+            click.echo(f"GKE private IP endpoint detected ({control_plane_host})")
+
+    return use_dns_endpoint
+
+
 def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
     """
     Create an IAP tunnel and generate a temporary kubeconfig that uses it.
@@ -67,15 +89,7 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
 
         _dns_check()
         control_plane_host = urlparse(cluster["cluster"]["server"]).hostname
-
-        if "gke.goog" in control_plane_host:
-            use_dns_endpoint = True
-            if not quiet:
-                click.echo(f"GKE DNS endpoint detected ({control_plane_host})")
-        else:
-            use_dns_endpoint = False
-            if not quiet:
-                click.echo(f"GKE private IP endpoint detected ({control_plane_host})")
+        use_dns_endpoint = _dns_endpoint_check(control_plane_host, quiet)
 
         if not use_dns_endpoint:
             cluster["cluster"]["server"] = f"https://kubernetes:{port}"
@@ -88,6 +102,7 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
 
     port_fwd = f"{port}:{control_plane_host}:443"
 
+    # Skip all of this junk if we're using the DNS endpoint
     if not use_dns_endpoint:
         if not _tcp_port_check(port):
             if not quiet:
