@@ -100,51 +100,53 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
         with open(tmp_kubeconfig_path, "w") as tmp_cf:
             yaml.dump(kubeconfig, tmp_cf)
 
-    # Skip all of this junk if we're using the DNS endpoint
-    if not use_dns_endpoint:
-        port_fwd = f"{port}:{control_plane_host}:443"
-        if not _tcp_port_check(port):
-            if not quiet:
-                click.echo(f"Spawning port forwarding for {port_fwd}")
+    if use_dns_endpoint:
+        return tmp_kubeconfig_path
 
-            subprocess.Popen(
-                build_ssh_command(
-                    ctx,
-                    host=KUBECTL_JUMP_HOST,
-                    project=None,
-                    user=None,
-                    ssh_key_file=None,
-                    region=None,
-                    zone=None,
-                    # -N -- Do not execute remote command
-                    # -T -- do not allocate tty
-                    # -f -- go to background, before the command execution
-                    # ExitOnForwardFailure=yes
-                    # Terminate the connection if it cannot set up all requested dynamic,
-                    # tunnel, local, and remote port forwardings.
-                    ssh_args=(
-                        "-NTf",
-                        "-o",
-                        "ExitOnForwardFailure=yes",
-                        "-L",
-                        port_fwd,
-                    ),
+    # Skip all of this junk if we're using the DNS endpoint
+    port_fwd = f"{port}:{control_plane_host}:443"
+    if not _tcp_port_check(port):
+        if not quiet:
+            click.echo(f"Spawning port forwarding for {port_fwd}")
+
+        subprocess.Popen(
+            build_ssh_command(
+                ctx,
+                host=KUBECTL_JUMP_HOST,
+                project=None,
+                user=None,
+                ssh_key_file=None,
+                region=None,
+                zone=None,
+                # -N -- Do not execute remote command
+                # -T -- do not allocate tty
+                # -f -- go to background, before the command execution
+                # ExitOnForwardFailure=yes
+                # Terminate the connection if it cannot set up all requested dynamic,
+                # tunnel, local, and remote port forwardings.
+                ssh_args=(
+                    "-NTf",
+                    "-o",
+                    "ExitOnForwardFailure=yes",
+                    "-L",
+                    port_fwd,
                 ),
-                # spawn as detached process
-                start_new_session=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.STDOUT,
-            )
-            # try port_check_attempts times if the port forwarding is in place
-            port_check_attempts = 10
-            for _ in range(port_check_attempts):
+            ),
+            # spawn as detached process
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
+        # try port_check_attempts times if the port forwarding is in place
+        port_check_attempts = 10
+        for _ in range(port_check_attempts):
+            if not quiet:
+                click.echo("poking on port ...")
+            if _tcp_port_check(port):
                 if not quiet:
-                    click.echo("poking on port ...")
-                if _tcp_port_check(port):
-                    if not quiet:
-                        click.echo("port forwarding in place")
-                    break
-                else:
-                    time.sleep(3)
+                    click.echo("port forwarding in place")
+                break
+            else:
+                time.sleep(3)
 
     return tmp_kubeconfig_path
