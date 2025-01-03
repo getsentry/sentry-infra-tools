@@ -1,3 +1,9 @@
+## 0.0.28
+
+### Various fixes & improvements
+
+- detect dns endpoint and skip port forwarding (#72) by @mwarkentin
+
 ## 0.0.27
 
 ### Various fixes & improvements
