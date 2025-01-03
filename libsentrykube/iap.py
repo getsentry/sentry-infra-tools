@@ -100,10 +100,9 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
         with open(tmp_kubeconfig_path, "w") as tmp_cf:
             yaml.dump(kubeconfig, tmp_cf)
 
-    port_fwd = f"{port}:{control_plane_host}:443"
-
     # Skip all of this junk if we're using the DNS endpoint
     if not use_dns_endpoint:
+        port_fwd = f"{port}:{control_plane_host}:443"
         if not _tcp_port_check(port):
             if not quiet:
                 click.echo(f"Spawning port forwarding for {port_fwd}")
