@@ -1,3 +1,10 @@
+## 0.0.30
+
+### Various fixes & improvements
+
+- chore: Remove unused EB test code (#75) by @rgibert
+- chore: Remove ephemeral bastion code (#67) by @rgibert
+
 ## 0.0.29
 
 ### Various fixes & improvements
