@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, ClassVar, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 from types import MappingProxyType
 from functools import cache
 
@@ -11,37 +11,6 @@ from yaml import SafeLoader, load
 from libsentrykube.utils import workspace_root
 
 DEFAULT_CONFIG = "cli_config/configuration.yaml"
-
-
-@dataclass(frozen=True)
-class Site:
-    _all: ClassVar[dict[str, Site]] = {}
-    name: str
-    region: str
-    zone: str
-    network: str = ""
-    subnetwork: str = ""
-
-    def __post_init__(self) -> None:
-        self._all[self.name] = self
-
-    @classmethod
-    def get(cls, name: str) -> Site:
-        return cls._all[name]
-
-    @classmethod
-    def names(cls) -> Sequence[str]:
-        return [k for k in cls._all.keys()]
-
-    @classmethod
-    def from_conf(cls, conf: Mapping[str, str]) -> Site:
-        return Site(
-            name=conf["name"],
-            region=conf["region"],
-            zone=conf["zone"],
-            network=conf.get("network", ""),
-            subnetwork=conf.get("subnetwork", ""),
-        )
 
 
 @dataclass(frozen=True)
@@ -110,8 +79,6 @@ class K8sConfig:
 
 @dataclass(frozen=True)
 class SiloRegion:
-    bastion_spawner_endpoint: str
-    bastion_site: Site
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
@@ -121,17 +88,10 @@ class SiloRegion:
         cls,
         region_name: str,
         silo_regions_conf: Mapping[str, Any],
-        sites: Mapping[str, Site],
     ) -> SiloRegion:
         name_from_conf = silo_regions_conf.get("sentry_region", region_name)
-        bastion_config = silo_regions_conf["bastion"]
-        assert (
-            bastion_config["site"] in sites
-        ), f"Undefined site {bastion_config['site']}"
         k8s_config = silo_regions_conf["k8s"] if "k8s" in silo_regions_conf else None
         return SiloRegion(
-            bastion_spawner_endpoint=bastion_config["spawner_endpoint"],
-            bastion_site=sites[bastion_config["site"]],
             k8s_config=K8sConfig.from_conf(name_from_conf, k8s_config),
             sentry_region=name_from_conf,
             service_monitors=silo_regions_conf.get("service_monitors", {}),
@@ -147,21 +107,14 @@ class Config:
         with open(config_file_name) as file:
             configuration = load(file, Loader=SafeLoader)
 
-            assert "sites" in configuration, "sites entry not present in the config"
-            sites = {
-                name: Site.from_conf(conf)
-                for name, conf in configuration["sites"].items()
-            }
-
             assert (
                 "silo_regions" in configuration
             ), "silo_regions entry not present in the config"
             silo_regions = {
-                region_name: SiloRegion.from_conf(region_name, region_conf, sites)
+                region_name: SiloRegion.from_conf(region_name, region_conf)
                 for region_name, region_conf in configuration["silo_regions"].items()
             }
 
-        self.sites: Mapping[str, Site] = sites
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
 
     @cache

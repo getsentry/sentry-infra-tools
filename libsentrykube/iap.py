@@ -5,10 +5,10 @@ import time
 from contextlib import closing
 from urllib.parse import urlparse
 
-from libsentrykube.ssh import build_ssh_command
-
 import click
 import yaml
+
+from libsentrykube.ssh import build_ssh_command
 
 KUBE_CONFIG_PATH = os.getenv(
     "KUBECONFIG_PATH",
@@ -40,6 +40,28 @@ def _dns_check() -> None:
         )
 
 
+def _dns_endpoint_check(control_plane_host: str, quiet: bool) -> bool:
+    """
+    GKE provides a DNS endpoint for the control plane, but also a private IP endpoint.
+    We want to use the DNS endpoint if possible as it doesn't require port forwarding or bastion hosts,
+    but if it's not available, we'll use the private IP endpoint.
+
+    We can detect the endpoint by checking if the control plane host contains "gke.goog".
+    Example DNS endpoint: gke-22df3be7a2d24d7eb1935c53b5cfaa2337ea-249720712700.us-east1.gke.goog
+    """
+
+    if "gke.goog" in control_plane_host:
+        use_dns_endpoint = True
+        if not quiet:
+            click.echo(f"GKE DNS endpoint detected ({control_plane_host})")
+    else:
+        use_dns_endpoint = False
+        if not quiet:
+            click.echo(f"GKE private IP endpoint detected ({control_plane_host})")
+
+    return use_dns_endpoint
+
+
 def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
     """
     Create an IAP tunnel and generate a temporary kubeconfig that uses it.
@@ -66,8 +88,11 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
             )
 
         _dns_check()
-        control_plane_ip = urlparse(cluster["cluster"]["server"]).hostname
-        cluster["cluster"]["server"] = f"https://kubernetes:{port}"
+        control_plane_host = urlparse(cluster["cluster"]["server"]).hostname
+        use_dns_endpoint = _dns_endpoint_check(control_plane_host, quiet)
+
+        if not use_dns_endpoint:
+            cluster["cluster"]["server"] = f"https://kubernetes:{port}"
 
         tmp_kubeconfig_path = os.path.join(
             os.path.dirname(KUBE_CONFIG_PATH), f"sentry-kube.config.{port}.yaml"
@@ -75,8 +100,11 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
         with open(tmp_kubeconfig_path, "w") as tmp_cf:
             yaml.dump(kubeconfig, tmp_cf)
 
-    port_fwd = f"{port}:{control_plane_ip}:443"
+    if use_dns_endpoint:
+        return tmp_kubeconfig_path
 
+    # Skip all of this junk if we're using the DNS endpoint
+    port_fwd = f"{port}:{control_plane_host}:443"
     if not _tcp_port_check(port):
         if not quiet:
             click.echo(f"Spawning port forwarding for {port_fwd}")
@@ -88,8 +116,6 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
                 project=None,
                 user=None,
                 ssh_key_file=None,
-                region=None,
-                zone=None,
                 # -N -- Do not execute remote command
                 # -T -- do not allocate tty
                 # -f -- go to background, before the command execution
