@@ -1,3 +1,9 @@
+## 0.0.29
+
+### Various fixes & improvements
+
+- Removes the region and zone parameters from the ssh command. (#74) by @ellisonmarks
+
 ## 0.0.28
 
 ### Various fixes & improvements
