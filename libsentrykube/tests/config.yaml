@@ -18,3 +18,8 @@ silo_regions:
       cluster_def_root: clusters/my_other_customer
       materialized_manifests: rendered_services
     sentry_region: st-my_other_customer
+  region2:
+    k8s:
+      root: k8s
+    sentry_region: region2
+  region3:
