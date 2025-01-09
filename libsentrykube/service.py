@@ -5,6 +5,7 @@ import click
 import yaml
 
 from collections import OrderedDict
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from libsentrykube.config import Config
 from libsentrykube.customer import load_customer_data
 from libsentrykube.utils import workspace_root, deep_merge_dict
@@ -92,9 +93,11 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
     else:
         service_path = get_service_path(service_name)
     try:
-        with open(service_path / "_values.yaml", "rb") as f:
-            values = yaml.safe_load(f)
-    except FileNotFoundError:
+        template = Environment(
+            loader=FileSystemLoader(service_path),
+        ).get_template("_values.yaml")
+        values = yaml.safe_load(template.render())
+    except TemplateNotFound:
         values = {}
     return values
 
@@ -133,16 +136,15 @@ def get_service_value_overrides(
     If "external=True" is specified, treat the service name as the full service path.
     """
     try:
-        service_override_file = (
-            get_service_value_override_path(service_name, region_name, external)
-            / f"{cluster_name}.yaml"
-        )
-
-        with open(service_override_file, "rb") as f:
-            values = yaml.safe_load(f)
+        template = Environment(
+            loader=FileSystemLoader(
+                get_service_value_override_path(service_name, region_name, external)
+            ),
+        ).get_template(f"{cluster_name}.yaml")
+        values = yaml.safe_load(template.render())
 
         return values
-    except FileNotFoundError:
+    except TemplateNotFound:
         return {}
 
 
@@ -156,16 +158,15 @@ def get_common_regional_override(
     settings shared across all clusters in that region.
     """
     try:
-        common_service_override_file = (
-            get_service_value_override_path(service_name, region_name, external)
-            / "_values.yaml"
-        )
+        template = Environment(
+            loader=FileSystemLoader(
+                get_service_value_override_path(service_name, region_name, external)
+            ),
+        ).get_template("_values.yaml")
+        values = yaml.safe_load(template.render())
 
-        with open(common_service_override_file, "rb") as f:
-            common_override_values = yaml.safe_load(f)
-
-        return common_override_values
-    except FileNotFoundError:
+        return values
+    except TemplateNotFound:
         return {}
 
 
@@ -209,13 +210,11 @@ def get_hierarchical_value_overrides(
             continue
 
         try:
-            service_override_file = (
-                service_regions_path / override_group.name / "_values.yaml"
-            )
-
-            with open(service_override_file, "rb") as f:
-                base_values = yaml.safe_load(f)
-        except FileNotFoundError:
+            template = Environment(
+                loader=FileSystemLoader(service_regions_path / override_group.name),
+            ).get_template("_values.yaml")
+            base_values = yaml.safe_load(template.render())
+        except TemplateNotFound:
             base_values = {}
 
         if region_name == "saas":

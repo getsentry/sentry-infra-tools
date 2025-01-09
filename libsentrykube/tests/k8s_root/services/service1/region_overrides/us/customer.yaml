@@ -1,5 +1,8 @@
+{% set some_jinja = "some_jinja" %}
 key2:
   subkey2_3:
     - value2_3_1_replaced
   subkey2_4:
     - value2_4_1_replaced
+  subkey2_5:
+    - {{ some_jinja}}
