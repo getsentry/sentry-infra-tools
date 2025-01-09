@@ -87,14 +87,20 @@ class SiloRegion:
     def from_conf(
         cls,
         region_name: str,
-        silo_regions_conf: Mapping[str, Any],
+        silo_regions_conf: Mapping[str, Any] | None,
     ) -> SiloRegion:
-        name_from_conf = silo_regions_conf.get("sentry_region", region_name)
-        k8s_config = silo_regions_conf["k8s"] if "k8s" in silo_regions_conf else None
+        if silo_regions_conf is not None:
+            name_from_conf = silo_regions_conf.get("sentry_region", region_name)
+            k8s_config = silo_regions_conf.get("k8s", None)
+            service_monitors = silo_regions_conf.get("service_monitors", {})
+        else:
+            name_from_conf = region_name
+            k8s_config = None
+            service_monitors = {}
         return SiloRegion(
             k8s_config=K8sConfig.from_conf(name_from_conf, k8s_config),
             sentry_region=name_from_conf,
-            service_monitors=silo_regions_conf.get("service_monitors", {}),
+            service_monitors=service_monitors,
         )
 
 
