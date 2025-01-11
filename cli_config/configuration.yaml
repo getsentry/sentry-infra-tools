@@ -1,27 +1,7 @@
 # This file contains the parameters that are needed to use sentry-kube
 # for each silo-region (region or single tenant).
-#
-# These parameters are the basic parameter needed to connect to prod.
-# They include things like:
-#   bastion spawner
-# - region/zone
-# - placement of the k8s config in the ops repo
-sites:
-  some_saas:
-    name: us
-    region: some-region
-    zone: a
-    network: global/networks/some-network
-    subnetwork: regions/some-region/subnetworks/some-subnetwork
-
-# TODO: Break bastion configuration apart from kubernetes config.
-# The two are not interdependent and we do not even need to use the
-# same tool to connect to bastion and apply k8s changes.
 silo_regions:
   saas:
-    bastion:
-      spawner_endpoint: https://localhost:12345
-      site: some_saas
     k8s:
       root: k8s
       cluster_def_root: clusters/us

@@ -1,3 +1,16 @@
+## 0.0.30
+
+### Various fixes & improvements
+
+- chore: Remove unused EB test code (#75) by @rgibert
+- chore: Remove ephemeral bastion code (#67) by @rgibert
+
+## 0.0.29
+
+### Various fixes & improvements
+
+- Removes the region and zone parameters from the ssh command. (#74) by @ellisonmarks
+
 ## 0.0.28
 
 ### Various fixes & improvements
