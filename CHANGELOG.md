@@ -1,3 +1,9 @@
+## 0.0.31
+
+### Various fixes & improvements
+
+- fix(kube): Ignore empty override files (#76) by @Dav1dde
+
 ## 0.0.30
 
 ### Various fixes & improvements
