@@ -93,10 +93,9 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
         service_path = get_service_path(service_name)
     try:
         with open(service_path / "_values.yaml", "rb") as f:
-            values = yaml.safe_load(f)
+            return yaml.safe_load(f) or {}
     except FileNotFoundError:
-        values = {}
-    return values
+        return {}
 
 
 def get_service_value_override_path(
@@ -139,7 +138,7 @@ def get_service_value_overrides(
         )
 
         with open(service_override_file, "rb") as f:
-            values = yaml.safe_load(f)
+            values = yaml.safe_load(f) or {}
 
         return values
     except FileNotFoundError:
@@ -162,9 +161,7 @@ def get_common_regional_override(
         )
 
         with open(common_service_override_file, "rb") as f:
-            common_override_values = yaml.safe_load(f)
-
-        return common_override_values
+            return yaml.safe_load(f) or {}
     except FileNotFoundError:
         return {}
 
@@ -214,7 +211,7 @@ def get_hierarchical_value_overrides(
             )
 
             with open(service_override_file, "rb") as f:
-                base_values = yaml.safe_load(f)
+                base_values = yaml.safe_load(f) or {}
         except FileNotFoundError:
             base_values = {}
 
@@ -268,7 +265,7 @@ def get_tools_managed_service_value_overrides(
 
     if service_override_file.exists() and service_override_file.is_file():
         with open(service_override_file, "rb") as f:
-            return yaml.safe_load(f)
+            return yaml.safe_load(f) or {}
 
     return {}
 
