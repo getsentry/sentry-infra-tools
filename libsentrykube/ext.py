@@ -551,7 +551,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
     To be used as a container within pod.spec.initContainers.
     """
 
-    def run(self, version: str = "alpine3.20"):
+    def run(self, version: str = "latest"):
         iptables_entrypoint = IPTABLES_ENTRYPOINT
         env = [
             {
@@ -562,7 +562,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
 
         return json.dumps(
             {
-                "image": f"us.gcr.io/sentryio/iptables:{version}",
+                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
                 "name": "init-port-forward",
                 "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
                 "env": env,
