@@ -1,3 +1,12 @@
+## 0.0.32
+
+### Various fixes & improvements
+
+- Updates deprecated upload artifact workflow. (#81) by @ellisonmarks
+- change: allow kube api calls timeout overrides in ext.py (#80) by @dmajere
+- feat(iptables): use latest tag from Artifact Registry (#79) by @oioki
+- chore: cleanup `vault` subcommand (#78) by @oioki
+
 ## 0.0.31
 
 ### Various fixes & improvements
