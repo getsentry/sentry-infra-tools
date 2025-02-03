@@ -219,9 +219,10 @@ def process_folder(folder: str) -> Dict[str, List[ApplyResult]]:
         for filename in filenames:
             full_path = os.path.join(dirpath, filename)
 
-            with open(full_path) as input_file, tempfile.NamedTemporaryFile(
-                mode="w", delete=False
-            ) as output_stream:
+            with (
+                open(full_path) as input_file,
+                tempfile.NamedTemporaryFile(mode="w", delete=False) as output_stream,
+            ):
                 file_apply_results[filename] = process_file(
                     full_path, input_file, output_stream
                 )

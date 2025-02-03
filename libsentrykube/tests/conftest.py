@@ -357,9 +357,9 @@ def duplicate_customer_dirs_in_service() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def regional_without_cluster_specific_override_structure() -> (
-    Generator[str, None, None]
-):
+def regional_without_cluster_specific_override_structure() -> Generator[
+    str, None, None
+]:
     """
     Creates the following folder structure:
     temp_dir/
@@ -400,9 +400,9 @@ def regional_without_cluster_specific_override_structure() -> (
 
 
 @pytest.fixture
-def hierarchy_without_cluster_specific_override_structure() -> (
-    Generator[str, None, None]
-):
+def hierarchy_without_cluster_specific_override_structure() -> Generator[
+    str, None, None
+]:
     """
     Creates the following folder structure:
     temp_dir/

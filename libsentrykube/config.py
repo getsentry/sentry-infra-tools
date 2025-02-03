@@ -72,9 +72,9 @@ class Config:
         with open(config_file_name) as file:
             configuration = load(file, Loader=SafeLoader)
 
-            assert (
-                "silo_regions" in configuration
-            ), "silo_regions entry not present in the config"
+            assert "silo_regions" in configuration, (
+                "silo_regions entry not present in the config"
+            )
             silo_regions = {
                 name: SiloRegion.from_conf(conf)
                 for name, conf in configuration["silo_regions"].items()
