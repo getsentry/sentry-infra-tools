@@ -99,7 +99,6 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
         return yaml.safe_load(template.render()) or {}
     except TemplateNotFound:
         return {}
-    return values
 
 
 def get_service_value_override_path(
@@ -141,9 +140,8 @@ def get_service_value_overrides(
                 get_service_value_override_path(service_name, region_name, external)
             ),
         ).get_template(f"{cluster_name}.yaml")
-        values = yaml.safe_load(template.render()) or {}
+        return yaml.safe_load(template.render()) or {}
 
-        return values
     except TemplateNotFound:
         return {}
 
@@ -163,9 +161,8 @@ def get_common_regional_override(
                 get_service_value_override_path(service_name, region_name, external)
             ),
         ).get_template("_values.yaml")
-        values = yaml.safe_load(template.render()) or {}
+        return yaml.safe_load(template.render()) or {}
 
-        return values
     except TemplateNotFound:
         return {}
 
