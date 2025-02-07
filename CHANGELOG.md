@@ -1,3 +1,10 @@
+## 0.0.33
+
+### Various fixes & improvements
+
+- Increase default kube api timeout (#83) by @mwarkentin
+- feat(render-services): Add an option to render services fast (#82) by @Dav1dde
+
 ## 0.0.32
 
 ### Various fixes & improvements
