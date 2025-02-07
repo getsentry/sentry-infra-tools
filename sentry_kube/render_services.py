@@ -11,8 +11,9 @@ from libsentrykube.context import init_cluster_context
 
 
 @click.command()
+@click.option("--fast", is_flag=True, help="Only render the specified services")
 @click.argument("filename", nargs=-1)
-def render_services(filename: Sequence[str]) -> None:
+def render_services(fast: bool, filename: Sequence[str]) -> None:
     """
     Identifies which services and clusters need to be re-rendered
     depending on the file names passed as arguments.
@@ -30,10 +31,11 @@ def render_services(filename: Sequence[str]) -> None:
             path = Path(file)
             resources_to_render.update(index.get_resources_for_path(path))
 
-    # We aggressively render the whole cluster for each modified service.
-    # This guarantees correctness in case of cross references between
-    # services.
-    resources_to_render = extract_clusters(resources_to_render)
+    if not fast:
+        # We aggressively render the whole cluster for each modified service.
+        # This guarantees correctness in case of cross references between
+        # services.
+        resources_to_render = extract_clusters(resources_to_render)
 
     os.environ["KUBERNETES_OFFLINE"] = "1"
     changes_made = False

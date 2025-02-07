@@ -5,10 +5,10 @@ import time
 from contextlib import closing
 from urllib.parse import urlparse
 
-from libsentrykube.ssh import build_ssh_command
-
 import click
 import yaml
+
+from libsentrykube.ssh import build_ssh_command
 
 KUBE_CONFIG_PATH = os.getenv(
     "KUBECONFIG_PATH",
@@ -116,8 +116,6 @@ def ensure_iap_tunnel(ctx: click.core.Context, quiet: bool = False) -> str:
                 project=None,
                 user=None,
                 ssh_key_file=None,
-                region=None,
-                zone=None,
                 # -N -- Do not execute remote command
                 # -T -- do not allocate tty
                 # -f -- go to background, before the command execution

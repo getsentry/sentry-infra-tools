@@ -43,21 +43,8 @@ CLUSTER_2 = {
 }
 
 CONFIGURATION = {
-    "sites": {
-        "test_site": {
-            "name": "us",
-            "region": "us-central1",
-            "zone": "b",
-            "network": "global/networks/sentry",
-            "subnetwork": "regions/us-central1/subnetworks/sentry-default",
-        }
-    },
     "silo_regions": {
         "customer1": {
-            "bastion": {
-                "spawner_endpoint": "FIXME",
-                "site": "test_site",
-            },
             "k8s": {
                 "root": "k8s",
                 "cluster_def_root": "clusters",
@@ -66,10 +53,6 @@ CONFIGURATION = {
             },
         },
         "customer2": {
-            "bastion": {
-                "spawner_endpoint": "FIXME",
-                "site": "test_site",
-            },
             "k8s": {
                 "root": "k8s",
                 "cluster_def_root": "clusters",

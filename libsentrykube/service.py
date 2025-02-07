@@ -96,9 +96,9 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
         template = Environment(
             loader=FileSystemLoader(service_path),
         ).get_template("_values.yaml")
-        values = yaml.safe_load(template.render())
+        return yaml.safe_load(template.render()) or {}
     except TemplateNotFound:
-        values = {}
+        return {}
     return values
 
 
@@ -141,7 +141,7 @@ def get_service_value_overrides(
                 get_service_value_override_path(service_name, region_name, external)
             ),
         ).get_template(f"{cluster_name}.yaml")
-        values = yaml.safe_load(template.render())
+        values = yaml.safe_load(template.render()) or {}
 
         return values
     except TemplateNotFound:
@@ -163,7 +163,7 @@ def get_common_regional_override(
                 get_service_value_override_path(service_name, region_name, external)
             ),
         ).get_template("_values.yaml")
-        values = yaml.safe_load(template.render())
+        values = yaml.safe_load(template.render()) or {}
 
         return values
     except TemplateNotFound:
@@ -213,7 +213,7 @@ def get_hierarchical_value_overrides(
             template = Environment(
                 loader=FileSystemLoader(service_regions_path / override_group.name),
             ).get_template("_values.yaml")
-            base_values = yaml.safe_load(template.render())
+            base_values = yaml.safe_load(template.render()) or {}
         except TemplateNotFound:
             base_values = {}
 
@@ -267,7 +267,7 @@ def get_tools_managed_service_value_overrides(
 
     if service_override_file.exists() and service_override_file.is_file():
         with open(service_override_file, "rb") as f:
-            return yaml.safe_load(f)
+            return yaml.safe_load(f) or {}
 
     return {}
 

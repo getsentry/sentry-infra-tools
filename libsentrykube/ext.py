@@ -23,6 +23,9 @@ from libsentrykube.utils import (
     workspace_root,
 )
 
+KUBE_API_TIMEOUT_DEFAULT: int = 3
+KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
+
 ENVOY_ENTRYPOINT = """
 cat << EOF > /etc/envoy/envoy.yaml
 
@@ -143,7 +146,11 @@ class DeploymentImage(SimpleExtension):
         client = kube_get_client()
         try:
             deployment = AppsV1Api(client).read_namespaced_deployment(
-                name, namespace, _request_timeout=2
+                name,
+                namespace,
+                _request_timeout=os.getenv(
+                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+                ),
             )
         except ApiException as e:
             if e.status == 404:
@@ -172,7 +179,11 @@ class StatefulSetImage(SimpleExtension):
         client = kube_get_client()
         try:
             stateful_set = AppsV1Api(client).read_namespaced_stateful_set(
-                name, namespace, _request_timeout=1
+                name,
+                namespace,
+                _request_timeout=os.getenv(
+                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+                ),
             )
         except ApiException as e:
             if e.status == 404:
@@ -551,7 +562,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
     To be used as a container within pod.spec.initContainers.
     """
 
-    def run(self, version: str = "alpine3.20"):
+    def run(self, version: str = "latest"):
         iptables_entrypoint = IPTABLES_ENTRYPOINT
         env = [
             {
@@ -562,7 +573,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
 
         return json.dumps(
             {
-                "image": f"us.gcr.io/sentryio/iptables:{version}",
+                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
                 "name": "init-port-forward",
                 "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
                 "env": env,

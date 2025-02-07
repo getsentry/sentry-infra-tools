@@ -1,3 +1,31 @@
+## 0.0.32
+
+### Various fixes & improvements
+
+- Updates deprecated upload artifact workflow. (#81) by @ellisonmarks
+- change: allow kube api calls timeout overrides in ext.py (#80) by @dmajere
+- feat(iptables): use latest tag from Artifact Registry (#79) by @oioki
+- chore: cleanup `vault` subcommand (#78) by @oioki
+
+## 0.0.31
+
+### Various fixes & improvements
+
+- fix(kube): Ignore empty override files (#76) by @Dav1dde
+
+## 0.0.30
+
+### Various fixes & improvements
+
+- chore: Remove unused EB test code (#75) by @rgibert
+- chore: Remove ephemeral bastion code (#67) by @rgibert
+
+## 0.0.29
+
+### Various fixes & improvements
+
+- Removes the region and zone parameters from the ssh command. (#74) by @ellisonmarks
+
 ## 0.0.28
 
 ### Various fixes & improvements
