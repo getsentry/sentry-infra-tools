@@ -18,6 +18,18 @@
 
 Follow the setup instructions in the [top-level README](../../README.md).
 
+## Releasing a new version
+
+To cut a new release, we use the `Release` Github Actions Workflow. This can be triggered manually using the [UI](https://github.com/getsentry/sentry-infra-tools/actions/workflows/release.yml)
+
+![image](https://github.com/user-attachments/assets/96fc8c19-4855-4258-8565-c959317d9723)
+
+Or with the [`gh`](https://cli.github.com) CLI:
+ 
+```
+gh workflow run Release --field version=0.0.33
+```
+
 ## Help
 
 All commands support `--help`, so please reference this.

@@ -23,7 +23,7 @@ from libsentrykube.utils import (
     workspace_root,
 )
 
-KUBE_API_TIMEOUT_DEFAULT: int = 1
+KUBE_API_TIMEOUT_DEFAULT: int = 3
 KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
 
 ENVOY_ENTRYPOINT = """
