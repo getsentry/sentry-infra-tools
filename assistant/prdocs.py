@@ -67,9 +67,9 @@ class InstructionsMessage:
 
         if config_path.exists() and config_path.is_file():
             conf = loads(config_path.read_text())
-            assert isinstance(
-                conf, MutableMapping
-            ), f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
+            assert isinstance(conf, MutableMapping), (
+                f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
+            )
             ref_path = conf.get("ref")
             if ref_path:
                 instructions_path = path / ref_path
@@ -131,9 +131,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args()
 
     root = args.root
-    assert (
-        root is not None and Path(root).exists() and Path(root).is_dir()
-    ), "The root path does not exists or is not a directory."
+    assert root is not None and Path(root).exists() and Path(root).is_dir(), (
+        "The root path does not exists or is not a directory."
+    )
     message = InstructionsMessage(Path(root))
 
     for path in sys.stdin:

@@ -153,7 +153,7 @@ EOF
 listen_addr = 0.0.0.0
 listen_port = 6432
 unix_socket_dir =
-auth_type = { "scram-sha-256" if use_auth else "trust" }
+auth_type = {"scram-sha-256" if use_auth else "trust"}
 auth_file = /etc/pgbouncer/userlist.txt
 admin_users = {admin_user}
 """

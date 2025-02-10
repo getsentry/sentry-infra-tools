@@ -657,7 +657,7 @@ def rollout_status_deployment(
     if status_replicas > updated_replicas:
         return (
             f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{status_replicas-updated_replicas} old replicas "
+            f"{status_replicas - updated_replicas} old replicas "
             "are pending termination...",
             False,
         )

@@ -209,7 +209,7 @@ def format_docs(docs: dict) -> str:
 
 
 def format_people(people: list) -> str:
-    return ", ".join([f'{p["name"]} ({p["email"]})' for p in people])
+    return ", ".join([f"{p['name']} ({p['email']})" for p in people])
 
 
 def format_slack_channels(slack_channels: list) -> str:
@@ -223,7 +223,7 @@ def format_slos(slos: list) -> str:
 def format_teams(teams: list) -> str:
     return ", ".join(
         [
-            f'{t["display_name"]} ({t["id"]}) tags={{{",".join(t["tags"])}}}'
+            f"{t['display_name']} ({t['id']}) tags={{{','.join(t['tags'])}}}"
             for t in teams
         ]
     )
