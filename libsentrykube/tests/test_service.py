@@ -44,6 +44,7 @@ expected_service_value_overrides = {
                     "subkey2_4": [
                         "value2_4_1_replaced"  # From the managed file
                     ],
+                    "subkey2_5": ["some_jinja"],  # From jinja variable
                 }
             },
             "service2": {},
