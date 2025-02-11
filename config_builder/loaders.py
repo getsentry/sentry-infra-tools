@@ -35,9 +35,9 @@ class YamlFileLoader(ContentLoader):
     """
 
     def __init__(self, directory: Path) -> None:
-        assert (
-            directory.exists() and directory.is_dir()
-        ), f"The provided path {directory} does not exists or it is not a directory"
+        assert directory.exists() and directory.is_dir(), (
+            f"The provided path {directory} does not exists or it is not a directory"
+        )
         self.__directory = directory
 
     def load_dict(self, file_name: str) -> Mapping[str, Any] | None:

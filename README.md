@@ -25,7 +25,7 @@ To cut a new release, we use the `Release` Github Actions Workflow. This can be 
 ![image](https://github.com/user-attachments/assets/96fc8c19-4855-4258-8565-c959317d9723)
 
 Or with the [`gh`](https://cli.github.com) CLI:
- 
+
 ```
 gh workflow run Release --field version=0.0.33
 ```

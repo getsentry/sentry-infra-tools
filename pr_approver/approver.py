@@ -132,9 +132,9 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
     config_path = args.config
-    assert (
-        Path(config_path).exists() and Path(config_path).is_file()
-    ), f"Invalid path to a config file {config_path}. File does not exist"
+    assert Path(config_path).exists() and Path(config_path).is_file(), (
+        f"Invalid path to a config file {config_path}. File does not exist"
+    )
 
     config: MutableSequence[Tuple[str, diff_approver]] = []
     with open(config_path, "r") as f:
