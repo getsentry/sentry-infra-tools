@@ -7,9 +7,7 @@ from typing import MutableMapping, MutableSet, Sequence
 
 COMMENT_TEMPLATE = """# Ops Assistant
 
-The ops repo is a large monorepo and there are multiple processes
-to deploy its content depending on what is changed.
-This message is here to provide context.
+The ops repo is a large monorepo and there are multiple processes to deploy its content depending on what is changed.
 
 {content}
 """
@@ -17,11 +15,13 @@ This message is here to provide context.
 INSTRUCTION_TEMPLATE = """
 {content}
 
-Files changed:
+<details>
+<summary>Files changed</summary>
+
 ```
 {files}
 ```
----
+</details>
 """
 
 INSTRUCTIONS_FILE = "deploy_instructions.md"
