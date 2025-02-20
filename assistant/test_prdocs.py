@@ -57,18 +57,18 @@ def test_full_message(valid_structure) -> None:
 
     two_files_comment = f"""# Ops Assistant
 
-The ops repo is a large monorepo and there are multiple processes
-to deploy its content depending on what is changed.
-This message is here to provide context.
+The ops repo is a large monorepo and there are multiple processes to deploy its content depending on what is changed.
 
 
 Kafka content
 
-Files changed:
+<details>
+<summary>Files changed</summary>
+
 ```
 {Path(valid_structure).resolve() / "shared_config/kafka/generated_files/topic1.yaml"}{Path(valid_structure).resolve() / "shared_config/kafka/generated_files/topic2.yaml"}
 ```
----
+</details>
 
 """
     assert message.produce_message() == two_files_comment
@@ -79,18 +79,18 @@ Files changed:
 
     three_files_comment = f"""# Ops Assistant
 
-The ops repo is a large monorepo and there are multiple processes
-to deploy its content depending on what is changed.
-This message is here to provide context.
+The ops repo is a large monorepo and there are multiple processes to deploy its content depending on what is changed.
 
 
 Kafka content
 
-Files changed:
+<details>
+<summary>Files changed</summary>
+
 ```
 {Path(valid_structure).resolve() / "shared_config/kafka/generated_files/topic1.yaml"}{Path(valid_structure).resolve() / "shared_config/kafka/generated_files/topic2.yaml"}{Path(valid_structure).resolve() / "shared_config/kafka/other_files/topic3.yaml"}
 ```
----
+</details>
 
 """
     assert message.produce_message() == three_files_comment
