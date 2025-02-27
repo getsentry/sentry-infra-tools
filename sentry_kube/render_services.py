@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Sequence
@@ -9,11 +10,15 @@ from libsentrykube.reversemap import extract_clusters
 from libsentrykube.service import get_service_names
 from libsentrykube.context import init_cluster_context
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 
 @click.command()
 @click.option("--fast", is_flag=True, help="Only render the specified services")
+@click.option("--debug", is_flag=True, help="Print debug information")
 @click.argument("filename", nargs=-1)
-def render_services(fast: bool, filename: Sequence[str]) -> None:
+def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
     """
     Identifies which services and clusters need to be re-rendered
     depending on the file names passed as arguments.
@@ -23,6 +28,9 @@ def render_services(fast: bool, filename: Sequence[str]) -> None:
     service and relevant clusters. After this, it re-renders the
     service in all the relevant clusters.
     """
+    if debug:
+        logger.setLevel(logging.DEBUG)
+
     index = build_index()
     resources_to_render = set()
 
@@ -40,14 +48,22 @@ def render_services(fast: bool, filename: Sequence[str]) -> None:
     os.environ["KUBERNETES_OFFLINE"] = "1"
     changes_made = False
     for resource in resources_to_render:
+        logger.debug(
+            f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
+        )
         init_cluster_context(resource.customer_name, resource.cluster_name)
 
         if resource.service_name is not None:
+            logger.debug(f"Materializing service: {resource.service_name}")
             services_to_materialize = [resource.service_name]
         else:
+            logger.debug("Getting all service names")
             services_to_materialize = get_service_names()
 
+        logger.debug(f"Services to materialize: {services_to_materialize}")
+
         for s in services_to_materialize:
+            logger.debug(f"Materializing service: {s}")
             changed = materialize(
                 customer_name=resource.customer_name,
                 service_name=s,
