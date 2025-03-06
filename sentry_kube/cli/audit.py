@@ -43,7 +43,9 @@ def audit(ctx, services):
     listing_funcs = {
         "Deployment": apis["AppsV1"].list_deployment_for_all_namespaces,
         "PersistentVolume": apis["CoreV1"].list_persistent_volume,
-        "PersistentVolumeClaim": apis["CoreV1"].list_persistent_volume_claim_for_all_namespaces,
+        "PersistentVolumeClaim": apis[
+            "CoreV1"
+        ].list_persistent_volume_claim_for_all_namespaces,
         "CronJob": apis["BatchV1"].list_cron_job_for_all_namespaces,
         "Service": apis["CoreV1"].list_service_for_all_namespaces,
         "ConfigMap": apis["CoreV1"].list_config_map_for_all_namespaces,
@@ -70,7 +72,11 @@ def audit(ctx, services):
             plural="verticalpodautoscalers",
         ),
     }
-    crds = [name for name, config in listing_funcs.items() if isinstance(config, functools.partial)]
+    crds = [
+        name
+        for name, config in listing_funcs.items()
+        if isinstance(config, functools.partial)
+    ]
     # This might miss some kinds if there are no more such objects locally.
     # May need to check for a list of kinds unconditionally.
     return_code = 0
@@ -114,11 +120,15 @@ def audit(ctx, services):
             else:
                 cont = items.metadata._continue
             if cont:
-                items = listing_funcs[kind](label_selector=selector, limit=100, _continue=cont)
+                items = listing_funcs[kind](
+                    label_selector=selector, limit=100, _continue=cont
+                )
             else:
                 break
         if not ctx.obj.quiet_mode:
-            click.echo(f"Objects of type {kind} present serverside which are not present locally:")
+            click.echo(
+                f"Objects of type {kind} present serverside which are not present locally:"
+            )
         diff = remote_names - local_names
         if not diff:
             if not ctx.obj.quiet_mode:
@@ -129,7 +139,9 @@ def audit(ctx, services):
                 for name in sorted(diff):
                     click.secho(f"\t({name[0]}) {name[1]}", fg="red", bold=True)
         if not ctx.obj.quiet_mode:
-            click.echo(f"Objects of type {kind} present locally which are not present serverside:")
+            click.echo(
+                f"Objects of type {kind} present locally which are not present serverside:"
+            )
         diff = local_names - remote_names
         if not diff:
             if not ctx.obj.quiet_mode:
