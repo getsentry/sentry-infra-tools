@@ -1,3 +1,15 @@
+## 0.0.34
+
+### Various fixes & improvements
+
+- Fix audit script listing CRDs. (#92) by @ellisonmarks
+- [pre-commit.ci] pre-commit autoupdate (#89) by @pre-commit-ci
+- chore(render_services): Add debug flag for investigating issues (#90) by @rgibert
+- clean up ops assistant message (#88) by @mwarkentin
+- change: Make docker container buildable (#87) by @dmajere
+- [pre-commit.ci] pre-commit autoupdate (#85) by @pre-commit-ci
+- Add release instructions (#84) by @mwarkentin
+
 ## 0.0.33
 
 ### Various fixes & improvements
