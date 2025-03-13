@@ -810,3 +810,23 @@ class MachineType(SimpleExtension):
                 }
                 return self._type_cache[name]
         return {}
+
+
+class GetVar(SimpleExtension):
+    """
+    This only exists because jinja2 doesn't support macros that return values.
+
+    Allows to search for variable value in a list of dictionaries to implement
+    common patterns of get from override dict or default one.
+    Examples:
+
+    params.var|default(defaults.var) =>  get_var(var_name, params, defaults)
+    params.get(var, component.get(var, service.get("some global default"))) => get_var(var, params, component, service, default="some global default")
+    """
+
+    @cache
+    def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
+        for d in dicts:
+            if key in d:
+                return d[key]
+        return default
