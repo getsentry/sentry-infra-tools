@@ -8,7 +8,7 @@ __all__ = ("get_customers", "get_live_regions", "get_all_regions")
 @click.command()
 def get_live_regions():
     """
-    Gets the list of all avaliable customers.
+    Gets the list of all live regions.
     """
     click.echo(" ".join(Config().get_live_regions()))
 
@@ -16,7 +16,7 @@ def get_live_regions():
 @click.command()
 def get_all_regions():
     """
-    Gets the list of all avaliable customers.
+    Gets the list of all avaliable region.
     """
     click.echo(" ".join(Config().get_all_regions()))
 
