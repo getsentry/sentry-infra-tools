@@ -121,7 +121,7 @@ Get kubed.
         ):
             return
 
-        newline_customers = "\n".join(config.get_customers())
+        newline_customers = "\n".join(config.get_all_regions())
         if not customer:
             die(
                 f"""Region was not specified, please use `-C` to specify a region.

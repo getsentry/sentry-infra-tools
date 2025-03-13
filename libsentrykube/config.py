@@ -52,6 +52,7 @@ class SiloRegion:
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
+    live: bool = True
 
     @classmethod
     def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
@@ -60,6 +61,7 @@ class SiloRegion:
             k8s_config=K8sConfig.from_conf(k8s_config),
             sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
             service_monitors=silo_regions_conf.get("service_monitors", {}),
+            live=silo_regions_conf.get("live", True),
         )
 
 
@@ -83,8 +85,19 @@ class Config:
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
 
     @cache
-    def get_customers(self) -> Sequence[str]:
+    def get_live_regions(self) -> Sequence[str]:
         """
-        Returns list of customers
+        Returns list of regions that are live
+        """
+        return [
+            region
+            for region, silo_region in self.silo_regions.items()
+            if silo_region.live
+        ]
+
+    @cache
+    def get_all_regions(self) -> Sequence[str]:
+        """
+        Returns list of all regions
         """
         return list(self.silo_regions.keys())

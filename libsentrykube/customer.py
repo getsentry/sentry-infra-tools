@@ -15,16 +15,16 @@ ALLOYDB_DISCOVERY_SERVICEURL = (
 
 @cache
 def load_customer_data(
-    config: Config, customer_name: str, cluster_name: str
+    config: Config, region_name: str, cluster_name: str
 ) -> Dict[str, Any]:
     try:
-        customer_config = config.silo_regions[customer_name]
+        region_config = config.silo_regions[region_name]
     except KeyError:
         die(
-            f"Customer '{customer_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_customers()}"
+            f"Region '{region_name}' not found. Did you mean one of: \n\n"
+            f"{config.get_all_regions()}"
         )
-    k8s_config = customer_config.k8s_config
+    k8s_config = region_config.k8s_config
 
     # If the customer has only one cluster, just use the value from config
     cluster_name = k8s_config.cluster_name or cluster_name

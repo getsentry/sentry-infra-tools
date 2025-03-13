@@ -18,6 +18,17 @@ def test_config_load() -> None:
             sentry_region="us",
             service_monitors=MappingProxyType({}),
         ),
+        "notlive": SiloRegion(
+            k8s_config=K8sConfig(
+                root="k8s_root",
+                cluster_def_root="clusters/notlive",
+                cluster_name=None,
+                materialized_manifests="rendered_services",
+            ),
+            sentry_region="us",
+            service_monitors=MappingProxyType({}),
+            live=False,
+        ),
         "my_customer": SiloRegion(
             k8s_config=K8sConfig(
                 root="k8s_root",
