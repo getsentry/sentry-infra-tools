@@ -1,3 +1,9 @@
+## 0.0.35
+
+### Various fixes & improvements
+
+- change: Add get-var macro (#95) by @dmajere
+
 ## 0.0.34
 
 ### Various fixes & improvements
