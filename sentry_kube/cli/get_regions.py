@@ -16,7 +16,7 @@ def get_regions(service: str | None = None) -> None:
     """
     regions = Config().silo_regions
     # Default to all regions
-    ret = list(regions.keys())
+    ret = set(regions.keys())
 
     if service:
         ret = set()
