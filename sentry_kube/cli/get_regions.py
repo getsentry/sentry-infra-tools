@@ -19,7 +19,7 @@ def get_regions(service: str | None = None) -> None:
     ret = list(regions.keys())
 
     if service:
-        ret = []
+        ret = set()
         for region in regions:
             for cluster in list_clusters_for_customer(regions[region].k8s_config):
                 if service in cluster.service_names:
