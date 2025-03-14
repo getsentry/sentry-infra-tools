@@ -22,7 +22,7 @@ def load_customer_data(
     except KeyError:
         die(
             f"Customer '{customer_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_customers()}"
+            f"{config.get_regions()}"
         )
     k8s_config = customer_config.k8s_config
 

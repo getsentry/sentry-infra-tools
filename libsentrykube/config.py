@@ -83,8 +83,8 @@ class Config:
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
 
     @cache
-    def get_customers(self) -> Sequence[str]:
+    def get_regions(self) -> Sequence[str]:
         """
-        Returns list of customers
+        Returns list of regions
         """
         return list(self.silo_regions.keys())
