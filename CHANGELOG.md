@@ -1,3 +1,10 @@
+## 0.0.36
+
+### Various fixes & improvements
+
+- ref: use set instead of [] for get_regions (#98) by @rgibert
+- feat: Support get-regions filtering by service (#97) by @rgibert
+
 ## 0.0.35
 
 ### Various fixes & improvements
