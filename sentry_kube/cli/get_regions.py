@@ -23,7 +23,7 @@ def get_regions(service: str | None = None) -> None:
         for region in regions:
             for cluster in list_clusters_for_customer(regions[region].k8s_config):
                 if service in cluster.service_names:
-                    ret.append(region)
+                    ret.add(region)
                     # Avoid duplicating when we have services in multiple clusters in a region
                     break
 
