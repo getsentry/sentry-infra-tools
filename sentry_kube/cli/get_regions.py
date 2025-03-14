@@ -9,7 +9,7 @@ __all__ = ("get_regions",)
 @click.option(
     "--service", "-s", type=str, default=None, help="Get regions for a specific service"
 )
-def get_regions(service: str | None = None):
+def get_regions(service: str | None = None) -> None:
     """
     Gets the list of all avaliable regions, if service is provided it will
     filter regions with just that service enabled.
