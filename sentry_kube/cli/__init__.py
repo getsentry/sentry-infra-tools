@@ -117,11 +117,11 @@ Get kubed.
         if (
             ctx.invoked_subcommand == "datadog-log-terragrunt"
             or ctx.invoked_subcommand == "datadog-log"
-            or ctx.invoked_subcommand == "get-customers"
+            or ctx.invoked_subcommand == "get-regions"
         ):
             return
 
-        newline_customers = "\n".join(config.get_customers())
+        newline_customers = "\n".join(config.get_regions())
         if not customer:
             die(
                 f"""Region was not specified, please use `-C` to specify a region.
