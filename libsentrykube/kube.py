@@ -1,8 +1,10 @@
 import base64
 import difflib
 import json
+import yaml
 import operator
 from dataclasses import dataclass
+import os
 from pprint import pformat
 from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
 
@@ -14,7 +16,7 @@ from yaml import dump_all, safe_dump, safe_load, safe_load_all
 
 from libsentrykube.loader import load_macros
 from libsentrykube.service import (
-    build_materialized_path,
+    build_materialized_directory,
     get_service_data,
     get_service_path,
     get_service_template_files,
@@ -289,15 +291,26 @@ def materialize(customer_name: str, service_name: str, cluster_name: str) -> boo
             cluster_name,
         )
     )
-    output_path = build_materialized_path(customer_name, cluster_name, service_name)
+    output_path = build_materialized_directory(
+        customer_name, cluster_name, service_name
+    )
     try:
-        existing_content = open(output_path).read()
+        existing_content = ""
+        for file_to_read in os.listdir(output_path):
+            if file_to_read.endswith(".yaml"):
+                existing_content += open(output_path / file_to_read).read()
     except Exception:
         existing_content = None
 
     if existing_content != rendered_service:
-        with open(output_path, "w") as f:
-            f.write(rendered_service)
+        yamldoc = yaml.safe_load_all(rendered_service)
+        for doc in yamldoc:
+            with open(
+                output_path
+                / f"{doc['kind'].lower()}-{doc['metadata']['name'].lower()}.yaml",
+                "w",
+            ) as file_to_write:
+                file_to_write.write(yaml.dump(doc))
         return True
     else:
         return False
