@@ -341,15 +341,3 @@ def build_materialized_directory(
     path = kube_config_dir / config.materialized_manifests / cluster_name / service_name
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def build_materialized_path(
-    customer_name: str, cluster_name: str, service_name: str
-) -> Path:
-    """
-    Returns the file name where to store a materialized service
-    """
-    return (
-        build_materialized_directory(customer_name, cluster_name, service_name)
-        / "deployment.yaml"
-    )
