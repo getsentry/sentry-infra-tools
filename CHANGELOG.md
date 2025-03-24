@@ -1,3 +1,9 @@
+## 0.0.37
+
+### Various fixes & improvements
+
+- fix: Support .yaml.j2 extensions for templates (#102) by @rgibert
+
 ## 0.0.36
 
 ### Various fixes & improvements
