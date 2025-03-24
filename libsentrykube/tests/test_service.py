@@ -1,5 +1,7 @@
 from libsentrykube.context import init_cluster_context
 import os
+from pathlib import Path
+from unittest.mock import patch, Mock
 
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
@@ -9,6 +11,7 @@ from libsentrykube.service import (
     get_tools_managed_service_value_overrides,
     get_service_value_override_path,
     get_service_path,
+    get_service_template_files,
     write_managed_values_overrides,
 )
 from libsentrykube.utils import set_workspace_root_start
@@ -231,3 +234,30 @@ def test_regional_cluster_value_overrides(
     )
 
     assert returned == expected_regional_cluster_values
+
+
+def test_get_service_template_files():
+    # Create mock files
+    mock_files = [
+        Path("template1.yaml"),
+        Path("template2.yml"),
+        Path("template3.yaml.j2"),
+        Path("template4.yml.j2"),
+        Path("_values.yaml"),  # should be ignored (starts with _)
+        Path("other.txt"),  # should be ignored (wrong extension)
+    ]
+
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_service_dir.iterdir.return_value = mock_files
+
+    with patch("libsentrykube.service.get_service_path", return_value=mock_service_dir):
+        # Convert generator to list for testing
+        templates = list(get_service_template_files("test-service"))
+
+        # Verify we got the expected templates
+        assert len(templates) == 4
+        assert Path("template1.yaml") in templates
+        assert Path("template2.yml") in templates
+        assert Path("template3.yaml.j2") in templates
+        assert Path("template4.yml.j2") in templates
