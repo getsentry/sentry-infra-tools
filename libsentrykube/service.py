@@ -322,7 +322,7 @@ def get_service_template_files(service_name):
 
     for template in service_dir.iterdir():
         if not template.name.startswith("_") and template.name.endswith(
-            (".yaml", ".yml")
+            (".yaml", ".yml", ".yaml.j2", ".yml.j2")
         ):
             yield template
 
