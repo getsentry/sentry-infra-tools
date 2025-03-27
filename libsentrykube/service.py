@@ -6,10 +6,10 @@ import yaml
 
 from collections import OrderedDict
 from libsentrykube.config import Config
-from libsentrykube.customer import load_customer_data
+from libsentrykube.customer import load_customer_data, load_customer_helm_data
 from libsentrykube.utils import workspace_root, deep_merge_dict
 
-_services = OrderedDict()
+_services: dict[str | None, dict[str, Any]] = {None: OrderedDict()}
 
 
 class CustomerTooOftenDefinedException(Exception):
@@ -41,24 +41,32 @@ def assert_customer_is_defined_at_most_once(
         )
 
 
-def set_service_paths(service_paths: List[str]):
-    for service_path in service_paths:
-        # Globbing is supported
-        paths = list(workspace_root().glob(service_path))
-        if not paths:
-            raise Exception(f"Invalid service path: {service_path}")
-        for path in paths:
-            if not path.is_dir():
-                continue
+def set_service_paths(service_paths: List[str], **namespaced_service_paths: List[str]):
+    targets = [
+        (None, service_paths),
+        *[(key, val) for key, val in namespaced_service_paths.items()],
+    ]
+    for collector_key, input_paths in targets:
+        collector = _services[collector_key] = _services.get(
+            collector_key, OrderedDict()
+        )
+        for service_path in input_paths:
+            # Globbing is supported
+            paths = list(workspace_root().glob(service_path))
+            if not paths:
+                raise Exception(f"Invalid service path: {service_path}")
+            for path in paths:
+                if not path.is_dir():
+                    continue
 
-            name = path.name
-            if name in _services:
-                raise Exception(f"Found duplicate service: {path}")
+                name = path.name
+                if name in collector:
+                    raise Exception(f"Found duplicate service: {path}")
 
-            if name == "customers":  # well-known; not an actual service
-                continue
+                if name == "customers":  # well-known; not an actual service
+                    continue
 
-            _services[name] = path
+                collector[name] = path
 
 
 def clear_service_paths() -> None:
@@ -67,21 +75,26 @@ def clear_service_paths() -> None:
     to reset the repo while we still have global states around in this
     library.
     """
-    _services.clear()
+    for key in _services.keys():
+        _services[key].clear()
 
 
-def get_service_path(service_name) -> Path:
-    if service_name not in _services:
+def get_service_path(service_name, namespace: str | None = None) -> Path:
+    if namespace not in _services:
+        click.echo(f"Service namespace named {namespace} was not found.", err=True)
+    if service_name not in _services[namespace]:
         click.echo(f"Service named {service_name} was not found.", err=True)
         raise click.Abort()
-    return _services[service_name]
+    return _services[namespace][service_name]
 
 
-def get_service_names() -> List[str]:
-    return [s for s in _services.keys()]
+def get_service_names(namespace: str | None = None) -> List[str]:
+    return [s for s in _services.get(namespace, {}).keys()]
 
 
-def get_service_values(service_name: str, external: bool = False) -> dict:
+def get_service_values(
+    service_name: str, external: bool = False, namespace: str | None = None
+) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
 
@@ -90,7 +103,7 @@ def get_service_values(service_name: str, external: bool = False) -> dict:
     if external:
         service_path = workspace_root() / service_name
     else:
-        service_path = get_service_path(service_name)
+        service_path = get_service_path(service_name, namespace=namespace)
     try:
         with open(service_path / "_values.yaml", "rb") as f:
             return yaml.safe_load(f) or {}
@@ -102,6 +115,7 @@ def get_service_value_override_path(
     service_name: str,
     region_name: str,
     external: bool = False,
+    namespace: str | None = None,
 ) -> Path:
     """
     For the given service, return the path to the override files.
@@ -111,7 +125,7 @@ def get_service_value_override_path(
     if external:
         service_regions_path = workspace_root() / service_name
     else:
-        service_regions_path = get_service_path(service_name)
+        service_regions_path = get_service_path(service_name, namespace=namespace)
 
     service_regions_path = service_regions_path / "region_overrides"
 
@@ -126,6 +140,7 @@ def get_service_value_overrides(
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
+    namespace: str | None = None,
 ) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
@@ -133,7 +148,9 @@ def get_service_value_overrides(
     """
     try:
         service_override_file = (
-            get_service_value_override_path(service_name, region_name, external)
+            get_service_value_override_path(
+                service_name, region_name, external, namespace=namespace
+            )
             / f"{cluster_name}.yaml"
         )
 
@@ -146,7 +163,10 @@ def get_service_value_overrides(
 
 
 def get_common_regional_override(
-    service_name: str, region_name: str, external: bool = False
+    service_name: str,
+    region_name: str,
+    external: bool = False,
+    namespace: str | None = None,
 ) -> dict:
     """
     Helper function to load common regional configuration values.
@@ -156,7 +176,9 @@ def get_common_regional_override(
     """
     try:
         common_service_override_file = (
-            get_service_value_override_path(service_name, region_name, external)
+            get_service_value_override_path(
+                service_name, region_name, external, namespace=namespace
+            )
             / "_values.yaml"
         )
 
@@ -171,6 +193,7 @@ def get_hierarchical_value_overrides(
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
+    namespace: str | None = None,
 ) -> dict:
     """
     Enables hierarchical configuration overrides with shared base values.
@@ -194,7 +217,7 @@ def get_hierarchical_value_overrides(
     if external:
         service_regions_path = workspace_root() / service_name
     else:
-        service_regions_path = get_service_path(service_name)
+        service_regions_path = get_service_path(service_name, namespace=namespace)
 
     service_regions_path = service_regions_path / "region_overrides"
 
@@ -220,11 +243,11 @@ def get_hierarchical_value_overrides(
 
         region_path = f"{override_group.name}/{region_name}"
         region_values = get_service_value_overrides(
-            service_name, region_path, cluster_name, external
+            service_name, region_path, cluster_name, external, namespace=namespace
         )
 
         common_service_values = get_common_regional_override(
-            service_name, region_path, external
+            service_name, region_path, external, namespace=namespace
         )
 
         # There must be either a cluster specific override file a _values.yaml in the region dir
@@ -244,6 +267,7 @@ def get_tools_managed_service_value_overrides(
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
+    namespace: str | None = None,
 ) -> dict:
     """
     We have two override files. Conceptually there is no difference
@@ -259,7 +283,9 @@ def get_tools_managed_service_value_overrides(
     The managed file is applied last.
     """
     service_override_file = (
-        get_service_value_override_path(service_name, region_name, external)
+        get_service_value_override_path(
+            service_name, region_name, external, namespace=namespace
+        )
         / f"{cluster_name}.managed.yaml"
     )
 
@@ -276,6 +302,7 @@ def write_managed_values_overrides(
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
+    namespace: str | None = None,
 ) -> None:
     """
     Some tools like `quickpatch` allow us to write the the managed file after
@@ -283,7 +310,9 @@ def write_managed_values_overrides(
     This is the functions that updates the file.
     """
     service_override_file = (
-        get_service_value_override_path(service_name, region_name, external)
+        get_service_value_override_path(
+            service_name, region_name, external, namespace=namespace
+        )
         / f"{cluster_name}.managed.yaml"
     )
 
@@ -314,8 +343,22 @@ def get_service_data(
     return service_data, render_data
 
 
-def get_service_template_files(service_name):
-    service_dir = get_service_path(service_name)
+def get_helm_service_data(
+    customer_name: str, service_name: str, cluster_name: str = "default"
+):
+    # Customer data is used as the render_data, or the initial data.
+
+    # Then inside render_templates, get_service_values
+    # puts values into render_data["values"], then the service_data
+    # can override those.
+    customer_data = load_customer_helm_data(Config(), customer_name, cluster_name)
+    service_data = customer_data.get(service_name, {})
+    render_data = {"customer": customer_data}
+    return service_data, render_data
+
+
+def get_service_template_files(service_name, namespace: str | None = None):
+    service_dir = get_service_path(service_name, namespace=namespace)
     if not service_dir.is_dir():
         click.echo(f"Service directory {service_dir} not found.", err=True)
         raise click.Abort()
@@ -343,6 +386,24 @@ def build_materialized_directory(
     return path
 
 
+def build_helm_materialized_directory(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
+    """
+    Returns the directory where a service should be rendered when we
+    materialize the rendered template.
+    """
+    config = Config().silo_regions[customer_name].k8s_config
+
+    kube_config_dir = workspace_root() / config.root
+
+    path = (
+        kube_config_dir / config.materialized_helm_values / cluster_name / service_name
+    )
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def build_materialized_path(
     customer_name: str, cluster_name: str, service_name: str
 ) -> Path:
@@ -352,4 +413,16 @@ def build_materialized_path(
     return (
         build_materialized_directory(customer_name, cluster_name, service_name)
         / "deployment.yaml"
+    )
+
+
+def build_helm_materialized_path(
+    customer_name: str, cluster_name: str, service_name: str
+) -> Path:
+    """
+    Returns the file name where to store a materialized service
+    """
+    return (
+        build_helm_materialized_directory(customer_name, cluster_name, service_name)
+        / "values.yaml"
     )

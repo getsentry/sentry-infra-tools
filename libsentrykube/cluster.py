@@ -22,10 +22,17 @@ class Cluster:
     name: str
     services: List[str]
     services_data: dict[str, Any]
+    helm_services: List[str]
+    # NOTE: currently mirror `services_data`, ideally we can customise it
+    helm_services_data: dict[str, Any]
 
     @property
     def service_names(self) -> List[str]:
         return [Path(p).name for p in self.services]
+
+    @property
+    def helm_service_names(self) -> List[str]:
+        return [Path(p).name for p in self.helm_services]
 
 
 def list_clusters(config: Config) -> Sequence[Cluster]:
@@ -76,5 +83,6 @@ def load_cluster_configuration(config: K8sConfig, cluster_name: str) -> Cluster:
         die(f"Cluster '{cluster_name}' not found.")
 
     services = data.pop("services")
+    helm_services = data.pop("helm_services", [])
 
-    return Cluster(cluster_name, services, data)
+    return Cluster(cluster_name, services, data, helm_services, data)

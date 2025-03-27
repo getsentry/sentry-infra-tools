@@ -33,6 +33,26 @@ def load_customer_data(
     return cluster.services_data
 
 
+@cache
+def load_customer_helm_data(
+    config: Config, customer_name: str, cluster_name: str
+) -> Dict[str, Any]:
+    try:
+        customer_config = config.silo_regions[customer_name]
+    except KeyError:
+        die(
+            f"Customer '{customer_name}' not found. Did you mean one of: \n\n"
+            f"{config.get_regions()}"
+        )
+    k8s_config = customer_config.k8s_config
+
+    # If the customer has only one cluster, just use the value from config
+    cluster_name = k8s_config.cluster_name or cluster_name
+
+    cluster = load_cluster_configuration(k8s_config, cluster_name)
+    return cluster.helm_services_data
+
+
 def get_compute_instance_ips(project: str) -> List[str]:
     compute = googleapiclient.discovery.build("compute", "v1")
     request = compute.instances().aggregatedList(project=project)
