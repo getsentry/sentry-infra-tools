@@ -5,6 +5,7 @@ from unittest.mock import patch, Mock
 
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
+    get_service_ctx_overrides,
     get_service_data,
     get_service_values,
     get_service_value_overrides,
@@ -72,12 +73,16 @@ expected_hierarchical_and_regional_cluster_values = {
     "config": {"foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}
 }
 
+expected_hierarchical_and_regional_cluster_helmcfg = {"releases": ["production"]}
+
 expected_regional_cluster_values = {
     "config": {
         "foo": "not-foo",
         "settings": {"abc": 20},
     }
 }
+
+expected_regional_cluster_helmcfg = {"releases": ["production", "canary"]}
 
 
 def test_get_service_values_not_external():
@@ -218,6 +223,33 @@ def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) 
     assert returned == expected_hierarchical_and_regional_cluster_values
 
 
+def test_get_helm_hierarchical_value_overrides(
+    hierarchical_override_structure: str,
+) -> None:
+    set_workspace_root_start(hierarchical_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned_values = get_hierarchical_value_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+    )
+    returned_helmcfg = get_hierarchical_value_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        src_file="_helm.yaml",
+    )
+
+    assert returned_values == expected_hierarchical_and_regional_cluster_values
+    assert returned_helmcfg == expected_hierarchical_and_regional_cluster_helmcfg
+
+
 def test_regional_cluster_value_overrides(
     regional_cluster_specific_override_structure: str,
 ) -> None:
@@ -234,6 +266,35 @@ def test_regional_cluster_value_overrides(
     )
 
     assert returned == expected_regional_cluster_values
+
+
+def test_helm_regional_cluster_value_overrides(
+    regional_cluster_specific_override_structure: str,
+) -> None:
+    set_workspace_root_start(regional_cluster_specific_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned_values = get_service_ctx_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        cluster_as_folder=True,
+    )
+    returned_helmcfg = get_service_ctx_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        src_file="_helm.yaml",
+        cluster_as_folder=True,
+    )
+
+    assert returned_values == expected_regional_cluster_values
+    assert returned_helmcfg == expected_regional_cluster_helmcfg
 
 
 def test_get_service_template_files():

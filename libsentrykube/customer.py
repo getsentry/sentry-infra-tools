@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 
 from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config
+from libsentrykube.helm import HelmData
 from libsentrykube.utils import die
 
 ALLOYDB_DISCOVERY_SERVICEURL = (
@@ -36,7 +37,7 @@ def load_customer_data(
 @cache
 def load_customer_helm_data(
     config: Config, customer_name: str, cluster_name: str
-) -> Dict[str, Any]:
+) -> HelmData:
     try:
         customer_config = config.silo_regions[customer_name]
     except KeyError:
@@ -50,7 +51,7 @@ def load_customer_helm_data(
     cluster_name = k8s_config.cluster_name or cluster_name
 
     cluster = load_cluster_configuration(k8s_config, cluster_name)
-    return cluster.helm_services_data
+    return cluster.helm_services
 
 
 def get_compute_instance_ips(project: str) -> List[str]:

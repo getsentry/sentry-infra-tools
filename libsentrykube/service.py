@@ -92,11 +92,14 @@ def get_service_names(namespace: str | None = None) -> List[str]:
     return [s for s in _services.get(namespace, {}).keys()]
 
 
-def get_service_values(
-    service_name: str, external: bool = False, namespace: str | None = None
+def get_service_ctx(
+    service_name: str,
+    external: bool = False,
+    namespace: str | None = None,
+    src_file: str = "_values.yaml",
 ) -> dict:
     """
-    For the given service, return the values specified in the corresponding _values.yaml.
+    For the given service, return the values specified in the corresponding {src_file}.
 
     If "external=True" is specified, treat the service name as the full service path.
     """
@@ -105,10 +108,14 @@ def get_service_values(
     else:
         service_path = get_service_path(service_name, namespace=namespace)
     try:
-        with open(service_path / "_values.yaml", "rb") as f:
+        with open(service_path / src_file, "rb") as f:
             return yaml.safe_load(f) or {}
     except FileNotFoundError:
         return {}
+
+
+def get_service_values(service_name: str, external: bool = False) -> dict:
+    return get_service_ctx(service_name, external=external, src_file="_values.yaml")
 
 
 def get_service_value_override_path(
@@ -135,23 +142,27 @@ def get_service_value_override_path(
     return service_regions_path / region_name
 
 
-def get_service_value_overrides(
+def get_service_ctx_overrides(
     service_name: str,
     region_name: str,
     cluster_name: str = "default",
     external: bool = False,
     namespace: str | None = None,
+    src_file: str = "_values.yaml",
+    cluster_as_folder: bool = False,
 ) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
     If "external=True" is specified, treat the service name as the full service path.
     """
     try:
+        override_path = get_service_value_override_path(
+            service_name, region_name, external, namespace=namespace
+        )
         service_override_file = (
-            get_service_value_override_path(
-                service_name, region_name, external, namespace=namespace
-            )
-            / f"{cluster_name}.yaml"
+            override_path / cluster_name / src_file
+            if cluster_as_folder
+            else override_path / f"{cluster_name}.yaml"
         )
 
         with open(service_override_file, "rb") as f:
@@ -162,11 +173,23 @@ def get_service_value_overrides(
         return {}
 
 
+def get_service_value_overrides(
+    service_name: str,
+    region_name: str,
+    cluster_name: str = "default",
+    external: bool = False,
+) -> dict:
+    return get_service_ctx_overrides(
+        service_name, region_name, cluster_name=cluster_name, external=external
+    )
+
+
 def get_common_regional_override(
     service_name: str,
     region_name: str,
     external: bool = False,
     namespace: str | None = None,
+    src_file: str = "_values.yaml",
 ) -> dict:
     """
     Helper function to load common regional configuration values.
@@ -179,7 +202,7 @@ def get_common_regional_override(
             get_service_value_override_path(
                 service_name, region_name, external, namespace=namespace
             )
-            / "_values.yaml"
+            / src_file
         )
 
         with open(common_service_override_file, "rb") as f:
@@ -194,6 +217,7 @@ def get_hierarchical_value_overrides(
     cluster_name: str = "default",
     external: bool = False,
     namespace: str | None = None,
+    src_file: str = "_values.yaml",
 ) -> dict:
     """
     Enables hierarchical configuration overrides with shared base values.
@@ -230,7 +254,7 @@ def get_hierarchical_value_overrides(
 
         try:
             service_override_file = (
-                service_regions_path / override_group.name / "_values.yaml"
+                service_regions_path / override_group.name / src_file
             )
 
             with open(service_override_file, "rb") as f:
@@ -242,12 +266,18 @@ def get_hierarchical_value_overrides(
             region_name = "us"
 
         region_path = f"{override_group.name}/{region_name}"
-        region_values = get_service_value_overrides(
-            service_name, region_path, cluster_name, external, namespace=namespace
+        region_values = get_service_ctx_overrides(
+            service_name,
+            region_path,
+            cluster_name,
+            external,
+            namespace=namespace,
+            src_file=src_file,
+            cluster_as_folder=namespace == "helm",
         )
 
         common_service_values = get_common_regional_override(
-            service_name, region_path, external, namespace=namespace
+            service_name, region_path, external, namespace=namespace, src_file=src_file
         )
 
         # There must be either a cluster specific override file a _values.yaml in the region dir
@@ -352,8 +382,8 @@ def get_helm_service_data(
     # puts values into render_data["values"], then the service_data
     # can override those.
     customer_data = load_customer_helm_data(Config(), customer_name, cluster_name)
-    service_data = customer_data.get(service_name, {})
-    render_data = {"customer": customer_data}
+    service_data = customer_data.service_data(service_name)
+    render_data = {"customer": customer_data.global_data}
     return service_data, render_data
 
 
@@ -417,12 +447,15 @@ def build_materialized_path(
 
 
 def build_helm_materialized_path(
-    customer_name: str, cluster_name: str, service_name: str
+    customer_name: str,
+    cluster_name: str,
+    service_name: str,
+    target: str = "values.yaml",
 ) -> Path:
     """
     Returns the file name where to store a materialized service
     """
     return (
         build_helm_materialized_directory(customer_name, cluster_name, service_name)
-        / "values.yaml"
+        / target
     )
