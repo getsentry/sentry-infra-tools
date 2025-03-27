@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 
 from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config
+from libsentrykube.helm import HelmData
 from libsentrykube.utils import die
 
 ALLOYDB_DISCOVERY_SERVICEURL = (
@@ -31,6 +32,26 @@ def load_customer_data(
 
     cluster = load_cluster_configuration(k8s_config, cluster_name)
     return cluster.services_data
+
+
+@cache
+def load_region_helm_data(
+    config: Config, region_name: str, cluster_name: str
+) -> HelmData:
+    try:
+        region_config = config.silo_regions[region_name]
+    except KeyError:
+        die(
+            f"Region '{region_name}' not found. Did you mean one of: \n\n"
+            f"{config.get_regions()}"
+        )
+    k8s_config = region_config.k8s_config
+
+    # If the customer has only one cluster, just use the value from config
+    cluster_name = k8s_config.cluster_name or cluster_name
+
+    cluster = load_cluster_configuration(k8s_config, cluster_name)
+    return cluster.helm_services
 
 
 def get_compute_instance_ips(project: str) -> List[str]:

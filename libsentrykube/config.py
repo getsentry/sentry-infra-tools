@@ -34,6 +34,8 @@ class K8sConfig:
     # materialize the rendered manifest. Each cluster is a
     # subdirectory in this directory.
     materialized_manifests: str
+    # Same thing as `materialized_manifests`, but for helm values
+    materialized_helm_values: str
 
     @classmethod
     def from_conf(cls, conf: Mapping[str, Any]) -> K8sConfig:
@@ -44,6 +46,14 @@ class K8sConfig:
             if "cluster_name" in conf
             else None,
             materialized_manifests=str(conf["materialized_manifests"]),
+            materialized_helm_values=str(
+                conf.get(
+                    "materialized_helm_values",
+                    conf["materialized_manifests"].replace(
+                        "materialized_manifests", "materialized_helm_values"
+                    ),
+                )
+            ),
         )
 
 
