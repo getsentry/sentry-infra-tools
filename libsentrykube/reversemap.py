@@ -72,7 +72,7 @@ def extract_clusters(resources: Set[ResourceReference]) -> Set[ResourceReference
                 ResourceReference(
                     customer_name=r.customer_name,
                     cluster_name=r.cluster_name,
-                    service_name=None,
+                    service_name=r.service_name,
                 )
             )
 
