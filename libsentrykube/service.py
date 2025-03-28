@@ -18,7 +18,10 @@ class CustomerTooOftenDefinedException(Exception):
 
 
 def assert_customer_is_defined_at_most_once(
-    service_name: str, customer_name: str, external: bool = False
+    service_name: str,
+    customer_name: str,
+    external: bool = False,
+    namespace: str | None = None,
 ) -> None:
     """
     Make sure that a customer directory is only defined a single time in a service.
@@ -29,7 +32,7 @@ def assert_customer_is_defined_at_most_once(
     if external:
         service_regions_path = workspace_root() / service_name
     else:
-        service_regions_path = get_service_path(service_name)
+        service_regions_path = get_service_path(service_name, namespace=namespace)
 
     paths: List[Path] = []
     paths.extend(service_regions_path.glob(f"region_overrides/{customer_name}"))

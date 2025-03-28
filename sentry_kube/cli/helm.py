@@ -9,7 +9,6 @@ from libsentrykube.helm import (
     materialize_values as _helm_materialize_values,
 )
 from libsentrykube.service import get_service_names
-from libsentrykube.utils import pretty
 
 __all__ = ["helm"]
 
@@ -69,34 +68,36 @@ def allow_for_all_services(f):
     return wrapper
 
 
-def _render(ctx, services, raw, renderer):
+def _render(ctx, services, release, raw, renderer):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
 
     for service_name in services:
-        out = renderer(
+        yield renderer(
             customer_name,
             service_name,
             cluster_name,
+            release=release,
+            raw=raw,
         )
-        yield out if raw else pretty(out)
 
 
-def _materialize(ctx, services: list[str]):
+def _materialize(ctx, services, release):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     for service in services:
-        _helm_materialize_values(customer_name, service, cluster_name)
+        _helm_materialize_values(customer_name, service, cluster_name, release=release)
 
 
 @helm.command()
+@click.option("--release", help="Target a specific release")
 @click.option("--raw", is_flag=True)
 @click.option("--pager/--no-pager", default=True)
-@click.option("--values-only", is_flag=True)
+@click.option("--values-only", is_flag=True, help="Render Helm values only")
 @click.option("--materialize", is_flag=True)
 @click.pass_context
 @allow_for_all_services
-def render(ctx, services, raw, pager, values_only, materialize):
+def render(ctx, services, release, raw, pager, values_only, materialize):
     """
     Render helm service(s).
 
@@ -104,12 +105,12 @@ def render(ctx, services, raw, pager, values_only, materialize):
     """
 
     if materialize:
-        _materialize(ctx, services)
+        _materialize(ctx, services, release)
         return
     if values_only:
-        rendered = _render(ctx, services, raw, _helm_render_values)
+        rendered = _render(ctx, services, release, raw, _helm_render_values)
     else:
-        rendered = _render(ctx, services, raw, check_helm_bin(_helm_render))
+        rendered = _render(ctx, services, release, raw, check_helm_bin(_helm_render))
     if pager:
         click.echo_via_pager(rendered)
     else:
@@ -117,7 +118,11 @@ def render(ctx, services, raw, pager, values_only, materialize):
 
 
 @helm.command()
-def diff():
+@click.option("--release", help="Target a specific release")
+@click.option("--raw", is_flag=True)
+@click.option("--pager/--no-pager", default=True)
+@click.pass_context
+def diff(ctx, services, release, raw, pager):
     """
     Render a diff between production and local configs, using a wrapper around
     "helm diff".
@@ -129,7 +134,15 @@ def diff():
 
 
 @helm.command()
-def apply():
+@click.option("--release", help="Target a specific release")
+@click.option(
+    "--atomic/--no-atomic",
+    default=True,
+    help="Atomic apply (auto-rollback if goes wrong)",
+)
+@click.option("--timeout", default=300)
+@click.pass_context
+def apply(ctx, services, release, atomic, timeout):
     """
     Apply helm service(s) to production
     """
