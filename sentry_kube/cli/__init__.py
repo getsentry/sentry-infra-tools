@@ -162,7 +162,7 @@ Valid regions:
             )
             return
 
-        set_service_paths(cluster.services)
+        set_service_paths(cluster.services, helm=cluster.helm_services.services)
 
         if ctx.invoked_subcommand in (
             "rendervalues",

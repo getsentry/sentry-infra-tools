@@ -1,3 +1,5 @@
+import copy
+
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -12,6 +14,8 @@ from jinja2 import StrictUndefined
 from jinja2 import TemplateNotFound
 from libsentrykube.config import Config
 from libsentrykube.config import K8sConfig
+from libsentrykube.helm import HelmData
+from libsentrykube.utils import deep_merge_dict
 from libsentrykube.utils import die
 from libsentrykube.utils import workspace_root
 from yaml import safe_load
@@ -22,10 +26,15 @@ class Cluster:
     name: str
     services: List[str]
     services_data: dict[str, Any]
+    helm_services: HelmData
 
     @property
     def service_names(self) -> List[str]:
         return [Path(p).name for p in self.services]
+
+    @property
+    def helm_service_names(self) -> List[str]:
+        return self.helm_services.service_names
 
 
 def list_clusters(config: Config) -> Sequence[Cluster]:
@@ -76,5 +85,22 @@ def load_cluster_configuration(config: K8sConfig, cluster_name: str) -> Cluster:
         die(f"Cluster '{cluster_name}' not found.")
 
     services = data.pop("services")
+    helm_spec = data.pop("helm", {})
+    helm_data = copy.deepcopy(data)
+    deep_merge_dict(helm_data, helm_spec.get("values", {}))
+    helm_svclist = []
+    helm_svcdata: dict[str, dict[str, Any]] = {}
+    for svc in helm_spec.get("services", []):
+        if isinstance(svc, str):
+            helm_svclist.append(svc)
+            helm_svcdata[svc] = {}
+            continue
+        svc_key = svc.get("path")
+        if not svc_key:
+            continue
+        helm_svclist.append(svc_key)
+        helm_svcdata[svc_key] = svc.get("values", {})
 
-    return Cluster(cluster_name, services, data)
+    return Cluster(
+        cluster_name, services, data, HelmData(helm_svclist, helm_data, helm_svcdata)
+    )

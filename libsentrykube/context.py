@@ -33,6 +33,6 @@ def init_cluster_context(
     # If the customer has only one cluster, just use the value from config
     cluster_name = customer_config.cluster_name or cluster_name
     cluster = load_cluster_configuration(customer_config, cluster_name)
-    set_service_paths(cluster.services)
+    set_service_paths(cluster.services, helm=cluster.helm_services.services)
 
     return (customer_config, cluster)
