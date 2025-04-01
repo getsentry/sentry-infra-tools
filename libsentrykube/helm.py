@@ -342,8 +342,20 @@ def get_remote_app_version(release: HelmRelease, tmpdir, targets, kctx=None):
         targets.append(f.name)
 
 
+def set_app_version(release: HelmRelease, target_cmd: list[str], app_version=None):
+    if app_version is None:
+        return
+    dynamic_version_path = release.chart.dynamic_version_path
+    target_cmd.extend(["--set-string", f"{dynamic_version_path}={app_version}"])
+
+
 def helm_release_ctx(
-    region_name, service_name, cluster_name="default", release=None, kctx=None
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    app_version=None,
+    kctx=None,
 ):
     for rendered_release, rendered_contents in _render_values(
         region_name, service_name, cluster_name, release=release
@@ -356,7 +368,10 @@ def helm_release_ctx(
                 ) as f:
                     f.write(rendered_content.encode("utf8"))
                     release_targets.append(f.name)
-            get_remote_app_version(rendered_release, tmpdirname, release_targets, kctx)
+            if app_version is None:
+                get_remote_app_version(
+                    rendered_release, tmpdirname, release_targets, kctx
+                )
             yield rendered_release, release_targets
 
 
@@ -392,14 +407,26 @@ def render(
     return "\n".join([out_filter(v) for v in outputs])
 
 
-def diff(region_name, service_name, cluster_name="default", release=None, kctx=None):
+def diff(
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    app_version=None,
+    kctx=None,
+):
     from libsentrykube.service import get_service_path
 
     outputs = []
 
     service_path = get_service_path(service_name, namespace="helm")
     for helm_release, targets in helm_release_ctx(
-        region_name, service_name, cluster_name, release=release, kctx=kctx
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        app_version=app_version,
+        kctx=kctx,
     ):
         helm_params = [
             "diff",
@@ -418,6 +445,7 @@ def diff(region_name, service_name, cluster_name="default", release=None, kctx=N
             helm_params.extend(["--version", helm_release.chart.version])
         for target in targets:
             helm_params.extend(["-f", target])
+        set_app_version(helm_release, helm_params, app_version=app_version)
         try:
             output = _run_helm(helm_params)
         except HelmException:
@@ -433,6 +461,7 @@ def apply(
     service_name,
     cluster_name="default",
     release=None,
+    app_version=None,
     kctx=None,
     atomic=True,
     timeout=300,
@@ -443,7 +472,12 @@ def apply(
 
     service_path = get_service_path(service_name, namespace="helm")
     for helm_release, targets in helm_release_ctx(
-        region_name, service_name, cluster_name, release=release, kctx=kctx
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        app_version=app_version,
+        kctx=kctx,
     ):
         helm_params = [
             "upgrade",
@@ -461,6 +495,7 @@ def apply(
             helm_params.extend(["--version", helm_release.chart.version])
         for target in targets:
             helm_params.extend(["-f", target])
+        set_app_version(helm_release, helm_params, app_version=app_version)
         outputs.append(_run_helm(helm_params))
 
     return "\n".join(outputs)

@@ -95,7 +95,7 @@ def _materialize(ctx, services, release):
 
 
 @check_helm_bin
-def _diff(ctx, services, release):
+def _diff(ctx, services, release, app_version):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -106,12 +106,13 @@ def _diff(ctx, services, release):
             service_name,
             cluster_name,
             release=release,
+            app_version=app_version,
             kctx=context_name,
         )
 
 
 @check_helm_bin
-def _apply(ctx, services, release, atomic, timeout):
+def _apply(ctx, services, release, app_version, atomic, timeout):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -123,6 +124,7 @@ def _apply(ctx, services, release, atomic, timeout):
                 service_name,
                 cluster_name,
                 release=release,
+                app_version=app_version,
                 kctx=context_name,
                 atomic=atomic,
                 timeout=timeout,
@@ -161,10 +163,11 @@ def render(ctx, services, release, raw, pager, values_only, materialize):
 
 @helm.command()
 @click.option("--release", help="Target a specific release")
+@click.option("--app-version", help="Use a specific app version")
 @click.option("--pager/--no-pager", default=True)
 @click.pass_context
 @allow_for_all_services
-def diff(ctx, services, release, pager):
+def diff(ctx, services, release, app_version, pager):
     """
     Render a diff between production and local configs, using a wrapper around
     "helm diff".
@@ -174,7 +177,7 @@ def diff(ctx, services, release, pager):
     """
 
     click.echo(f"Rendering services: {', '.join(services)}")
-    rendered = _diff(ctx, services, release)
+    rendered = _diff(ctx, services, release, app_version)
     if pager:
         click.echo_via_pager(rendered)
     else:
@@ -183,6 +186,7 @@ def diff(ctx, services, release, pager):
 
 @helm.command()
 @click.option("--release", help="Target a specific release")
+@click.option("--app-version", help="Use a specific app version")
 @click.option("--yes", "-y", is_flag=True)
 @click.option(
     "--atomic/--no-atomic",
@@ -192,7 +196,7 @@ def diff(ctx, services, release, pager):
 @click.option("--timeout", default=300)
 @click.pass_context
 @allow_for_all_services
-def apply(ctx, services, release, yes, atomic, timeout):
+def apply(ctx, services, release, app_version, yes, atomic, timeout):
     """
     Apply helm service(s) to production
     """
@@ -200,7 +204,7 @@ def apply(ctx, services, release, yes, atomic, timeout):
     if not yes:
         click.echo(f"Rendering services: {', '.join(services)}")
 
-        rendered = _diff(ctx, services, release)
+        rendered = _diff(ctx, services, release, app_version)
         click.echo("".join(rendered))
 
         if not click.confirm(
@@ -212,4 +216,4 @@ def apply(ctx, services, release, yes, atomic, timeout):
         ):
             raise click.Abort()
 
-    _apply(ctx, services, release, atomic, timeout)
+    _apply(ctx, services, release, app_version, atomic, timeout)
