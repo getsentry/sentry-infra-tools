@@ -1,3 +1,9 @@
+## 1.0.0
+
+### Various fixes & improvements
+
+- Merge pull request #104 from getsentry/gi0baro/helm (#104) by @gi0baro
+
 ## 0.0.37
 
 ### Various fixes & improvements
