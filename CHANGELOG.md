@@ -1,3 +1,9 @@
+## 1.1.0
+
+### Various fixes & improvements
+
+- feat(helm): add reversemap support (#105) by @gi0baro
+
 ## 1.0.0
 
 ### Various fixes & improvements
