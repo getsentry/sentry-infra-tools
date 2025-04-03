@@ -119,7 +119,7 @@ def _apply(ctx, services, release, app_version, atomic, timeout):
 
     for service_name in services:
         try:
-            _helm_apply(
+            yield _helm_apply(
                 customer_name,
                 service_name,
                 cluster_name,
@@ -216,4 +216,5 @@ def apply(ctx, services, release, app_version, yes, atomic, timeout):
         ):
             raise click.Abort()
 
-    _apply(ctx, services, release, app_version, atomic, timeout)
+    for res in _apply(ctx, services, release, app_version, atomic, timeout):
+        click.echo("".join(res))
