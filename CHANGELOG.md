@@ -1,3 +1,9 @@
+## 1.1.1
+
+### Various fixes & improvements
+
+- Minor helm enhancements (#106) by @gi0baro
+
 ## 1.1.0
 
 ### Various fixes & improvements
