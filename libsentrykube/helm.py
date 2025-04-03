@@ -486,6 +486,8 @@ def apply(
             "--namespace",
             helm_release.namespace,
             "--install",
+            "--timeout",
+            f"{timeout}s",
         ]
         if kctx:
             helm_params.extend(["--kube-context", kctx])
@@ -493,6 +495,8 @@ def apply(
             helm_params.extend(["--repo", helm_release.chart.repo])
         if helm_release.chart.version:
             helm_params.extend(["--version", helm_release.chart.version])
+        if atomic:
+            helm_params.extend(["--atomic"])
         for target in targets:
             helm_params.extend(["-f", target])
         set_app_version(helm_release, helm_params, app_version=app_version)
