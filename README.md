@@ -16,7 +16,7 @@
 
 ## Installation
 
-Follow the setup instructions in the [top-level README](../../README.md).
+Run `./install.sh` to install sentry-kube.
 
 ## Releasing a new version
 
