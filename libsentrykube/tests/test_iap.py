@@ -1,14 +1,12 @@
-from libsentrykube.iap import _dns_endpoint_check
+from libsentrykube.iap import _is_external_connection_allowed
+from unittest import mock
 
 
-def test_dns_endpoint_detects_valid_host():
-    use_dns_endpoint = _dns_endpoint_check(
-        control_plane_host="gke-22df3be7a2d24d7eb1935c53b5cfaa2337ea-249720712700.us-east1.gke.goog",
-        quiet=True,
+@mock.patch("subprocess.check_output")
+def test_external_connection_allowed(mock_subprocess):
+    mock_subprocess.return_value = b"True\n"
+    result = _is_external_connection_allowed(
+        "test-project", "us-central1", "test-cluster"
     )
-    assert use_dns_endpoint is True
 
-
-def test_dns_endpoint_detects_invalid_host():
-    use_dns_endpoint = _dns_endpoint_check(control_plane_host="172.16.0.13", quiet=True)
-    assert use_dns_endpoint is False
+    assert result is True
