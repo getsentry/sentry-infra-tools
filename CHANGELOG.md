@@ -1,3 +1,9 @@
+## 1.2.0
+
+### Various fixes & improvements
+
+- chore: Add support for us region to replace saas (#60) by @rgibert
+
 ## 1.1.3
 
 ### Various fixes & improvements
