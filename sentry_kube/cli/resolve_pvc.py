@@ -75,7 +75,7 @@ def resolve_pvc(ctx, output, service):
     from libsentrykube.utils import die
 
     customer_name = ctx.obj.customer_name
-    if customer_name == "saas":
+    if customer_name == "saas" or customer_name == "us" or customer_name == "de":
         die("Sorry, this command is only supported on ST right now.")
 
     from kubernetes.client import CoreV1Api

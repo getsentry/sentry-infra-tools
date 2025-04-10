@@ -37,8 +37,9 @@ ENV SENTRY_KUBE_ROOT="/work"
 ENV SENTRY_KUBE_CONFIG_FILE="/work/configuration.yaml"
 ENV KUBECONFIG_PATH=$SENTRY_KUBE_ROOT/.kube/config
 ENV SENTRY_KUBE_NO_CONTEXT="1"
-ENV SENTRY_KUBE_CUSTOMER="saas"
+ENV SENTRY_KUBE_CUSTOMER="us"
 
+# Use kubectl version from the build argument
 ARG SENTRY_KUBE_VERSION
 ARG SENTRY_KUBE_KUBECTL_VERSION
 # Persist the version as an environment variable so that subsequent "sentry-kube" calls in the
