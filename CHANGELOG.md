@@ -1,3 +1,9 @@
+## 1.1.3
+
+### Various fixes & improvements
+
+- feat(kubectl): remove old private DNS connection to clusters (#109) by @bmckerry
+
 ## 1.1.2
 
 ### Various fixes & improvements
