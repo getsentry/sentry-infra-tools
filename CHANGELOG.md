@@ -1,3 +1,9 @@
+## 1.2.1
+
+### Various fixes & improvements
+
+- chore: Add config defaults (#65) by @rgibert
+
 ## 1.2.0
 
 ### Various fixes & improvements
