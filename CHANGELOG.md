@@ -1,3 +1,9 @@
+## 1.1.2
+
+### Various fixes & improvements
+
+- fix(readme): update install info (#107) by @bmckerry
+
 ## 1.1.1
 
 ### Various fixes & improvements
