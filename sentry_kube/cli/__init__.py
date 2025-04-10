@@ -114,53 +114,35 @@ Get kubed.
     ) as transaction:
         transaction.set_tag(key="subcommand", value=ctx.invoked_subcommand)
 
-        if ctx.invoked_subcommand == "datadog-log-terragrunt":
+        if (
+            ctx.invoked_subcommand == "datadog-log-terragrunt"
+            or ctx.invoked_subcommand == "datadog-log"
+            or ctx.invoked_subcommand == "get-regions"
+        ):
             return
 
-        if ctx.invoked_subcommand == "datadog-log":
-            return
-
-        if ctx.invoked_subcommand == "connect":
-            ctx.obj = CliContext(
-                context_name=None,  # type: ignore
-                customer_name=None,  # type: ignore
-                cluster_name=cluster_name,
-                quiet_mode=quiet,
-                service_monitors=None,  # type: ignore
-            )
-            return
-        if ctx.invoked_subcommand == "get-customers":
-            return
-
+        newline_customers = "\n".join(config.get_regions())
         if not customer:
-            try:
-                customer = SESSION_FILE.read_text().strip()
-            except FileNotFoundError:
-                # Backslashes not allowed in f-strings...
-                newline_customers = "\n".join(config.get_customers())
-                die(
-                    f"""It doesn't seem like you have a bastion connection and customer wasn't specified.
+            die(
+                f"""Region was not specified, please use `-C` to specify a region.
 
-In a separate shell, start `sentry-kube connect [customer].`
-
-If you are already inside the network (perhaps you're running this on dumpster),
-you must explicitly say sentry-kube [-C, --customer NAME] COMMAND...
-
-Customers include:
+Valid regions:
 {newline_customers}
 """
-                )
-
-        if not quiet:
-            click.echo(f"Operating for customer {customer}.")
+            )
 
         if customer in config.silo_regions:
             customer_config = config.silo_regions[customer]
         else:
-            print("Invalid region specified, must be one of:")
-            for region in config.silo_regions:
-                print(f"  {region}")
+            print(
+                f"""Invalid region specified, must be one of:
+{newline_customers}
+"""
+            )
             exit(1)
+
+        if not quiet:
+            click.echo(f"Operating for customer {customer}.")
 
         cluster_to_load = customer_config.k8s_config.cluster_name or cluster_name
 
@@ -180,7 +162,7 @@ Customers include:
             )
             return
 
-        set_service_paths(cluster.services)
+        set_service_paths(cluster.services, helm=cluster.helm_services.services)
 
         if ctx.invoked_subcommand in (
             "rendervalues",
@@ -188,12 +170,6 @@ Customers include:
             "lint",
             "validate",
         ):
-            if not customer:
-                die(
-                    f"Please pass in a customer to {ctx.invoked_subcommand} "
-                    f"example: sentry-kube -C CUSTOMER {ctx.invoked_subcommand}"
-                )
-
             # Force offline, we don't need connections for these subcommands
             os.environ["KUBERNETES_OFFLINE"] = "1"
 
@@ -218,7 +194,7 @@ Customers include:
             service_monitors=customer_config.service_monitors,
         )
 
-        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx, quiet)
+        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx)
 
         kube_set_context(context_name, kubeconfig=kubeconfig)
 

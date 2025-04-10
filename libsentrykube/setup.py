@@ -24,6 +24,7 @@ default_macros = [
     "xds_proxy_sidecar=libsentrykube.ext:XDSProxySidecar",
     "xds_proxy_initcontainer=libsentrykube.ext:XDSProxyInitContainer",
     "xds_proxy_volume=libsentrykube.ext:XDSProxyVolume",
+    "get_var=libsentrykube.ext:GetVar",
 ]
 
 setup(

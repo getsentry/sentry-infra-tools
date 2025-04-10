@@ -1,37 +1,23 @@
-sites:
-  saas_us:
-    name: us
-    region: us-central1
-    zone: b
-    network: global/networks/sentry
-    subnetwork: regions/us-central1/subnetworks/sentry-default
-
 silo_regions:
   saas:
-    bastion:
-      spawner_endpoint: https://bastion-spawner.app
-      site: saas_us
     k8s:
       root: k8s_root
       # relative to k8s root
       cluster_def_root: clusters/saas
       materialized_manifests: rendered_services
+      materialized_helm_values: rendered_helm_values
     sentry_region: us
   my_customer:
-    bastion:
-      spawner_endpoint: https://bastion-spawner2.app
-      site: saas_us
     k8s:
       root: k8s_root
       cluster_def_root: clusters/my_customer
       materialized_manifests: rendered_services
+      materialized_helm_values: rendered_helm_values
     sentry_region: st-my_customer
   my_other_customer:
-    bastion:
-      spawner_endpoint: https://bastion-spawner3.app
-      site: saas_us
     k8s:
       root: k8s_root
       cluster_def_root: clusters/my_other_customer
       materialized_manifests: rendered_services
+      materialized_helm_values: rendered_helm_values
     sentry_region: st-my_other_customer

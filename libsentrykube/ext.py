@@ -23,6 +23,9 @@ from libsentrykube.utils import (
     workspace_root,
 )
 
+KUBE_API_TIMEOUT_DEFAULT: int = 3
+KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
+
 ENVOY_ENTRYPOINT = """
 cat << EOF > /etc/envoy/envoy.yaml
 
@@ -143,7 +146,11 @@ class DeploymentImage(SimpleExtension):
         client = kube_get_client()
         try:
             deployment = AppsV1Api(client).read_namespaced_deployment(
-                name, namespace, _request_timeout=2
+                name,
+                namespace,
+                _request_timeout=os.getenv(
+                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+                ),
             )
         except ApiException as e:
             if e.status == 404:
@@ -172,7 +179,11 @@ class StatefulSetImage(SimpleExtension):
         client = kube_get_client()
         try:
             stateful_set = AppsV1Api(client).read_namespaced_stateful_set(
-                name, namespace, _request_timeout=1
+                name,
+                namespace,
+                _request_timeout=os.getenv(
+                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+                ),
             )
         except ApiException as e:
             if e.status == 404:
@@ -198,7 +209,7 @@ def format_docs(docs: dict) -> str:
 
 
 def format_people(people: list) -> str:
-    return ", ".join([f'{p["name"]} ({p["email"]})' for p in people])
+    return ", ".join([f"{p['name']} ({p['email']})" for p in people])
 
 
 def format_slack_channels(slack_channels: list) -> str:
@@ -212,7 +223,7 @@ def format_slos(slos: list) -> str:
 def format_teams(teams: list) -> str:
     return ", ".join(
         [
-            f'{t["display_name"]} ({t["id"]}) tags={{{",".join(t["tags"])}}}'
+            f"{t['display_name']} ({t['id']}) tags={{{','.join(t['tags'])}}}"
             for t in teams
         ]
     )
@@ -335,11 +346,13 @@ class Md5Template(Md5File):
     """
 
     @pass_context
-    def run(self, context, template_path: str) -> str:  # type: ignore
+    def run(
+        self, context, template_path: str, extra_context: Optional[dict] = None
+    ) -> str:  # type: ignore
         return md5_fileobj(
             io.BytesIO(
                 self.environment.get_template(template_path)
-                .render(context)
+                .render(context, **(extra_context or {}))
                 .encode("utf-8")
             )
         )
@@ -549,7 +562,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
     To be used as a container within pod.spec.initContainers.
     """
 
-    def run(self, version: str = "alpine3.20"):
+    def run(self, version: str = "latest"):
         iptables_entrypoint = IPTABLES_ENTRYPOINT
         env = [
             {
@@ -560,7 +573,7 @@ class DogstatsdPortForwardingInitContainer(SimpleExtension):
 
         return json.dumps(
             {
-                "image": f"us.gcr.io/sentryio/iptables:{version}",
+                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
                 "name": "init-port-forward",
                 "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
                 "env": env,
@@ -797,3 +810,23 @@ class MachineType(SimpleExtension):
                 }
                 return self._type_cache[name]
         return {}
+
+
+class GetVar(SimpleExtension):
+    """
+    This only exists because jinja2 doesn't support macros that return values.
+
+    Allows to search for variable value in a list of dictionaries to implement
+    common patterns of get from override dict or default one.
+    Examples:
+
+    params.var|default(defaults.var) =>  get_var(var_name, params, defaults)
+    params.get(var, component.get(var, service.get("some global default"))) => get_var(var, params, component, service, default="some global default")
+    """
+
+    @cache
+    def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
+        for d in dicts:
+            if key in d:
+                return d[key]
+        return default

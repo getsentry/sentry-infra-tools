@@ -97,9 +97,9 @@ def test_process_data() -> None:
 
     # Make sure fields are ignored
     assert "generation" not in data["metadata"], "metadata.generation should be ignored"
-    assert (
-        "configVersion" not in data["spec"]["template"]["metadata"]["annotations"]
-    ), "configVersion should be ignored"
+    assert "configVersion" not in data["spec"]["template"]["metadata"]["annotations"], (
+        "configVersion should be ignored"
+    )
     assert all(
         "image" not in container
         for container in data["spec"]["template"]["spec"]["containers"]

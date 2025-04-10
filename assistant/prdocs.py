@@ -7,9 +7,7 @@ from typing import MutableMapping, MutableSet, Sequence
 
 COMMENT_TEMPLATE = """# Ops Assistant
 
-The ops repo is a large monorepo and there are multiple processes
-to deploy its content depending on what is changed.
-This message is here to provide context.
+The ops repo is a large monorepo and there are multiple processes to deploy its content depending on what is changed.
 
 {content}
 """
@@ -17,11 +15,13 @@ This message is here to provide context.
 INSTRUCTION_TEMPLATE = """
 {content}
 
-Files changed:
+<details>
+<summary>Files changed</summary>
+
 ```
 {files}
 ```
----
+</details>
 """
 
 INSTRUCTIONS_FILE = "deploy_instructions.md"
@@ -67,9 +67,9 @@ class InstructionsMessage:
 
         if config_path.exists() and config_path.is_file():
             conf = loads(config_path.read_text())
-            assert isinstance(
-                conf, MutableMapping
-            ), f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
+            assert isinstance(conf, MutableMapping), (
+                f"Invalid content of {INSTRUCTIONS_CONF_FILE}"
+            )
             ref_path = conf.get("ref")
             if ref_path:
                 instructions_path = path / ref_path
@@ -131,9 +131,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = parser.parse_args()
 
     root = args.root
-    assert (
-        root is not None and Path(root).exists() and Path(root).is_dir()
-    ), "The root path does not exists or is not a directory."
+    assert root is not None and Path(root).exists() and Path(root).is_dir(), (
+        "The root path does not exists or is not a directory."
+    )
     message = InstructionsMessage(Path(root))
 
     for path in sys.stdin:

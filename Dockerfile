@@ -34,6 +34,8 @@ RUN HELM_SHA256="2315941a13291c277dac9f65e75ead56386440d3907e0540bf157ae70f18834
 ENV VIRTUAL_ENV=1
 ENV SENTRY_KUBE_INSTALL_GIT_HOOKS=0
 ENV SENTRY_KUBE_ROOT="/work"
+ENV SENTRY_KUBE_CONFIG_FILE="/work/configuration.yaml"
+ENV KUBECONFIG_PATH=$SENTRY_KUBE_ROOT/.kube/config
 ENV SENTRY_KUBE_NO_CONTEXT="1"
 ENV SENTRY_KUBE_CUSTOMER="us"
 
@@ -48,12 +50,19 @@ RUN echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cl
 RUN echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml
 
 # Use kubectl version from the build argument
+ARG SENTRY_KUBE_VERSION
 ARG SENTRY_KUBE_KUBECTL_VERSION
 # Persist the version as an environment variable so that subsequent "sentry-kube" calls in the
 # live container would pick it up too.
 ENV SENTRY_KUBE_KUBECTL_VERSION=${SENTRY_KUBE_KUBECTL_VERSION}
+RUN pip install --index-url https://pypi.devinfra.sentry.io/simple sentry-infra-tools==${SENTRY_KUBE_VERSION} && rm -rf /root/.cache
 
-# The configuration file is not in the /work dir.
-ENV SENTRY_KUBE_CONFIG_FILE="/work/configuration.yaml"
-# Check installation and download "kubectl"
-RUN sentry-kube kubectl
+### Prepare the working directory
+WORKDIR /work
+# Dummy context to make sentry-kube happy
+RUN mkdir -p k8s/clusters && \
+  mkdir -p $SENTRY_KUBE_ROOT/.kube && \
+  echo '{"context": "_empty", "services": [], "iap_local_port": 22028}' > k8s/clusters/default.yaml && \
+  echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {saas: {bastion: " >> configuration.yaml && \
+  echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cluster_def_root: " >> configuration.yaml && \
+  echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml

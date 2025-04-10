@@ -31,6 +31,7 @@ macros = [
     "xds_proxy_volume=libsentrykube.ext:XDSProxyVolume",
     "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
     "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
+    "get_var=libsentrykube.ext:GetVar",
 ]
 
 
@@ -43,7 +44,7 @@ def get_requirements() -> Sequence[str]:
 
 setup(
     name="sentry-infra-tools",
-    version="0.0.23",
+    version="1.1.2",
     author="Sentry",
     author_email="oss@sentry.io",
     packages=find_packages(where=".", exclude="tests"),

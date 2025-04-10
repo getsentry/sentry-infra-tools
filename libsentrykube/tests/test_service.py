@@ -1,14 +1,18 @@
 from libsentrykube.context import init_cluster_context
 import os
+from pathlib import Path
+from unittest.mock import patch, Mock
 
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
+    get_service_ctx_overrides,
     get_service_data,
     get_service_values,
     get_service_value_overrides,
     get_tools_managed_service_value_overrides,
     get_service_value_override_path,
     get_service_path,
+    get_service_template_files,
     write_managed_values_overrides,
 )
 from libsentrykube.utils import set_workspace_root_start
@@ -69,12 +73,16 @@ expected_hierarchical_and_regional_cluster_values = {
     "config": {"foo": "not-foo", "baz": "test", "settings": {"abc": 20, "def": "test"}}
 }
 
+expected_hierarchical_and_regional_cluster_helmcfg = {"releases": ["production"]}
+
 expected_regional_cluster_values = {
     "config": {
         "foo": "not-foo",
         "settings": {"abc": 20},
     }
 }
+
+expected_regional_cluster_helmcfg = {"releases": ["production", "canary"]}
 
 
 def test_get_service_values_not_external():
@@ -215,6 +223,33 @@ def test_get_hierarchical_value_overrides(hierarchical_override_structure: str) 
     assert returned == expected_hierarchical_and_regional_cluster_values
 
 
+def test_get_helm_hierarchical_value_overrides(
+    hierarchical_override_structure: str,
+) -> None:
+    set_workspace_root_start(hierarchical_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned_values = get_hierarchical_value_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+    )
+    returned_helmcfg = get_hierarchical_value_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        src_file="_helm.yaml",
+    )
+
+    assert returned_values == expected_hierarchical_and_regional_cluster_values
+    assert returned_helmcfg == expected_hierarchical_and_regional_cluster_helmcfg
+
+
 def test_regional_cluster_value_overrides(
     regional_cluster_specific_override_structure: str,
 ) -> None:
@@ -231,3 +266,59 @@ def test_regional_cluster_value_overrides(
     )
 
     assert returned == expected_regional_cluster_values
+
+
+def test_helm_regional_cluster_value_overrides(
+    regional_cluster_specific_override_structure: str,
+) -> None:
+    set_workspace_root_start(regional_cluster_specific_override_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    returned_values = get_service_ctx_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        cluster_as_folder=True,
+    )
+    returned_helmcfg = get_service_ctx_overrides(
+        service_name="my_helm_service",
+        region_name="customer1",
+        cluster_name="cluster1",
+        namespace="helm",
+        src_file="_helm.yaml",
+        cluster_as_folder=True,
+    )
+
+    assert returned_values == expected_regional_cluster_values
+    assert returned_helmcfg == expected_regional_cluster_helmcfg
+
+
+def test_get_service_template_files():
+    # Create mock files
+    mock_files = [
+        Path("template1.yaml"),
+        Path("template2.yml"),
+        Path("template3.yaml.j2"),
+        Path("template4.yml.j2"),
+        Path("_values.yaml"),  # should be ignored (starts with _)
+        Path("other.txt"),  # should be ignored (wrong extension)
+    ]
+
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_service_dir.iterdir.return_value = mock_files
+
+    with patch("libsentrykube.service.get_service_path", return_value=mock_service_dir):
+        # Convert generator to list for testing
+        templates = list(get_service_template_files("test-service"))
+
+        # Verify we got the expected templates
+        assert len(templates) == 4
+        assert Path("template1.yaml") in templates
+        assert Path("template2.yml") in templates
+        assert Path("template3.yaml.j2") in templates
+        assert Path("template4.yml.j2") in templates

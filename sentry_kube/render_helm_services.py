@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Sequence
 
 import click
-from libsentrykube.kube import materialize
-from libsentrykube.reversemap import build_index
+from libsentrykube.helm import materialize_values
+from libsentrykube.reversemap import build_helm_index
 from libsentrykube.reversemap import extract_clusters
 from libsentrykube.service import get_service_names
 from libsentrykube.context import init_cluster_context
@@ -18,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 @click.option("--fast", is_flag=True, help="Only render the specified services")
 @click.option("--debug", is_flag=True, help="Print debug information")
 @click.argument("filename", nargs=-1)
-def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
+def render_helm_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
     """
     Identifies which services and clusters need to be re-rendered
     depending on the file names passed as arguments.
@@ -31,7 +31,7 @@ def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
     if debug:
         logger.setLevel(logging.DEBUG)
 
-    index = build_index()
+    index = build_helm_index()
     resources_to_render = set()
 
     for file in filename:
@@ -58,14 +58,14 @@ def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
             services_to_materialize = [resource.service_name]
         else:
             logger.debug("Getting all service names")
-            services_to_materialize = get_service_names()
+            services_to_materialize = get_service_names(namespace="helm")
 
         logger.debug(f"Services to materialize: {services_to_materialize}")
 
         for s in services_to_materialize:
             logger.debug(f"Materializing service: {s}")
-            changed = materialize(
-                customer_name=resource.customer_name,
+            changed = materialize_values(
+                region_name=resource.customer_name,
                 service_name=s,
                 cluster_name=resource.cluster_name,
             )
@@ -87,4 +87,4 @@ def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
 
 
 if __name__ == "__main__":
-    render_services()
+    render_helm_services()
