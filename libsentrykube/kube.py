@@ -8,7 +8,6 @@ from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
 
 import click
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from kubernetes import client
 from kubernetes.client.rest import ApiException
 from yaml import dump_all, safe_dump, safe_load, safe_load_all
 
@@ -621,51 +620,3 @@ def apply(items: List[KubeResource]):
             else:
                 getattr(item.api, f"patch_{item.func}")(item.name, item.local_doc)
                 click.echo(f'{item.kind} "{item.name}" updated')
-
-
-def rollout_status_deployment(
-    api: client.AppsV1Api, name: str, namespace: str
-) -> Tuple[str, bool]:
-    deployment = api.read_namespaced_deployment(name=name, namespace=namespace)
-    if deployment.metadata.generation > deployment.status.observed_generation:
-        # the desired generation is greater than the live (observed) generation,
-        # so we're waiting on k8s to recognize changes.
-        return (
-            f"Waiting for deployment {repr(name)} spec update to be observed...",
-            False,
-        )
-
-    # TimedOutReason is added in a deployment when its newest replica set
-    # fails to show any progress within the given deadline (progressDeadlineSeconds).
-    for condition in deployment.status.conditions:
-        if condition.type == "Progressing":
-            if condition.reason == "ProgressDeadlineExceeded":
-                return f"deployment {repr(name)} exceeded its progress deadline", False
-
-    spec_replicas = deployment.spec.replicas
-    status_replicas = deployment.status.replicas or 0
-    updated_replicas = deployment.status.updated_replicas or 0
-    available_replicas = deployment.status.available_replicas or 0
-
-    if updated_replicas < spec_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{updated_replicas} out of {spec_replicas} new "
-            "replicas have been updated...",
-            False,
-        )
-    if status_replicas > updated_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{status_replicas - updated_replicas} old replicas "
-            "are pending termination...",
-            False,
-        )
-    if available_replicas < updated_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{available_replicas} of {updated_replicas} "
-            "updated replicas are available...",
-            False,
-        )
-    return f"Deployment {repr(name)} successfully rolled out", True
