@@ -1,3 +1,92 @@
+## 1.2.0
+
+### Various fixes & improvements
+
+- chore: Add support for us region to replace saas (#60) by @rgibert
+
+## 1.1.3
+
+### Various fixes & improvements
+
+- feat(kubectl): remove old private DNS connection to clusters (#109) by @bmckerry
+
+## 1.1.2
+
+### Various fixes & improvements
+
+- fix(readme): update install info (#107) by @bmckerry
+
+## 1.1.1
+
+### Various fixes & improvements
+
+- Minor helm enhancements (#106) by @gi0baro
+
+## 1.1.0
+
+### Various fixes & improvements
+
+- feat(helm): add reversemap support (#105) by @gi0baro
+
+## 1.0.0
+
+### Various fixes & improvements
+
+- Merge pull request #104 from getsentry/gi0baro/helm (#104) by @gi0baro
+
+## 0.0.37
+
+### Various fixes & improvements
+
+- fix: Support .yaml.j2 extensions for templates (#102) by @rgibert
+
+## 0.0.36
+
+### Various fixes & improvements
+
+- ref: use set instead of [] for get_regions (#98) by @rgibert
+- feat: Support get-regions filtering by service (#97) by @rgibert
+
+## 0.0.35
+
+### Various fixes & improvements
+
+- change: Add get-var macro (#95) by @dmajere
+
+## 0.0.34
+
+### Various fixes & improvements
+
+- Fix audit script listing CRDs. (#92) by @ellisonmarks
+- [pre-commit.ci] pre-commit autoupdate (#89) by @pre-commit-ci
+- chore(render_services): Add debug flag for investigating issues (#90) by @rgibert
+- clean up ops assistant message (#88) by @mwarkentin
+- change: Make docker container buildable (#87) by @dmajere
+- [pre-commit.ci] pre-commit autoupdate (#85) by @pre-commit-ci
+- Add release instructions (#84) by @mwarkentin
+
+## 0.0.33
+
+### Various fixes & improvements
+
+- Increase default kube api timeout (#83) by @mwarkentin
+- feat(render-services): Add an option to render services fast (#82) by @Dav1dde
+
+## 0.0.32
+
+### Various fixes & improvements
+
+- Updates deprecated upload artifact workflow. (#81) by @ellisonmarks
+- change: allow kube api calls timeout overrides in ext.py (#80) by @dmajere
+- feat(iptables): use latest tag from Artifact Registry (#79) by @oioki
+- chore: cleanup `vault` subcommand (#78) by @oioki
+
+## 0.0.31
+
+### Various fixes & improvements
+
+- fix(kube): Ignore empty override files (#76) by @Dav1dde
+
 ## 0.0.30
 
 ### Various fixes & improvements

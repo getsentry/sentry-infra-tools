@@ -110,7 +110,10 @@ def audit(ctx, services):
             else:
                 itemlist = items.items
             remote_names.update(
-                (item.metadata.namespace, item.metadata.name) for item in itemlist
+                (item["metadata"]["namespace"], item["metadata"]["name"])
+                if kind in crds
+                else (item.metadata.namespace, item.metadata.name)
+                for item in itemlist
             )
             if kind in crds:
                 cont = items["metadata"]["continue"]

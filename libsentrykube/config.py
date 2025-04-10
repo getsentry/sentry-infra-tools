@@ -34,6 +34,8 @@ class K8sConfig:
     # materialize the rendered manifest. Each cluster is a
     # subdirectory in this directory.
     materialized_manifests: str
+    # Same thing as `materialized_manifests`, but for helm values
+    materialized_helm_values: str
 
     @classmethod
     def from_conf(cls, region_name: str, conf: Mapping[str, Any] | None) -> K8sConfig:
@@ -69,11 +71,20 @@ class K8sConfig:
                 else DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
             )
 
+            materialized_helm_values = (
+                conf["materialized_helm_values"]
+                if "materialized_helm_values" in conf
+                else materialized_manifests.replace(
+                    "materialized_manifests", "materialized_helm_values"
+                )
+            )
+
         return K8sConfig(
             root=root,
             cluster_def_root=cluster_def_root,
             cluster_name=cluster_name,
             materialized_manifests=materialized_manifests,
+            materialized_helm_values=materialized_helm_values,
         )
 
 
@@ -113,9 +124,9 @@ class Config:
         with open(config_file_name) as file:
             configuration = load(file, Loader=SafeLoader)
 
-            assert (
-                "silo_regions" in configuration
-            ), "silo_regions entry not present in the config"
+            assert "silo_regions" in configuration, (
+                "silo_regions entry not present in the config"
+            )
             silo_regions = {
                 region_name: SiloRegion.from_conf(region_name, region_conf)
                 for region_name, region_conf in configuration["silo_regions"].items()
@@ -124,8 +135,8 @@ class Config:
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
 
     @cache
-    def get_customers(self) -> Sequence[str]:
+    def get_regions(self) -> Sequence[str]:
         """
-        Returns list of customers
+        Returns list of regions
         """
         return list(self.silo_regions.keys())

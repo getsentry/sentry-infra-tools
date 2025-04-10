@@ -199,3 +199,35 @@ def build_index() -> ResourceIndex:
                 trie.add_descendents(git_relative_path)
 
     return ResourceIndex(trie, partial_index)
+
+
+def build_helm_index() -> ResourceIndex:
+    """
+    Same as `build_index` but for helm services.
+    """
+
+    partial_index: MutableMapping[Path, Set[ResourceReference]] = defaultdict(set)
+    trie = TrieNode(None, {})
+
+    config = Config().silo_regions
+    for customer_name, conf in config.items():
+        clusters = list_clusters_for_customer(conf.k8s_config)
+        clusters_root = Path(conf.k8s_config.root) / conf.k8s_config.cluster_def_root
+        for c in clusters:
+            clear_service_paths()
+            cluster_name = c.name
+            partial_index[clusters_root].add(
+                ResourceReference(customer_name, cluster_name, None)
+            )
+            trie.add_descendents(clusters_root)
+
+            set_service_paths([], helm=c.helm_services.services)
+            for service_name in get_service_names(namespace="helm"):
+                full_path = get_service_path(service_name, namespace="helm").resolve()
+                git_relative_path = full_path.relative_to(workspace_root())
+                partial_index[git_relative_path].add(
+                    ResourceReference(customer_name, cluster_name, service_name)
+                )
+                trie.add_descendents(git_relative_path)
+
+    return ResourceIndex(trie, partial_index)

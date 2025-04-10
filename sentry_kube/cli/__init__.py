@@ -117,11 +117,11 @@ Get kubed.
         if (
             ctx.invoked_subcommand == "datadog-log-terragrunt"
             or ctx.invoked_subcommand == "datadog-log"
-            or ctx.invoked_subcommand == "get-customers"
+            or ctx.invoked_subcommand == "get-regions"
         ):
             return
 
-        newline_customers = "\n".join(config.get_customers())
+        newline_customers = "\n".join(config.get_regions())
         if not customer:
             die(
                 f"""Region was not specified, please use `-C` to specify a region.
@@ -162,7 +162,7 @@ Valid regions:
             )
             return
 
-        set_service_paths(cluster.services)
+        set_service_paths(cluster.services, helm=cluster.helm_services.services)
 
         if ctx.invoked_subcommand in (
             "rendervalues",
@@ -194,7 +194,7 @@ Valid regions:
             service_monitors=customer_config.service_monitors,
         )
 
-        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx, quiet)
+        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx)
 
         kube_set_context(context_name, kubeconfig=kubeconfig)
 
