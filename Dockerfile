@@ -51,8 +51,8 @@ RUN pip install --index-url https://pypi.devinfra.sentry.io/simple sentry-infra-
 WORKDIR /work
 # Dummy context to make sentry-kube happy
 RUN mkdir -p k8s/clusters && \
-  mkdir -p $SENTRY_KUBE_ROOT/.kube && \
-  echo '{"context": "_empty", "services": [], "iap_local_port": 22028}' > k8s/clusters/default.yaml && \
-  echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {saas: {bastion: " >> configuration.yaml && \
-  echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cluster_def_root: " >> configuration.yaml && \
-  echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml
+    mkdir -p $SENTRY_KUBE_ROOT/.kube && \
+    echo '{"context": "_empty", "services": [], "iap_local_port": 22028}' > k8s/clusters/default.yaml && \
+    echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {saas: {bastion: " >> configuration.yaml && \
+    echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cluster_def_root: " >> configuration.yaml && \
+    echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml
