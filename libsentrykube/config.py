@@ -49,6 +49,9 @@ class K8sConfig:
             cluster_def_root = DEFAULT_CONFIG_CLUSTER_DEF_ROOT
             cluster_name = DEFAULT_CONFIG_CLUSTER_NAME
             materialized_manifests = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
+            materialized_helm_values = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS.replace(
+                "materialized_manifests", "materialized_helm_values"
+            )
 
         else:
             root = conf["root"] if "root" in conf else DEFAULT_CONFIG_ROOT
