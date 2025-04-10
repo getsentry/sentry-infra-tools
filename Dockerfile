@@ -39,16 +39,6 @@ ENV KUBECONFIG_PATH=$SENTRY_KUBE_ROOT/.kube/config
 ENV SENTRY_KUBE_NO_CONTEXT="1"
 ENV SENTRY_KUBE_CUSTOMER="us"
 
-RUN /install.sh && rm -rf /root/.cache
-
-### Prepare the working directory
-WORKDIR /work
-# Dummy context to make sentry-kube happy
-RUN mkdir -p k8s/clusters && echo '{"context": "_empty", "services": []}' > k8s/clusters/default.yaml
-RUN echo "{sites: {saas_us: {name: us, region: us-central1, zone: b}}, silo_regions: {us: {bastion: " >> configuration.yaml
-RUN echo "{spawner_endpoint: 'https://test', site: saas_us}, k8s: {root: k8s, cluster_def_root: " >> configuration.yaml
-RUN echo "clusters, materialized_manifests: materialized_manifests}}}}" >> configuration.yaml
-
 # Use kubectl version from the build argument
 ARG SENTRY_KUBE_VERSION
 ARG SENTRY_KUBE_KUBECTL_VERSION
