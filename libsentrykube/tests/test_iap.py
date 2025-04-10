@@ -1,14 +1,30 @@
-from libsentrykube.iap import _dns_endpoint_check
+from unittest import mock
+import json
+from libsentrykube.iap import ensure_iap_tunnel
+
+dummy_kube_config = json.dumps(
+    {
+        "clusters": [
+            {
+                "certificate-authority-data": "secure-data",
+                "server": "server-url",
+                "name": "gke_test-proj_test-region_test-cluster",
+            }
+        ]
+    }
+)
 
 
-def test_dns_endpoint_detects_valid_host():
-    use_dns_endpoint = _dns_endpoint_check(
-        control_plane_host="gke-22df3be7a2d24d7eb1935c53b5cfaa2337ea-249720712700.us-east1.gke.goog",
-        quiet=True,
+@mock.patch("builtins.open", new_callable=mock.mock_open, read_data=dummy_kube_config)
+@mock.patch("yaml.dump")
+@mock.patch("os.getenv", return_value="/tmp/kubeconfig")
+def test_ensure_iap_tunnel(mock_getenv, mock_yaml_dump, mock_open) -> None:
+    mock_ctx = mock.Mock()
+    mock_ctx.obj.cluster.services_data.__getitem__ = mock.Mock(return_value=8080)
+    mock_ctx.obj.context_name = "gke_test-proj_test-region_test-cluster"
+    ensure_iap_tunnel(mock_ctx)
+
+    mock_yaml_dump.assert_called_once_with(
+        json.loads(dummy_kube_config),
+        mock.ANY,
     )
-    assert use_dns_endpoint is True
-
-
-def test_dns_endpoint_detects_invalid_host():
-    use_dns_endpoint = _dns_endpoint_check(control_plane_host="172.16.0.13", quiet=True)
-    assert use_dns_endpoint is False
