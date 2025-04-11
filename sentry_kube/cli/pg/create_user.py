@@ -153,7 +153,9 @@ def upload_plaintext_to_k8s_secret(
             is_modified = True
 
     if not is_modified:
-        print(f"Kubernetes secret `{namespace}/{secret_name}` is up to date. No new users.")
+        print(
+            f"Kubernetes secret `{namespace}/{secret_name}` is up to date. No new users."
+        )
         return
     print(f"### Kubernetes secret `{namespace}/{secret_name}`, AFTER")
     for secret_item in secret_data:
