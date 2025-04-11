@@ -125,23 +125,23 @@ def decode_userlist(userlist: str):
 
 
 def upload_plaintext_to_k8s_secret(
-    api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
+    api: CoreV1Api, users: dict[str, dict[str, str]], namespace: str, secret_name: str
 ) -> None:
     try:
-        secret = api.read_namespaced_secret(namespace="default", name=secret_name)
+        secret = api.read_namespaced_secret(namespace=namespace, name=secret_name)
     except ApiException as exc:
         if exc.status == 404:
-            print(f"Secret `default/{secret_name}` does not exist, creating...")
+            print(f"Secret `{namespace}/{secret_name}` does not exist, creating...")
             body = V1Secret()
             body.metadata = {"name": secret_name}
             body.data = {}
-            secret = api.create_namespaced_secret(namespace="default", body=body)
+            secret = api.create_namespaced_secret(namespace=namespace, body=body)
         else:
             raise
 
     secret_data = secret.data if secret.data else {}
 
-    print(f"### Kubernetes secret `default/{secret_name}`, BEFORE")
+    print(f"### Kubernetes secret `{namespace}/{secret_name}`, BEFORE")
     for secret_item in secret_data:
         print(f"{secret_item}: {secret_data[secret_item]}")
     print()
@@ -153,9 +153,9 @@ def upload_plaintext_to_k8s_secret(
             is_modified = True
 
     if not is_modified:
-        print(f"Kubernetes secret `default/{secret_name}` is up to date. No new users.")
+        print(f"Kubernetes secret `{namespace}/{secret_name}` is up to date. No new users.")
         return
-    print(f"### Kubernetes secret `default/{secret_name}`, AFTER")
+    print(f"### Kubernetes secret `{namespace}/{secret_name}`, AFTER")
     for secret_item in secret_data:
         print(f"{secret_item}: {secret_data[secret_item]}")
     print()
@@ -166,7 +166,7 @@ def upload_plaintext_to_k8s_secret(
         return
 
     api.patch_namespaced_secret(
-        namespace="default", name=secret_name, body={"data": secret_data}
+        namespace=namespace, name=secret_name, body={"data": secret_data}
     )
     print("Updated successfully.")
 
@@ -308,9 +308,12 @@ def create_user(
     # fetch current list of users
     users = {}
     secret_data = {}
+    namespace = "default"
     try:
+        if "/" in plaintext_k8s_secret:
+            namespace, plaintext_k8s_secret = plaintext_k8s_secret.split("/")
         secret = api.read_namespaced_secret(
-            namespace="default", name=plaintext_k8s_secret
+            namespace=namespace, name=plaintext_k8s_secret
         )
         secret_data = secret.data
     except ApiException as exc:
@@ -334,7 +337,7 @@ def create_user(
                 "scram": pg_scram_sha256(password),
             }
 
-        upload_plaintext_to_k8s_secret(api, users, plaintext_k8s_secret)
+        upload_plaintext_to_k8s_secret(api, users, namespace, plaintext_k8s_secret)
 
     # Step 2: generate userlists from plaintext secrets
     if generate_userlist:
