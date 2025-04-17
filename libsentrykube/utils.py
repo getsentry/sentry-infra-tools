@@ -386,6 +386,17 @@ def macos_notify(title: str, text: str) -> None:
         subprocess.call(["osascript", "-e", cmd, title, text])
 
 
+def get_pubkey() -> Path:
+    if os.getenv("SSH_PUBLIC_KEY_PATH"):
+        return Path(str(os.getenv("SSH_PUBLIC_KEY_PATH")))
+    raise Exception(
+        "Failed to find a pubkey."
+        "Please ensure you've exported SSH_PUBLIC_KEY_PATH to point your "
+        "SSH public key file.\n"
+        "Example: export SSH_PUBLIC_KEY_PATH=/Users/rgibert/.ssh/id_ed25519.pub"
+    )
+
+
 def get_service_registry_data(service_registry_id: str) -> dict:
     filepath = get_service_registry_filepath()
     return json.loads(filepath.read_text())[service_registry_id]
