@@ -1,3 +1,9 @@
+## 1.2.2
+
+### Various fixes & improvements
+
+- cleanup: remove unused commands (#108) by @bmckerry
+
 ## 1.2.1
 
 ### Various fixes & improvements
