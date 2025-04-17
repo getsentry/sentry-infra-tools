@@ -41,4 +41,26 @@ def test_config_load() -> None:
             sentry_region="st-my_other_customer",
             service_monitors=MappingProxyType({}),
         ),
+        "region2": SiloRegion(
+            k8s_config=K8sConfig(
+                root="k8s",
+                cluster_def_root="clusters/region2",
+                cluster_name=None,
+                materialized_manifests="materialized_manifests/region2",
+                materialized_helm_values="materialized_helm_values/region2",
+            ),
+            sentry_region="region2",
+            service_monitors=MappingProxyType({}),
+        ),
+        "region3": SiloRegion(
+            k8s_config=K8sConfig(
+                root="k8s",
+                cluster_def_root="clusters/region3",
+                cluster_name=None,
+                materialized_manifests="materialized_manifests/region3",
+                materialized_helm_values="materialized_helm_values/region3",
+            ),
+            sentry_region="region3",
+            service_monitors=MappingProxyType({}),
+        ),
     }

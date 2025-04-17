@@ -194,7 +194,7 @@ Valid regions:
             service_monitors=customer_config.service_monitors,
         )
 
-        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx, quiet)
+        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx)
 
         kube_set_context(context_name, kubeconfig=kubeconfig)
 

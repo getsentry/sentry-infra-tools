@@ -1,3 +1,27 @@
+## 1.2.1
+
+### Various fixes & improvements
+
+- chore: Add config defaults (#65) by @rgibert
+
+## 1.2.0
+
+### Various fixes & improvements
+
+- chore: Add support for us region to replace saas (#60) by @rgibert
+
+## 1.1.3
+
+### Various fixes & improvements
+
+- feat(kubectl): remove old private DNS connection to clusters (#109) by @bmckerry
+
+## 1.1.2
+
+### Various fixes & improvements
+
+- fix(readme): update install info (#107) by @bmckerry
+
 ## 1.1.1
 
 ### Various fixes & improvements

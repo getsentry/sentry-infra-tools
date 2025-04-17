@@ -7,6 +7,4 @@ silo_regions:
       cluster_def_root: clusters/us
       materialized_manifests: materialized_manifests/us
     sentry_region: us
-    service_monitors: {
-      getsentry: [ 123456789 ]
-    }
+    service_monitors: { getsentry: [123456789] }
