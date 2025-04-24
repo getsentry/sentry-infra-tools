@@ -38,56 +38,22 @@ class K8sConfig:
     materialized_helm_values: str
 
     @classmethod
-    def from_conf(cls, region_name: str, conf: Mapping[str, Any] | None) -> K8sConfig:
-        DEFAULT_CONFIG_ROOT = "k8s"
-        DEFAULT_CONFIG_CLUSTER_DEF_ROOT = f"clusters/{region_name}"
-        DEFAULT_CONFIG_CLUSTER_NAME = None
-        DEFAULT_CONFIG_MATERIALIZED_MANIFESTS = f"materialized_manifests/{region_name}"
-
-        if conf is None:
-            root = DEFAULT_CONFIG_ROOT
-            cluster_def_root = DEFAULT_CONFIG_CLUSTER_DEF_ROOT
-            cluster_name = DEFAULT_CONFIG_CLUSTER_NAME
-            materialized_manifests = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
-            materialized_helm_values = DEFAULT_CONFIG_MATERIALIZED_MANIFESTS.replace(
-                "materialized_manifests", "materialized_helm_values"
-            )
-
-        else:
-            root = conf["root"] if "root" in conf else DEFAULT_CONFIG_ROOT
-
-            cluster_def_root = (
-                conf["cluster_def_root"]
-                if "cluster_def_root" in conf
-                else DEFAULT_CONFIG_CLUSTER_DEF_ROOT
-            )
-
-            cluster_name = (
-                conf.get("cluster_name")
-                if "cluster_name" in conf
-                else DEFAULT_CONFIG_CLUSTER_NAME
-            )
-
-            materialized_manifests = (
-                conf["materialized_manifests"]
-                if "materialized_manifests" in conf
-                else DEFAULT_CONFIG_MATERIALIZED_MANIFESTS
-            )
-
-            materialized_helm_values = (
-                conf["materialized_helm_values"]
-                if "materialized_helm_values" in conf
-                else materialized_manifests.replace(
-                    "materialized_manifests", "materialized_helm_values"
-                )
-            )
-
+    def from_conf(cls, conf: Mapping[str, Any]) -> K8sConfig:
         return K8sConfig(
-            root=root,
-            cluster_def_root=cluster_def_root,
-            cluster_name=cluster_name,
-            materialized_manifests=materialized_manifests,
-            materialized_helm_values=materialized_helm_values,
+            root=str(conf["root"]),
+            cluster_def_root=str(conf["cluster_def_root"]),
+            cluster_name=str(conf.get("cluster_name"))
+            if "cluster_name" in conf
+            else None,
+            materialized_manifests=str(conf["materialized_manifests"]),
+            materialized_helm_values=str(
+                conf.get(
+                    "materialized_helm_values",
+                    conf["materialized_manifests"].replace(
+                        "materialized_manifests", "materialized_helm_values"
+                    ),
+                )
+            ),
         )
 
 
@@ -98,23 +64,12 @@ class SiloRegion:
     service_monitors: MappingProxyType[str, list[int]]
 
     @classmethod
-    def from_conf(
-        cls,
-        region_name: str,
-        silo_regions_conf: Mapping[str, Any] | None,
-    ) -> SiloRegion:
-        if silo_regions_conf is not None:
-            name_from_conf = silo_regions_conf.get("sentry_region", region_name)
-            k8s_config = silo_regions_conf.get("k8s", None)
-            service_monitors = silo_regions_conf.get("service_monitors", {})
-        else:
-            name_from_conf = region_name
-            k8s_config = None
-            service_monitors = {}
+    def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
+        k8s_config = silo_regions_conf["k8s"]
         return SiloRegion(
-            k8s_config=K8sConfig.from_conf(name_from_conf, k8s_config),
-            sentry_region=name_from_conf,
-            service_monitors=service_monitors,
+            k8s_config=K8sConfig.from_conf(k8s_config),
+            sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
+            service_monitors=silo_regions_conf.get("service_monitors", {}),
         )
 
 
@@ -131,8 +86,8 @@ class Config:
                 "silo_regions entry not present in the config"
             )
             silo_regions = {
-                region_name: SiloRegion.from_conf(region_name, region_conf)
-                for region_name, region_conf in configuration["silo_regions"].items()
+                name: SiloRegion.from_conf(conf)
+                for name, conf in configuration["silo_regions"].items()
             }
 
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
