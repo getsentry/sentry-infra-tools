@@ -112,10 +112,16 @@ def get_service_ctx(
         service_path = get_service_path(service_name, namespace=namespace)
 
     try:
-        env = Environment(loader=FileSystemLoader(service_path))
-        template = env.get_template(src_file)
-        rendered = template.render()
-        return yaml.safe_load(rendered) or {}
+        full_path = service_path / src_file
+        content = full_path.read_text()
+
+        # Render only if Jinja2 syntax is detected
+        if any(tag in content for tag in ("{{", "{%")):
+            env = Environment(loader=FileSystemLoader(service_path))
+            template = env.get_template(src_file)
+            content = template.render()
+
+        return yaml.safe_load(content) or {}
     except FileNotFoundError:
         return {}
 
