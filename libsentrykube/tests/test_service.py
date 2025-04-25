@@ -1,3 +1,4 @@
+import pytest
 from libsentrykube.context import init_cluster_context
 import os
 from pathlib import Path
@@ -5,6 +6,7 @@ from unittest.mock import patch, Mock
 
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
+    get_service_ctx,
     get_service_ctx_overrides,
     get_service_data,
     get_service_values,
@@ -17,6 +19,7 @@ from libsentrykube.service import (
 )
 from libsentrykube.utils import set_workspace_root_start
 from libsentrykube.utils import workspace_root
+import tempfile
 
 
 expected_service_data = {
@@ -322,3 +325,30 @@ def test_get_service_template_files():
         assert Path("template2.yml") in templates
         assert Path("template3.yaml.j2") in templates
         assert Path("template4.yml.j2") in templates
+
+
+@pytest.fixture
+def jinja_yaml_setup(monkeypatch):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+
+        (tmp_path / "_consumer_values.yaml").write_text("consumer_groups: data")
+
+        (tmp_path / "_values.yaml").write_text(
+            'workers: data\n{% include "_consumer_values.yaml" %}\n'
+        )
+
+        monkeypatch.setattr(
+            "libsentrykube.service.get_service_path", lambda *args, **kwargs: tmp_path
+        )
+
+        yield tmp_path
+
+
+def test_get_service_ctx_with_jinja_include(jinja_yaml_setup):
+    result = get_service_ctx(service_name="any", external=False)
+
+    assert result == {
+        "workers": "data",
+        "consumer_groups": "data",
+    }

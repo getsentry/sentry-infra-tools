@@ -3,7 +3,7 @@ from typing import List, Mapping, Any
 
 import click
 import yaml
-
+from jinja2 import Environment, FileSystemLoader
 from collections import OrderedDict
 from libsentrykube.config import Config
 from libsentrykube.customer import load_customer_data, load_region_helm_data
@@ -103,16 +103,19 @@ def get_service_ctx(
 ) -> dict:
     """
     For the given service, return the values specified in the corresponding {src_file}.
-
     If "external=True" is specified, treat the service name as the full service path.
+    This version supports Jinja2 templating in YAML files.
     """
     if external:
         service_path = workspace_root() / service_name
     else:
         service_path = get_service_path(service_name, namespace=namespace)
+
     try:
-        with open(service_path / src_file, "rb") as f:
-            return yaml.safe_load(f) or {}
+        env = Environment(loader=FileSystemLoader(service_path))
+        template = env.get_template(src_file)
+        rendered = template.render()
+        return yaml.safe_load(rendered) or {}
     except FileNotFoundError:
         return {}
 
