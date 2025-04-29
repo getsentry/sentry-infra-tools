@@ -120,6 +120,20 @@ def _consolidate_variables(
        preserve comments.
     6. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
 
+    ***
+    For all levels of overrides listed above, in the same directory of file system, we support
+    merging separete values files together, before proceding with the overriding logic 
+    Most common examples (numbers refer to override level listed above):
+    1. `k8s/services/getsentry/_values.yaml` content will be combined with `k8s/services/getsentry/_values_consumers.yaml`
+    3. `k8s/services/getsentry/regional_overrides/s4s/_values.yaml` content will be combined with
+       `k8s/services/getsentry/regional_overrides/s4s/_values_consumers.yaml`
+    4. `k8s/services/seer/region_overrides/de/default.yaml` content will be combined with `k8s/services/seer/region_overrides/de/default_2.yaml`
+    Files that should be combined have constraints:
+    - files cannot have conflicting keys. It will fail.
+    - files must be in the same directory in the file system
+    - file names must start with `_values` to be combined with `_values.yaml` file, or must start with `<cluster>` to be combined with `<cluster>.yaml`
+
+
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
     """

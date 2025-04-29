@@ -99,7 +99,9 @@ def check_helm_bin(f):
     return inner
 
 
-def _consolidate_ctx(region_name, service_name, cluster_name, src_file="_values.yaml"):
+def _consolidate_ctx(
+    region_name, service_name, cluster_name, src_files_prefix="_values"
+):
     from libsentrykube.service import (
         get_service_ctx,
         get_service_ctx_overrides,
@@ -109,33 +111,37 @@ def _consolidate_ctx(region_name, service_name, cluster_name, src_file="_values.
         assert_customer_is_defined_at_most_once,
     )
 
-    if src_file == "_values.yaml":
+    if src_files_prefix == "_values":
         assert_customer_is_defined_at_most_once(
             service_name, region_name, namespace="helm"
         )
 
-    ctx = get_service_ctx(service_name, namespace="helm", src_file=src_file)
+    ctx = get_service_ctx(service_name, namespace="helm")
     ctx_overrides = get_service_ctx_overrides(
         service_name,
         region_name,
         cluster_name,
         namespace="helm",
-        src_file=src_file,
+        src_files_prefix=src_files_prefix,
         cluster_as_folder=True,
     )
     ctx_common = get_common_regional_override(
-        service_name, region_name, namespace="helm", src_file=src_file
+        service_name, region_name, namespace="helm", src_files_prefix=src_files_prefix
     )
     if ctx_overrides or ctx_common:
         deep_merge_dict(ctx, ctx_common)
         deep_merge_dict(ctx, ctx_overrides)
     else:
         ctx_hierarchical = get_hierarchical_value_overrides(
-            service_name, region_name, cluster_name, namespace="helm", src_file=src_file
+            service_name,
+            region_name,
+            cluster_name,
+            namespace="helm",
+            src_files_prefix=src_files_prefix,
         )
         deep_merge_dict(ctx, ctx_hierarchical)
     # get_tools_managed_service_value_overrides?
-    if src_file == "_values.yaml":
+    if src_files_prefix == "_values":
         ctx_region, _ = get_helm_service_data(region_name, service_name, cluster_name)
         deep_merge_dict(ctx, ctx_region)
     return ctx
@@ -144,7 +150,7 @@ def _consolidate_ctx(region_name, service_name, cluster_name, src_file="_values.
 def _helm_chart_ctx(region_name, service_name, cluster_name) -> list[HelmRelease]:
     rv = []
     ctx = _consolidate_ctx(
-        region_name, service_name, cluster_name, src_file="_helm.yaml"
+        region_name, service_name, cluster_name, src_files_prefix="_helm"
     )
     chart_spec = ctx.get("chart", {})
     if isinstance(chart_spec, str):

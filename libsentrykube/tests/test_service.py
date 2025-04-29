@@ -1,3 +1,4 @@
+import pytest
 from libsentrykube.context import init_cluster_context
 import os
 from pathlib import Path
@@ -14,6 +15,7 @@ from libsentrykube.service import (
     get_service_path,
     get_service_template_files,
     write_managed_values_overrides,
+    merge_values_files_no_conflict,
 )
 from libsentrykube.utils import set_workspace_root_start
 from libsentrykube.utils import workspace_root
@@ -33,6 +35,12 @@ expected_service_values = {
                     "subkey2_2": 2,
                     "subkey2_3": ["value2_3_1"],
                 },
+                "consumer_key1": "value1",
+                "consumer_key2": {
+                    "subkey2_1": "value2_1",
+                    "subkey2_2": 2,
+                    "subkey2_3": ["value2_3_1"],
+                },
             },
             "service2": {},
         }
@@ -48,7 +56,13 @@ expected_service_value_overrides = {
                     "subkey2_4": [
                         "value2_4_1_replaced"  # From the managed file
                     ],
-                }
+                },
+                "consumer_key2": {
+                    "subkey2_3": ["value2_3_1_replaced"],
+                    "subkey2_4": [
+                        "value2_4_1_replaced"  # From the managed file
+                    ],
+                },
             },
             "service2": {},
         }
@@ -62,7 +76,11 @@ expected_service_value_managed_overrides = {
                 "key2": {
                     "subkey2_4": ["value2_4_1_managed_replaced"],
                     "subkey2_5": ["value2_5_1_managed_replaced"],
-                }
+                },
+                "consumer_key2": {
+                    "subkey2_4": ["value2_4_1_managed_replaced"],
+                    "subkey2_5": ["value2_5_1_managed_replaced"],
+                },
             },
             "service2": {},
         }
@@ -243,7 +261,7 @@ def test_get_helm_hierarchical_value_overrides(
         region_name="customer1",
         cluster_name="cluster1",
         namespace="helm",
-        src_file="_helm.yaml",
+        src_files_prefix="_helm",
     )
 
     assert returned_values == expected_hierarchical_and_regional_cluster_values
@@ -289,7 +307,7 @@ def test_helm_regional_cluster_value_overrides(
         region_name="customer1",
         cluster_name="cluster1",
         namespace="helm",
-        src_file="_helm.yaml",
+        src_files_prefix="_helm",
         cluster_as_folder=True,
     )
 
@@ -322,3 +340,24 @@ def test_get_service_template_files():
         assert Path("template2.yml") in templates
         assert Path("template3.yaml.j2") in templates
         assert Path("template4.yml.j2") in templates
+
+
+def test_verify_values_files_no_conflict_no_conflict():
+    base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
+    new = {"consumer_groups": {"consumer-1": {"other": "data"}}}
+    expected = {
+        "workers": {"rabbit-worker-1": {"some": "data"}},
+        "consumer_groups": {"consumer-1": {"other": "data"}},
+    }
+    result = merge_values_files_no_conflict(base.copy(), new, "_values_consumers.yaml")
+    assert result == expected
+
+
+def test_verify_values_files_no_conflict_with_conflict():
+    base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
+    new = {"workers": {"rabbit-worker-2": {"other": "data"}}}
+    with pytest.raises(ValueError) as excinfo:
+        merge_values_files_no_conflict(base.copy(), new, "_values_consumers.yaml")
+
+    assert "Conflict detected when merging file" in str(excinfo.value)
+    assert "duplicate keys {'workers'}" in str(excinfo.value)
