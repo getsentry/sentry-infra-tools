@@ -66,7 +66,7 @@ def test_secret_does_not_exist(mock_stdout):
     core_api_mock.read_namespaced_secret.side_effect = ApiException(status=404)
 
     users = {}
-    upload_plaintext_to_k8s_secret(core_api_mock, users, "example")
+    upload_plaintext_to_k8s_secret(core_api_mock, users, "default", "example")
     output = mock_stdout.getvalue()
 
     assert core_api_mock.create_namespaced_secret.call_count == 1
@@ -95,7 +95,7 @@ def test_secret_add_user(mock_stdout):
         }
     }
 
-    upload_plaintext_to_k8s_secret(core_api_mock, users, "example")
+    upload_plaintext_to_k8s_secret(core_api_mock, users, "default", "example")
     output = mock_stdout.getvalue()
 
     assert core_api_mock.patch_namespaced_secret.call_count == 1
