@@ -122,7 +122,7 @@ def _consolidate_variables(
 
     ***
     For all levels of overrides listed above, in the same directory of file system, we support
-    merging separete values files together, before proceding with the overriding logic 
+    merging separete values files together, before proceding with the overriding logic
     Most common examples (numbers refer to override level listed above):
     1. `k8s/services/getsentry/_values.yaml` content will be combined with `k8s/services/getsentry/_values_consumers.yaml`
     3. `k8s/services/getsentry/regional_overrides/s4s/_values.yaml` content will be combined with
