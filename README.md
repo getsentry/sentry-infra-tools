@@ -20,6 +20,8 @@ Run `./install.sh` to install sentry-kube.
 
 ## Releasing a new version
 
+Versioning note: When cutting a new release we should try to follow [SemVer](https://semver.org/).
+
 To cut a new release, we use the `Release` Github Actions Workflow. This can be triggered manually using the [UI](https://github.com/getsentry/sentry-infra-tools/actions/workflows/release.yml)
 
 ![image](https://github.com/user-attachments/assets/96fc8c19-4855-4258-8565-c959317d9723)
