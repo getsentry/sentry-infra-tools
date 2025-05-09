@@ -22,6 +22,18 @@ expected_consolidated_values = {
                         "value2_5_1_managed_replaced"
                     ],  # From the managed file
                 },
+                "consumer_key1": "value1",
+                "consumer_key2": {
+                    "subkey2_1": "value2_1",  # From the value file
+                    "subkey2_2": 2,  # From the value file
+                    "subkey2_3": ["value2_3_1_replaced"],  # From the region override
+                    "subkey2_4": [
+                        "value2_4_1_managed_replaced"
+                    ],  # From the managed file
+                    "subkey2_5": [
+                        "value2_5_1_managed_replaced"
+                    ],  # From the managed file
+                },
             },
             "service2": {
                 "key3": "three",  # From the cluster file

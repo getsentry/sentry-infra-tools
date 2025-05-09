@@ -95,30 +95,60 @@ def get_service_names(namespace: str | None = None) -> List[str]:
     return [s for s in _services.get(namespace, {}).keys()]
 
 
+def merge_values_files_no_conflict(base: dict, new: dict, file_name: str) -> dict:
+    """
+    All values files in each level of overriding should be flatly combined together.
+    There should be no key conflics
+    Example (these two files should have no key conflicts):
+    _values.yaml
+        workers:
+            rabbit-worker-1:
+                data
+
+    _values_consumer.yaml
+        consumer_groups:
+            consumer-1:
+                data
+    """
+    conflict_keys = base.keys() & new.keys()
+    if conflict_keys:
+        raise ValueError(
+            f"Conflict detected when merging file '{file_name}': duplicate keys {conflict_keys}"
+        )
+    base.update(new)
+    return base
+
+
 def get_service_ctx(
     service_name: str,
     external: bool = False,
     namespace: str | None = None,
-    src_file: str = "_values.yaml",
 ) -> dict:
     """
-    For the given service, return the values specified in the corresponding {src_file}.
+    For the given service, return the combined values from all _values*.yaml files in the service directory.
+
+    Raises an error if duplicate keys are found across files.
 
     If "external=True" is specified, treat the service name as the full service path.
     """
     if external:
-        service_path = workspace_root() / service_name
+        service_path_root = workspace_root() / service_name
     else:
-        service_path = get_service_path(service_name, namespace=namespace)
-    try:
-        with open(service_path / src_file, "rb") as f:
-            return yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        return {}
+        service_path_root = get_service_path(service_name, namespace=namespace)
+
+    ctx: dict[str, dict[str, Any]] = {}
+    for file in service_path_root.glob("_values*.yaml"):
+        try:
+            with open(file, "rb") as f:
+                values = yaml.safe_load(f) or {}
+                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+        except FileNotFoundError:
+            continue
+    return ctx
 
 
 def get_service_values(service_name: str, external: bool = False) -> dict:
-    return get_service_ctx(service_name, external=external, src_file="_values.yaml")
+    return get_service_ctx(service_name, external=external)
 
 
 def get_service_value_override_path(
@@ -151,29 +181,34 @@ def get_service_ctx_overrides(
     cluster_name: str = "default",
     external: bool = False,
     namespace: str | None = None,
-    src_file: str = "_values.yaml",
+    src_files_prefix: str = "_values",
     cluster_as_folder: bool = False,
 ) -> dict:
     """
     For the given service, return the values specified in the corresponding _values.yaml.
     If "external=True" is specified, treat the service name as the full service path.
     """
-    try:
-        override_path = get_service_value_override_path(
-            service_name, region_name, external, namespace=namespace
-        )
-        service_override_file = (
-            override_path / cluster_name / src_file
-            if cluster_as_folder
-            else override_path / f"{cluster_name}.yaml"
-        )
 
-        with open(service_override_file, "rb") as f:
-            values = yaml.safe_load(f) or {}
-
-        return values
-    except FileNotFoundError:
-        return {}
+    ctx: dict[str, dict[str, Any]] = {}
+    override_path = get_service_value_override_path(
+        service_name, region_name, external, namespace=namespace
+    )
+    service_override_file_root = (
+        override_path / cluster_name if cluster_as_folder else override_path
+    )
+    keyword_to_merge_files = (
+        f"{src_files_prefix}*.yaml" if cluster_as_folder else f"{cluster_name}*.yaml"
+    )
+    for file in service_override_file_root.glob(keyword_to_merge_files):
+        try:
+            if file.name.endswith("managed.yaml"):
+                continue
+            with open(file, "rb") as f:
+                values = yaml.safe_load(f) or {}
+                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+        except FileNotFoundError:
+            raise
+    return ctx
 
 
 def get_service_value_overrides(
@@ -192,7 +227,7 @@ def get_common_regional_override(
     region_name: str,
     external: bool = False,
     namespace: str | None = None,
-    src_file: str = "_values.yaml",
+    src_files_prefix: str = "_values",
 ) -> dict:
     """
     Helper function to load common regional configuration values.
@@ -200,18 +235,18 @@ def get_common_regional_override(
     Looks for a '_values.yaml' file in the region's override directory that contains
     settings shared across all clusters in that region.
     """
-    try:
-        common_service_override_file = (
-            get_service_value_override_path(
-                service_name, region_name, external, namespace=namespace
-            )
-            / src_file
-        )
-
-        with open(common_service_override_file, "rb") as f:
-            return yaml.safe_load(f) or {}
-    except FileNotFoundError:
-        return {}
+    common_service_override_file_root = get_service_value_override_path(
+        service_name, region_name, external, namespace=namespace
+    )
+    ctx: dict[str, dict[str, Any]] = {}
+    for file in common_service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
+        try:
+            with open(file, "rb") as f:
+                values = yaml.safe_load(f) or {}
+                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+        except FileNotFoundError:
+            continue
+    return ctx
 
 
 def get_hierarchical_value_overrides(
@@ -220,7 +255,7 @@ def get_hierarchical_value_overrides(
     cluster_name: str = "default",
     external: bool = False,
     namespace: str | None = None,
-    src_file: str = "_values.yaml",
+    src_files_prefix: str = "_values",
 ) -> dict:
     """
     Enables hierarchical configuration overrides with shared base values.
@@ -255,13 +290,15 @@ def get_hierarchical_value_overrides(
         if not override_group.is_dir():
             continue
 
+        service_override_file_root = service_regions_path / override_group.name
+        base_values: dict[str, dict[str, Any]] = {}
         try:
-            service_override_file = (
-                service_regions_path / override_group.name / src_file
-            )
-
-            with open(service_override_file, "rb") as f:
-                base_values = yaml.safe_load(f) or {}
+            for file in service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
+                with open(file, "rb") as f:
+                    values = yaml.safe_load(f) or {}
+                base_values = merge_values_files_no_conflict(
+                    base_values, values, file.name
+                )
         except FileNotFoundError:
             base_values = {}
 
@@ -275,12 +312,16 @@ def get_hierarchical_value_overrides(
             cluster_name,
             external,
             namespace=namespace,
-            src_file=src_file,
+            src_files_prefix=src_files_prefix,
             cluster_as_folder=namespace == "helm",
         )
 
         common_service_values = get_common_regional_override(
-            service_name, region_path, external, namespace=namespace, src_file=src_file
+            service_name,
+            region_path,
+            external,
+            namespace=namespace,
+            src_files_prefix=src_files_prefix,
         )
 
         # There must be either a cluster specific override file a _values.yaml in the region dir
