@@ -1,3 +1,7 @@
+## 1.3.0
+
+- No documented changes.
+
 ## 1.2.3
 
 ### Various fixes & improvements
