@@ -1,3 +1,15 @@
+## 1.2.3
+
+### Various fixes & improvements
+
+- chore(docs): Add note about determining new versions (#117) by @rgibert
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#114) by @victoria-yining-huang
+- add combine default values files (#114) by @victoria-yining-huang
+- sentry-kube pg: support optional namespace via / (#110) by @oioki
+- [pre-commit.ci] pre-commit autoupdate (#113) by @pre-commit-ci
+- [pre-commit.ci] pre-commit autoupdate (#94) by @pre-commit-ci
+- Revert "chore: Add config defaults" (#111) by @rgibert
+
 ## 1.2.2
 
 ### Various fixes & improvements
