@@ -29,9 +29,15 @@ class HelmChart:
     def is_local(self) -> bool:
         return self.repo is None
 
+    @property
+    def is_oci(self):
+        return self.repo is not None and self.repo.startswith("oci://")
+
     def cmd_target(self, cwd: Path) -> str:
         if self.is_local:
             return str(self.local_path(cwd))
+        if self.is_oci:
+            return self.repo  # type: ignore
         return self.name
 
     def local_path(self, parent: Path) -> Path | None:
@@ -116,7 +122,9 @@ def _consolidate_ctx(
             service_name, region_name, namespace="helm"
         )
 
-    ctx = get_service_ctx(service_name, namespace="helm")
+    ctx = get_service_ctx(
+        service_name, namespace="helm", src_files_prefix=src_files_prefix
+    )
     ctx_overrides = get_service_ctx_overrides(
         service_name,
         region_name,
@@ -401,7 +409,7 @@ def render(
         ]
         if kctx:
             helm_params.extend(["--kube-context", kctx])
-        if not helm_release.chart.is_local:
+        if not helm_release.chart.is_local and not helm_release.chart.is_oci:
             helm_params.extend(["--repo", helm_release.chart.repo])
         if helm_release.chart.version:
             helm_params.extend(["--version", helm_release.chart.version])
@@ -445,7 +453,7 @@ def diff(
         ]
         if kctx:
             helm_params.extend(["--kube-context", kctx])
-        if not helm_release.chart.is_local:
+        if not helm_release.chart.is_local and not helm_release.chart.is_oci:
             helm_params.extend(["--repo", helm_release.chart.repo])
         if helm_release.chart.version:
             helm_params.extend(["--version", helm_release.chart.version])
@@ -497,7 +505,7 @@ def apply(
         ]
         if kctx:
             helm_params.extend(["--kube-context", kctx])
-        if not helm_release.chart.is_local:
+        if not helm_release.chart.is_local and not helm_release.chart.is_oci:
             helm_params.extend(["--repo", helm_release.chart.repo])
         if helm_release.chart.version:
             helm_params.extend(["--version", helm_release.chart.version])
