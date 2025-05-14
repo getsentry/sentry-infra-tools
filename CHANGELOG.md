@@ -1,3 +1,9 @@
+## 1.3.1
+
+### Various fixes & improvements
+
+- fix: helm with OCI repos (#118) by @gi0baro
+
 ## 1.3.0
 
 - No documented changes.
