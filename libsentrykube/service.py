@@ -123,6 +123,7 @@ def get_service_ctx(
     service_name: str,
     external: bool = False,
     namespace: str | None = None,
+    src_files_prefix: str = "_values",
 ) -> dict:
     """
     For the given service, return the combined values from all _values*.yaml files in the service directory.
@@ -137,7 +138,7 @@ def get_service_ctx(
         service_path_root = get_service_path(service_name, namespace=namespace)
 
     ctx: dict[str, dict[str, Any]] = {}
-    for file in service_path_root.glob("_values*.yaml"):
+    for file in service_path_root.glob(f"{src_files_prefix}*.yaml"):
         try:
             with open(file, "rb") as f:
                 values = yaml.safe_load(f) or {}
