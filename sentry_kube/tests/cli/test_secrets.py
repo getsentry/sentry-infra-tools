@@ -7,7 +7,7 @@ from kubernetes.client import CoreV1Api
 from kubernetes.client.models import V1Secret
 from kubernetes.client.rest import ApiException
 
-from sentry_kube.cli.pg.create_user import (
+from sentry_kube.cli.secrets import (
     decode_userlist,
     merge_userlists,
     pg_scram_sha256,
