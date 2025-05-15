@@ -353,6 +353,7 @@ def upload_userlist_to_google_secret(
 @click.option("--userlist-k8s-secret", default="service-pgbouncer", type=str)
 @click.option("--plaintext-sm-secret-id", default="kafka", type=str)
 @click.option("--userlist-sm-secret-id", default="postgres", type=str)
+@click.option("--value", default=None, type=str)
 @click.option("--sm-key", default=None, type=str)
 @click.pass_context
 def secrets(
@@ -365,6 +366,7 @@ def secrets(
     userlist_k8s_secret,
     plaintext_sm_secret_id,
     userlist_sm_secret_id,
+    value,
     sm_key,
 ):
     project_id = ctx.obj.cluster.services_data["project"]
@@ -407,10 +409,10 @@ def secrets(
     # Step 1: generate plaintext secrets
     if generate_plaintext:
         for user in key_tuple:
-            password = token_urlsafe(16)
+            new_value = value if value else token_urlsafe(16)
             users[user] = {
-                "password": password,
-                "scram": pg_scram_sha256(password),
+                "password": new_value,
+                "scram": pg_scram_sha256(new_value),
             }
 
         upload_plaintext_to_k8s_secret(api, users, namespace, plaintext_k8s_secret)
@@ -427,7 +429,7 @@ def secrets(
     if copy_entry:
         if sm_key and len(key_tuple) > 1:
             print(
-                "The `--sm-key-id` argument should not be used when specifying multiple `--username` values."
+                "The `--sm-key` argument should not be used when specifying multiple `--username` values."
             )
             return
 
