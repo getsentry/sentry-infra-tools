@@ -176,6 +176,68 @@ def upload_plaintext_to_k8s_secret(
     print("Updated successfully.")
 
 
+def upload_plaintext_to_google_secret(
+    project_id: str, users: dict[str, str], secret_id: str
+):
+    # Create the Secret Manager client.
+    client = secretmanager.SecretManagerServiceClient()
+
+    data = {}
+
+    # get the current secret to ensure we're not double adding
+    version_id = "latest"
+    name = f"projects/{project_id}/secrets/{secret_id}/versions/{version_id}"
+    try:
+        response = client.access_secret_version(request={"name": name})
+        payload = response.payload.data.decode("utf-8")
+        data = json.loads(payload)
+    except exceptions.NotFound:
+        print(
+            f"ERROR: The secret `{secret_id}` should be created with Terragrunt before running this script."
+        )
+        return
+
+    merged_data = merge_secrets(data, users, f"Secret Manager secret `{secret_id}`")
+
+    if merged_data:
+        data = merged_data
+        secret_data = json.dumps(data).encode("utf-8")
+        parent = client.secret_path(project_id, secret_id)
+        client.add_secret_version(
+            request={"parent": parent, "payload": {"data": secret_data}}
+        )
+        print("Updated successfully.")
+
+
+def merge_secrets(data: dict[str, str], users: dict[str, str], label: str):
+    print(f"### {label}, BEFORE")
+    for k in data:
+        print(k, data[k])
+    print()
+
+    is_modified = False
+    for user in users:
+        if user not in data:
+            data[user] = users[user]
+            is_modified = True
+
+    if not is_modified:
+        print(f"{label} is up to date. No new users.\n")
+        return
+
+    print(f"### {label}, AFTER")
+    for k in data:
+        print(k, data[k])
+    print()
+
+    confirm = input("Type 'yes' to apply: ")
+    if confirm != "yes":
+        print("WARNING: This change was not applied.")
+        return
+
+    return data
+
+
 def merge_userlists(
     encoded_userlist: str, users: dict[str, dict[str, str]], label: str
 ):
@@ -286,25 +348,35 @@ def upload_userlist_to_google_secret(
 @click.option("--key", "key_tuple", required=False, multiple=True, type=str)
 @click.option("--generate-plaintext", type=bool, default=False, is_flag=True)
 @click.option("--generate-userlist", type=bool, default=False, is_flag=True)
+@click.option("--copy-entry", type=bool, default=False, is_flag=True)
 @click.option("--plaintext-k8s-secret", default="sentry-db-password", type=str)
 @click.option("--userlist-k8s-secret", default="service-pgbouncer", type=str)
+@click.option("--plaintext-sm-secret-id", default="kafka", type=str)
 @click.option("--userlist-sm-secret-id", default="postgres", type=str)
+@click.option("--value", default=None, type=str)
+@click.option("--sm-key", default=None, type=str)
 @click.pass_context
 def secrets(
     ctx,
     key_tuple,
     generate_plaintext,
     generate_userlist,
+    copy_entry,
     plaintext_k8s_secret,
     userlist_k8s_secret,
+    plaintext_sm_secret_id,
     userlist_sm_secret_id,
+    value,
+    sm_key,
 ):
     project_id = ctx.obj.cluster.services_data["project"]
     client = kube_get_client()
     api = CoreV1Api(client)
 
-    if not (generate_plaintext or generate_userlist):
-        print("Either --generate-plaintext or --generate-userlist should be specified.")
+    if not (generate_plaintext or generate_userlist or copy_entry):
+        print(
+            "Either --generate-plaintext, --generate-userlist, or --copy-entry should be specified."
+        )
         return
 
     if generate_userlist and key_tuple:
@@ -337,10 +409,10 @@ def secrets(
     # Step 1: generate plaintext secrets
     if generate_plaintext:
         for user in key_tuple:
-            password = token_urlsafe(16)
+            new_value = value if value else token_urlsafe(16)
             users[user] = {
-                "password": password,
-                "scram": pg_scram_sha256(password),
+                "password": new_value,
+                "scram": pg_scram_sha256(new_value),
             }
 
         upload_plaintext_to_k8s_secret(api, users, namespace, plaintext_k8s_secret)
@@ -352,3 +424,18 @@ def secrets(
 
         upload_userlist_to_k8s_secret(api, users, userlist_k8s_secret)
         upload_userlist_to_google_secret(project_id, users, userlist_sm_secret_id)
+
+    # Other mode: copying entries from K8s secrets to Secret Manager
+    if copy_entry:
+        if sm_key and len(key_tuple) > 1:
+            print(
+                "The `--sm-key` argument should not be used when specifying multiple `--username` values."
+            )
+            return
+
+        users = {}
+        for user in key_tuple:
+            _key = sm_key if sm_key else user
+            users[_key] = secret_data[user]
+
+        upload_plaintext_to_google_secret(project_id, users, plaintext_sm_secret_id)
