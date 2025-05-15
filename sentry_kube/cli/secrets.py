@@ -13,8 +13,11 @@ from kubernetes.client.rest import ApiException
 
 from libsentrykube.utils import kube_get_client
 
+__all__ = ("secrets",)
+
 # run this script only once per region.
-# this script generates and uploads the necessary username and passwords for postgres pgbouncer users.
+# this script generates and uploads the necessary username and passwords for postgres pgbouncer users
+# but also could be useful for other operations with secrets.
 
 salt_size = 16
 digest_len = 32
@@ -39,12 +42,12 @@ The script is addition-only. This is a safety net to avoid accidental user remov
 
 ## Step 1
 
-The first step generates plaintext passwords. You can specify several `--username` parameters if you
+The first step generates plaintext passwords. You can specify several `--key` parameters if you
 want:
 
 \b
 ```
-sentry-kube -C {env} pg create-user --generate-plaintext --username alice --username bob
+sentry-kube -C {env} secrets --generate-plaintext --key alice --key bob
 ```
 
 The resulting password will be saved to `sentry-db-password` k8s secret (or you can override it with
@@ -66,7 +69,7 @@ no need to specify usernames, as they will be taken from the plaintext k8s secre
 
 \b
 ```
-sentry-kube -C {env} pg create-user --generate-userlist
+sentry-kube -C {env} secrets --generate-userlist
 ```
 
 This will update userlists both in k8s secrets and Secret Manager.
@@ -279,16 +282,17 @@ def upload_userlist_to_google_secret(
         print("Updated successfully.")
 
 
-@click.option("--username", required=False, multiple=True, type=str)
+@click.command()
+@click.option("--key", "key_tuple", required=False, multiple=True, type=str)
 @click.option("--generate-plaintext", type=bool, default=False, is_flag=True)
 @click.option("--generate-userlist", type=bool, default=False, is_flag=True)
 @click.option("--plaintext-k8s-secret", default="sentry-db-password", type=str)
 @click.option("--userlist-k8s-secret", default="service-pgbouncer", type=str)
 @click.option("--userlist-sm-secret-id", default="postgres", type=str)
 @click.pass_context
-def create_user(
+def secrets(
     ctx,
-    username,
+    key_tuple,
     generate_plaintext,
     generate_userlist,
     plaintext_k8s_secret,
@@ -303,8 +307,8 @@ def create_user(
         print("Either --generate-plaintext or --generate-userlist should be specified.")
         return
 
-    if generate_userlist and username:
-        print("You should not specify --username when using --generate-userlist")
+    if generate_userlist and key_tuple:
+        print("You should not specify --key when using --generate-userlist")
         return
 
     # fetch current list of users
@@ -332,7 +336,7 @@ def create_user(
 
     # Step 1: generate plaintext secrets
     if generate_plaintext:
-        for user in username:
+        for user in key_tuple:
             password = token_urlsafe(16)
             users[user] = {
                 "password": password,
