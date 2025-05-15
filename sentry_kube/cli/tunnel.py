@@ -130,7 +130,10 @@ def tunnel(ctx, host, host_port, project, verbose, region, zone, local_port, bro
             # click.echo(line)
             if "Picking local unused port" in line:
                 pattern = r"\[(\d+)\]"
-                local_port = re.search(pattern, line).group(1)
+                local_port_match = re.search(pattern, line)
+                if local_port_match is None:
+                    raise RuntimeError(f"Failed to parse port from line: {line}")
+                local_port = local_port_match.group(1)
                 url = f"localhost:{local_port}"
                 click.echo(f"Tunnel now available at {url}")
                 if browser:

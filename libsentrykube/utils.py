@@ -16,10 +16,11 @@ import click
 import httpx
 from functools import cache
 from pathlib import Path
-from typing import IO, Any, Iterable, Iterator, List, Tuple
+from typing import IO, Any, Iterable, Iterator, List, Tuple, NoReturn
 
 import kubernetes
-from yaml import SafeDumper, safe_dump_all, safe_load_all
+from yaml import safe_dump_all, safe_load_all
+from yaml.dumper import SafeDumper
 
 # Run `sentry-kube kubectl version --short` to view the client and cluster version.
 # According to https://kubernetes.io/releases/version-skew-policy/#kubectl
@@ -41,7 +42,7 @@ SafeDumper.add_representer(
 )
 
 
-def die(msg: str = "") -> None:
+def die(msg: str = "") -> NoReturn:
     click.echo(msg, err=True)
     raise click.Abort()
 

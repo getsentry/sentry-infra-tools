@@ -426,4 +426,4 @@ def run_pod(
         exec_args.extend(ctx.args if ctx.args else ["sh"])
         exec_ctx.args = exec_args
 
-        exec_ctx.invoke(kubectl.callback, False, False)
+        exec_ctx.invoke(kubectl, False, False)

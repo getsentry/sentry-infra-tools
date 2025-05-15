@@ -27,9 +27,7 @@ __all__ = ("validate",)
     default=False,
     help="Only run the unit tests. Default `False`",
 )
-def validate(
-    ctx: click.core.Context, service: str, skip_lint: bool, skip_unit_tests: bool
-):
+def validate(ctx: click.Context, service: str, skip_lint: bool, skip_unit_tests: bool):
     """
     Renders the specified service and then runs linter and unit tests.
     """

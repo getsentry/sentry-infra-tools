@@ -28,7 +28,7 @@ def scp(ctx, *, compression, source, target):
     try:
         private_id_key_path = get_pubkey()
     except Exception as e:
-        die(e)
+        die(f"Unexpected error: {type(e)}: {str(e)}")
 
     args = [source, target]
     for idx, location in enumerate(args):
@@ -42,10 +42,10 @@ def scp(ctx, *, compression, source, target):
     if compression:
         args = ["-C", *args]
 
-    cmd = (
+    cmd = [
         "scp",
         "-i",
         f"{private_id_key_path}",
         *args,
-    )
+    ]
     execvp(cmd)
