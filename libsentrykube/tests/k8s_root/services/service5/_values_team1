@@ -1,0 +1,4 @@
+workers_team1:
+    worker_3:
+        foo: baz
+        size: 90

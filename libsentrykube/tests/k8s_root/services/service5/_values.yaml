@@ -1,0 +1,6 @@
+key1: value1
+
+workers:
+    worker_1:
+        foo: bar
+        size: 500

@@ -219,6 +219,17 @@ def render_services(
         yield out if raw else pretty(out)
 
 
+def merge_values_no_conflict_filter(value1: dict, value2: dict) -> dict:
+    conflict_keys = value1.keys() & value2.keys()
+    if conflict_keys:
+        raise ValueError(
+            f"Conflictng keys when merging dicts: Cannot overwrite key '{conflict_keys.pop()}'"
+        )
+    base = dict(value1)
+    base.update(value2)
+    return base
+
+
 def render_templates(
     customer_name,
     service_name,
@@ -260,6 +271,7 @@ def render_templates(
     env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
     # helper to safely get nested path or default
     env.filters["get_path"] = _get_path
+    env.filters["merge_no_conflicts"] = merge_values_no_conflict_filter
 
     rendered_templates = []
     for template in template_files:

@@ -1,0 +1,9 @@
+{% set workers = values.get('workers', dict()) %}
+{% set team1_workers = values.get('workers_team1', dict()) %}
+{% set all_workers = merge_no_conflicts(workers, workers_team1) %}
+{% for (key, config) in all_workers %}
+workers:
+    {{ key }}:
+        foo: {{ config.bar }}
+        size: {{ config.size }}
+{{ endfor }}
