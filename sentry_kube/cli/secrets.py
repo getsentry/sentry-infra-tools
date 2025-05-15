@@ -177,7 +177,7 @@ def upload_plaintext_to_k8s_secret(
 
 
 def upload_plaintext_to_google_secret(
-    project_id: str, users: dict[str, dict[str, str]], secret_id: str
+    project_id: str, users: dict[str, str], secret_id: str
 ):
     # Create the Secret Manager client.
     client = secretmanager.SecretManagerServiceClient()
@@ -353,7 +353,7 @@ def upload_userlist_to_google_secret(
 @click.option("--userlist-k8s-secret", default="service-pgbouncer", type=str)
 @click.option("--plaintext-sm-secret-id", default="kafka", type=str)
 @click.option("--userlist-sm-secret-id", default="postgres", type=str)
-@click.option("--sm-key-id", default=None, type=str)
+@click.option("--sm-key", default=None, type=str)
 @click.pass_context
 def secrets(
     ctx,
@@ -365,7 +365,7 @@ def secrets(
     userlist_k8s_secret,
     plaintext_sm_secret_id,
     userlist_sm_secret_id,
-    sm_key_id,
+    sm_key,
 ):
     project_id = ctx.obj.cluster.services_data["project"]
     client = kube_get_client()
@@ -425,15 +425,15 @@ def secrets(
 
     # Other mode: copying entries from K8s secrets to Secret Manager
     if copy_entry:
-        if sm_key_id and len(username) > 1:
+        if sm_key and len(key_tuple) > 1:
             print(
                 "The `--sm-key-id` argument should not be used when specifying multiple `--username` values."
             )
             return
 
         users = {}
-        for user in username:
-            _key = sm_key_id if sm_key_id else user
+        for user in key_tuple:
+            _key = sm_key if sm_key else user
             users[_key] = secret_data[user]
 
         upload_plaintext_to_google_secret(project_id, users, plaintext_sm_secret_id)
