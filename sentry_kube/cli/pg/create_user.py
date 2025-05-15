@@ -173,7 +173,9 @@ def upload_plaintext_to_k8s_secret(
     print("Updated successfully.")
 
 
-def upload_plaintext_to_google_secret(project_id: str, users: dict[str, dict[str, str]], secret_id: str):
+def upload_plaintext_to_google_secret(
+    project_id: str, users: dict[str, dict[str, str]], secret_id: str
+):
     # Create the Secret Manager client.
     client = secretmanager.SecretManagerServiceClient()
 
@@ -192,9 +194,7 @@ def upload_plaintext_to_google_secret(project_id: str, users: dict[str, dict[str
         )
         return
 
-    merged_data = merge_secrets(
-        data, users, f"Secret Manager secret `{secret_id}`"
-    )
+    merged_data = merge_secrets(data, users, f"Secret Manager secret `{secret_id}`")
 
     if merged_data:
         data = merged_data
@@ -368,7 +368,9 @@ def create_user(
     api = CoreV1Api(client)
 
     if not (generate_plaintext or generate_userlist or copy_entry):
-        print("Either --generate-plaintext, --generate-userlist, or --copy-entry should be specified.")
+        print(
+            "Either --generate-plaintext, --generate-userlist, or --copy-entry should be specified."
+        )
         return
 
     if generate_userlist and username:
@@ -420,7 +422,9 @@ def create_user(
     # Other mode: copying entries from K8s secrets to Secret Manager
     if copy_entry:
         if sm_key_id and len(username) > 1:
-            print("The `--sm-key-id` argument should not be used when specifying multiple `--username` values.")
+            print(
+                "The `--sm-key-id` argument should not be used when specifying multiple `--username` values."
+            )
             return
 
         users = {}
