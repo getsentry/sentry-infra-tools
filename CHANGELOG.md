@@ -1,3 +1,10 @@
+## 1.3.2
+
+### Various fixes & improvements
+
+- feat(secrets): add `--copy-entry` mode (#119) by @oioki
+- feat: universal secrets (#120) by @oioki
+
 ## 1.3.1
 
 ### Various fixes & improvements
