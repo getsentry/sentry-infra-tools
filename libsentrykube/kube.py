@@ -219,15 +219,13 @@ def render_services(
         yield out if raw else pretty(out)
 
 
-def merge_values_no_conflict_filter(value1: dict, value2: dict) -> dict:
+def merge_values_no_conflict_filter(value1: dict, value2: dict) -> None:
     conflict_keys = value1.keys() & value2.keys()
     if conflict_keys:
         raise ValueError(
             f"Conflictng keys when merging dicts: Cannot overwrite key '{conflict_keys.pop()}'"
         )
-    base = dict(value1)
-    base.update(value2)
-    return base
+    value1.update(value2)
 
 
 def render_templates(
