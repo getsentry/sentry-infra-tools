@@ -81,8 +81,11 @@ def load_cluster_configuration(config: K8sConfig, cluster_name: str) -> Cluster:
         ).get_template(f"{cluster_name}.yaml")
 
         data = safe_load(template.render())
-    except (FileNotFoundError, TemplateNotFound):
+    except FileNotFoundError:
         die(f"Cluster '{cluster_name}' not found.")
+    except TemplateNotFound as e:
+        print(e)
+        die("Failed to render template.")
 
     services = data.pop("services")
     helm_spec = data.pop("helm", {})
