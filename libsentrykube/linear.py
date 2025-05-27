@@ -1,6 +1,6 @@
 import os
 import requests
-from typing import cast, Optional
+from typing import Optional
 
 LINEAR_API_URL = os.getenv("LINEAR_API_URL")
 LINEAR_API_KEY = os.getenv("LINEAR_API_KEY")
@@ -33,10 +33,7 @@ def _generate_title(region: str, service: str):
     return f"[Drift Detection]: {region} {service} drifted"
 
 
-def _create_issue(region: str, service: str, body: str) -> None:
-    """
-    Creates the Linear issue.
-    """
+def _create_issue(region: str, service: str, body: str) -> requests.Response:
 
     mutation = """
     mutation CreateIssue($input: IssueCreateInput!) {
@@ -63,17 +60,19 @@ def _create_issue(region: str, service: str, body: str) -> None:
             "title": _generate_title(region, service),
             "description": f"There has been drift detected on {service} for {region}.\n\n{body}",
             "priority": 2,
-            "labelIds": [LINEAR_LABEL_DRIFT_ID]
+            "labelIds": [LINEAR_LABEL_DRIFT_ID],
         }
     }
 
-    response = requests.post(LINEAR_API_URL, headers=HEADERS, json={
-        "query": mutation,
-        "variables": variables
-    })
-    resp = response.json()
-    if 'errors' in resp:
-        raise Exception(f"Failed to create linear issue: {resp}")
+    response = requests.post(
+        LINEAR_API_URL,
+        headers=HEADERS,
+        json={"query": mutation, "variables": variables},
+    )
+    data = response.json()
+
+    if "errors" in data:
+        raise Exception(f"Failed to create linear issue: {data['errors']}")
     else:
         _associate_sentry_infrastructure(resp["data"]["issueCreate"]["issue"]["id"])
 
@@ -110,7 +109,6 @@ def _find_issue(region: str, service: str) -> Optional[str]:
     """
     Looks for an open existing issue. Return issue key if issue exists, otherwise return nothing.
     """
-
     # GraphQL mutation
     query = """
     query FindOpenIssues($title: String!, $teamId: ID!) {
@@ -154,7 +152,7 @@ def _find_issue(region: str, service: str) -> Optional[str]:
             return resp["data"]["issues"]["nodes"][0]
         else:
             return None
-    
+
 
 def _add_comment(issue_id: str, comment: str) -> None:
     """

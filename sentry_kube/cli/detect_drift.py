@@ -1,6 +1,5 @@
 from .apply import diff
 import click
-import os
 from jinja2.exceptions import TemplateError
 from libsentrykube.service import get_service_names
 from libsentrykube.linear import drift_issue
@@ -14,7 +13,11 @@ MAX_JIRA_DESCRIPTION_LENGTH = 32000
 
 @click.command()
 @click.option(
-    "--issue", "-i", is_flag=True, default=False, help="Attempts to create/update an issue"
+    "--issue",
+    "-i",
+    is_flag=True,
+    default=False,
+    help="Attempts to create/update an issue",
 )
 @click.pass_context
 def detect_drift(ctx, issue):
