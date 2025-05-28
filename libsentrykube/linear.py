@@ -2,14 +2,14 @@ import os
 import requests
 from typing import Optional
 
-LINEAR_API_URL = os.getenv("LINEAR_API_URL")
-LINEAR_API_KEY = os.getenv("LINEAR_API_KEY")
+LINEAR_API_URL = os.getenv("LINEAR_API_URL", "")
+LINEAR_API_KEY = os.getenv("LINEAR_API_KEY", "")
 LINEAR_TEAM_ID = "dc463b36-b68c-432a-a6d1-2beaab9b5cec" # SRE
 LINEAR_LABEL_DRIFT_ID = "dd3625d7-011b-4d52-8c74-086d539bb508" # Ops Issue -> Drift
 LINEAR_CUSTOMER_ID = "4b73f8a3-ef58-4ae7-95f1-489cf54f9766" # Sentry Infrastructure
 
 HEADERS = {
-    "Authorization": LINEAR_API_KEY,
+    "Authorization": LINEAR_API_KEY or "",
     "Content-Type": "application/json"
 }
 
@@ -19,8 +19,8 @@ def drift_issue(region: str, service: str, body: str) -> None:
     does not already exist. Otherwise, it will add a comment that the drift
     still exists.
     """
-    if issue := _find_issue(region, service):
-        _add_comment(issue["id"], "[UPDATED] Drift still present.")
+    if issue_id := _find_issue(region, service):
+        _add_comment(issue_id, "[UPDATED] Drift still present.")
     else:
         _create_issue(region, service, body)
 
@@ -149,7 +149,7 @@ def _find_issue(region: str, service: str) -> Optional[str]:
         raise Exception(f"Unable to search for linear issue: {resp['errors']}")
     else:
         if len(resp["data"]["issues"]["nodes"]) > 0:
-            return resp["data"]["issues"]["nodes"][0]
+            return resp["data"]["issues"]["nodes"][0]["id"]
         else:
             return None
 
