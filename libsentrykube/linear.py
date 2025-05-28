@@ -13,6 +13,7 @@ HEADERS = {
     "Content-Type": "application/json"
 }
 
+
 def drift_issue(region: str, service: str, body: str) -> None:
     """
     Attempts to create an issue reporting drift on region and service if one
@@ -69,10 +70,10 @@ def _create_issue(region: str, service: str, body: str) -> requests.Response:
         headers=HEADERS,
         json={"query": mutation, "variables": variables},
     )
-    data = response.json()
 
-    if "errors" in data:
-        raise Exception(f"Failed to create linear issue: {data['errors']}")
+    resp = response.json()
+    if "errors" in resp:
+        raise Exception(f"Failed to create linear issue: {resp}")
     else:
         _associate_sentry_infrastructure(resp["data"]["issueCreate"]["issue"]["id"])
 
@@ -96,20 +97,22 @@ def _associate_sentry_infrastructure(issue_id: str):
         }
     }
 
-    response = requests.post(LINEAR_API_URL, headers=HEADERS, json={
-        "query": mutation,
-        "variables": variables
-    })
+    response = requests.post(
+        LINEAR_API_URL,
+        headers=HEADERS,
+        json={"query": mutation, "variables": variables},
+    )
     customer_link = response.json()
-    if 'errors' in customer_link:
-        raise Exception(f"Failed to create link customer to issue: {customer_link['errors']}")
+    if "errors" in customer_link:
+        raise Exception(
+            f"Failed to create link customer to issue: {customer_link['errors']}"
+        )
 
 
 def _find_issue(region: str, service: str) -> Optional[str]:
     """
     Looks for an open existing issue. Return issue key if issue exists, otherwise return nothing.
     """
-    # GraphQL mutation
     query = """
     query FindOpenIssues($title: String!, $teamId: ID!) {
       issues(
@@ -139,13 +142,12 @@ def _find_issue(region: str, service: str) -> Optional[str]:
         "title": _generate_title(region, service),
         "teamId": LINEAR_TEAM_ID,
     }
-    response = requests.post(LINEAR_API_URL, headers=HEADERS, json={
-        "query": query,
-        "variables": variables
-    })
+    response = requests.post(
+        LINEAR_API_URL, headers=HEADERS, json={"query": query, "variables": variables}
+    )
     resp = response.json()
 
-    if 'errors' in resp:
+    if "errors" in resp:
         raise Exception(f"Unable to search for linear issue: {resp['errors']}")
     else:
         if len(resp["data"]["issues"]["nodes"]) > 0:
@@ -171,10 +173,12 @@ def _add_comment(issue_id: str, comment: str) -> None:
             "body": comment,
         }
     }
-    response = requests.post(LINEAR_API_URL, headers=HEADERS, json={
-        "query": mutation,
-        "variables": variables
-    })
+    response = requests.post(
+        LINEAR_API_URL,
+        headers=HEADERS,
+        json={"query": mutation, "variables": variables},
+    )
     resp = response.json()
     if 'errors' in resp:
         raise Exception(f"Failed to add comment: {resp['errors']}",)
+
