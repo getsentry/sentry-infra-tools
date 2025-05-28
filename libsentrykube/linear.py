@@ -179,6 +179,7 @@ def _add_comment(issue_id: str, comment: str) -> None:
         json={"query": mutation, "variables": variables},
     )
     resp = response.json()
-    if 'errors' in resp:
-        raise Exception(f"Failed to add comment: {resp['errors']}",)
-
+    if "errors" in resp:
+        raise Exception(
+            f"Failed to add comment: {resp['errors']}",
+        )
