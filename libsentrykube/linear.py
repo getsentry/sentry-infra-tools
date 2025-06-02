@@ -23,7 +23,7 @@ def drift_issue(region: str, service: str, body: str) -> None:
         _create_issue(region, service, body)
 
 
-def _generate_title(region: str, service: str):
+def _generate_title(region: str, service: str) -> str:
     """
     Helper method to generate the issue title, which is also used for finding
     previous issues that are still open.
@@ -31,7 +31,7 @@ def _generate_title(region: str, service: str):
     return f"[Drift Detection]: {region} {service} drifted"
 
 
-def _create_issue(region: str, service: str, body: str) -> requests.Response:
+def _create_issue(region: str, service: str, body: str) -> None:
     mutation = """
     mutation CreateIssue($input: IssueCreateInput!) {
         issueCreate(input: $input) {
