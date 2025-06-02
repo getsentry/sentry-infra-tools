@@ -1,9 +1,8 @@
 from .apply import diff
 import click
-import os
 from jinja2.exceptions import TemplateError
 from libsentrykube.service import get_service_names
-from libsentrykube.jira import JiraConfig, drift_jira_issue
+from libsentrykube.linear import drift_issue
 from libsentrykube.events import report_event_to_datadog
 
 __all__ = ("detect_drift",)
@@ -14,23 +13,21 @@ MAX_JIRA_DESCRIPTION_LENGTH = 32000
 
 @click.command()
 @click.option(
-    "--jira", "-j", is_flag=True, default=False, help="Attempts to create a jira ticket"
+    "--issue",
+    "-i",
+    is_flag=True,
+    default=False,
+    help="Attempts to create/update an issue",
 )
 @click.pass_context
-def detect_drift(ctx, jira):
+def detect_drift(ctx, issue):
     """
     This command runs a `sentry-kube diff` on all available services and reports
-    all outstanding changes. If the Jira flag is enabled, it will also
-    attempt to create a ticket per drifted service.
+    all outstanding changes. If the issue flag is enabled, it will also
+    attempt to create an issue per drifted service.
     """
     services = get_service_names()
     click.echo(services)
-
-    url = os.getenv("JIRA_URL")
-    project_key = os.getenv("JIRA_PROJECT_KEY")
-    user_email = os.getenv("JIRA_USER_EMAIL")
-    api_token = os.getenv("JIRA_API_TOKEN")
-    jiraConf = JiraConfig(url, project_key, user_email, api_token)
 
     for service in services:
         output = None
@@ -38,21 +35,21 @@ def detect_drift(ctx, jira):
             output = ctx.invoke(diff, services=[service], important_diffs_only=True)
         except TemplateError as e:
             click.secho(e, fg="red")
-            if jira:
+            if issue:
                 error_report = (
                     "{code}\n" + f"Jinja2 error for service {service}: {e}" + "\n{code}"
                 )
-                drift_jira_issue(jiraConf, ctx.obj.customer_name, service, error_report)
+                drift_issue(ctx.obj.customer_name, service, error_report)
         # _run_kubectl_diff raises kubectl errors as ClickExceptions
         except click.ClickException as e:
             click.secho(e, fg="red")
-            if jira:
+            if issue:
                 error_report = (
                     "{code}\n"
                     + f"kubectl error for service {service}: {e}"
                     + "\n{code}"
                 )
-                drift_jira_issue(jiraConf, ctx.obj.customer_name, service, error_report)
+                drift_issue(ctx.obj.customer_name, service, error_report)
 
         if output:
             click.echo(f"service {service} drifted!")
@@ -61,8 +58,8 @@ def detect_drift(ctx, jira):
                 + "\n".join(output)[:MAX_JIRA_DESCRIPTION_LENGTH]
                 + "\n{code}"
             )
-            if jira:
-                drift_jira_issue(jiraConf, ctx.obj.customer_name, service, drift_report)
+            if issue:
+                drift_issue(ctx.obj.customer_name, service, drift_report)
 
             report_event_to_datadog(
                 "[Drift Detection]",
