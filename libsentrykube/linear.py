@@ -4,14 +4,11 @@ from typing import Optional
 
 LINEAR_API_URL = os.getenv("LINEAR_API_URL", "")
 LINEAR_API_KEY = os.getenv("LINEAR_API_KEY", "")
-LINEAR_TEAM_ID = "dc463b36-b68c-432a-a6d1-2beaab9b5cec" # SRE
-LINEAR_LABEL_DRIFT_ID = "dd3625d7-011b-4d52-8c74-086d539bb508" # Ops Issue -> Drift
-LINEAR_CUSTOMER_ID = "4b73f8a3-ef58-4ae7-95f1-489cf54f9766" # Sentry Infrastructure
+LINEAR_TEAM_ID = "dc463b36-b68c-432a-a6d1-2beaab9b5cec"  # SRE
+LINEAR_LABEL_DRIFT_ID = "dd3625d7-011b-4d52-8c74-086d539bb508"  # Ops Issue -> Drift
+LINEAR_CUSTOMER_ID = "4b73f8a3-ef58-4ae7-95f1-489cf54f9766"  # Sentry Infrastructure
 
-HEADERS = {
-    "Authorization": LINEAR_API_KEY or "",
-    "Content-Type": "application/json"
-}
+HEADERS = {"Authorization": LINEAR_API_KEY or "", "Content-Type": "application/json"}
 
 
 def drift_issue(region: str, service: str, body: str) -> None:
@@ -35,7 +32,6 @@ def _generate_title(region: str, service: str):
 
 
 def _create_issue(region: str, service: str, body: str) -> requests.Response:
-
     mutation = """
     mutation CreateIssue($input: IssueCreateInput!) {
         issueCreate(input: $input) {
