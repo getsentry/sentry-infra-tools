@@ -74,7 +74,7 @@ def _create_issue(region: str, service: str, body: str) -> requests.Response:
         _associate_sentry_infrastructure(resp["data"]["issueCreate"]["issue"]["id"])
 
 
-def _associate_sentry_infrastructure(issue_id: str):
+def _associate_sentry_infrastructure(issue_id: str) -> None:
     """
     Associates the Sentry Infrastructure customer to the issue for better classification
     of the issue.
