@@ -131,15 +131,24 @@ Valid regions:
 """
             )
 
+        customer_config = None
+        # Load the region if it exists in the config
         if customer in config.silo_regions:
             customer_config = config.silo_regions[customer]
         else:
-            print(
-                f"""Invalid region specified, must be one of:
-{newline_customers}
-"""
-            )
-            exit(1)
+            # Check if we have any aliases that match our region
+            for region in config.silo_regions:
+                if customer in config.silo_regions[region].aliases:
+                    customer_config = config.silo_regions[region]
+                    break
+
+            if customer_config is None:
+                print(
+                    f"""Invalid region specified, must be one of:
+    {newline_customers}
+    """
+                )
+                exit(1)
 
         if not quiet:
             click.echo(f"Operating for customer {customer}.")
