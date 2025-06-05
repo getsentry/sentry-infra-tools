@@ -9,7 +9,7 @@ def test_config_load() -> None:
 
     assert conf.silo_regions == {
         "saas": SiloRegion(
-            aliases=["us"],
+            aliases=["saasalias"],
             k8s_config=K8sConfig(
                 root="k8s_root",
                 cluster_def_root="clusters/saas",
