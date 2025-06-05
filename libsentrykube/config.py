@@ -59,6 +59,7 @@ class K8sConfig:
 
 @dataclass(frozen=True)
 class SiloRegion:
+    aliases: list[str]
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
@@ -67,6 +68,7 @@ class SiloRegion:
     def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
         k8s_config = silo_regions_conf["k8s"]
         return SiloRegion(
+            aliases=silo_regions_conf.get("aliases", []),
             k8s_config=K8sConfig.from_conf(k8s_config),
             sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
             service_monitors=silo_regions_conf.get("service_monitors", {}),

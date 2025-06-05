@@ -2,11 +2,10 @@
 # for each silo-region (region or single tenant).
 silo_regions:
   saas:
+    aliases: [saasalias]
     k8s:
       root: k8s
       cluster_def_root: clusters/us
       materialized_manifests: materialized_manifests/us
     sentry_region: us
-    service_monitors: {
-      getsentry: [ 123456789 ]
-    }
+    service_monitors: { getsentry: [123456789] }
