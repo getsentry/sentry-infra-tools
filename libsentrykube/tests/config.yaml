@@ -1,5 +1,6 @@
 silo_regions:
   saas:
+    aliases: [us]
     k8s:
       root: k8s_root
       # relative to k8s root
