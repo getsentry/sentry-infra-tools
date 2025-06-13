@@ -1,3 +1,21 @@
+## 1.4.0
+
+### Various fixes & improvements
+
+- feat: Support skipping validating regions (#127) by @rgibert
+- feat: support region aliases (#124) by @rgibert
+- fixed mypy issue (#122) by @ghengiskhanh
+- fixed method return call for precommit hook (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- fixed mypy issues (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- Customer is now added to the issue; updated globals (#122) by @ghengiskhanh
+- added Linear integraiton for Drift tickets and swapped it in instead of jira (#122) by @ghengiskhanh
+- [pre-commit.ci] pre-commit autoupdate (#116) by @pre-commit-ci
+- improve error messages on missing jinja include (#121) by @keeakita
+
 ## 1.3.2
 
 ### Various fixes & improvements
