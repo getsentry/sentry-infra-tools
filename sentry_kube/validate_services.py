@@ -14,7 +14,8 @@ import click
 
 @click.command()
 @click.argument("filename", nargs=-1)
-def test_services(filename: Sequence[str]) -> None:
+@click.option("--skip-region", multiple=True)
+def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
     """
     Identifies the sentry-kube k8s services that may have been modified
     by the PR based on the changeset and lints/tests each of them.
@@ -37,7 +38,14 @@ def test_services(filename: Sequence[str]) -> None:
     lint_errors_count = 0
 
     for resource in resources_to_render:
-        click.echo(f"Using {resource.customer_name} {resource.cluster_name}", err=True)
+        # Skip specified regions
+        if resource.customer_name in skip_region:
+            click.echo(f"Skipping {resource.customer_name} {resource.cluster_name}")
+            continue
+
+        click.echo(
+            f"Validating {resource.customer_name} {resource.cluster_name}", err=True
+        )
         init_cluster_context(resource.customer_name, resource.cluster_name)
 
         if resource.service_name is not None:
