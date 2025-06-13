@@ -7,6 +7,7 @@ from googleapiclient.errors import HttpError
 from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config, SiloRegion
 from libsentrykube.helm import HelmData
+from libsentrykube.utils import die
 
 ALLOYDB_DISCOVERY_SERVICEURL = (
     "https://{api}.googleapis.com/$discovery/rest?version={apiVersion}"
@@ -35,7 +36,14 @@ def get_region_config(config: Config, region_name: str) -> SiloRegion:
 def load_customer_data(
     config: Config, customer_name: str, cluster_name: str
 ) -> Dict[str, Any]:
-    region_config = get_region_config(config, customer_name)
+    try:
+        region_config = get_region_config(config, customer_name)
+    except ValueError:
+        die(
+            f"Region '{customer_name}' not found. Did you mean one of: \n\n"
+            f"{config.get_regions()}"
+        )
+
     k8s_config = region_config.k8s_config
 
     # If the customer has only one cluster, just use the value from config
@@ -49,7 +57,14 @@ def load_customer_data(
 def load_region_helm_data(
     config: Config, region_name: str, cluster_name: str
 ) -> HelmData:
-    region_config = get_region_config(config, region_name)
+    try:
+        region_config = get_region_config(config, region_name)
+    except ValueError:
+        die(
+            f"Region '{region_name}' not found. Did you mean one of: \n\n"
+            f"{config.get_regions()}"
+        )
+
     k8s_config = region_config.k8s_config
 
     # If the customer has only one cluster, just use the value from config
