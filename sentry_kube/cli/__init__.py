@@ -12,6 +12,7 @@ import sentry_sdk
 from libsentrykube.cluster import Cluster
 from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config
+from libsentrykube.customer import get_region_config
 from libsentrykube.events import ensure_datadog_api_key_set
 from libsentrykube.iap import ensure_iap_tunnel
 from libsentrykube.service import set_service_paths
@@ -131,24 +132,15 @@ Valid regions:
 """
             )
 
-        customer_config = None
-        # Load the region if it exists in the config
-        if customer in config.silo_regions:
-            customer_config = config.silo_regions[customer]
-        else:
-            # Check if we have any aliases that match our region
-            for region in config.silo_regions:
-                if customer in config.silo_regions[region].aliases:
-                    customer_config = config.silo_regions[region]
-                    break
+        customer_config = get_region_config(config, customer)
 
-            if customer_config is None:
-                print(
-                    f"""Invalid region specified, must be one of:
-    {newline_customers}
-    """
-                )
-                exit(1)
+        if customer_config is None:
+            print(
+                f"""Invalid region specified, must be one of:
+{newline_customers}
+"""
+            )
+            exit(1)
 
         if not quiet:
             click.echo(f"Operating for customer {customer}.")

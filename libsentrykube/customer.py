@@ -5,9 +5,8 @@ import googleapiclient.discovery
 from googleapiclient.errors import HttpError
 
 from libsentrykube.cluster import load_cluster_configuration
-from libsentrykube.config import Config
+from libsentrykube.config import Config, SiloRegion
 from libsentrykube.helm import HelmData
-from libsentrykube.utils import die
 
 ALLOYDB_DISCOVERY_SERVICEURL = (
     "https://{api}.googleapis.com/$discovery/rest?version={apiVersion}"
@@ -15,17 +14,29 @@ ALLOYDB_DISCOVERY_SERVICEURL = (
 
 
 @cache
+def get_region_config(config: Config, region_name: str) -> SiloRegion:
+    region_config = None
+    if region_name in config.silo_regions:
+        region_config = config.silo_regions[region_name]
+    else:
+        # Check if we have any aliases that match our region
+        for region in config.silo_regions:
+            if region_name in config.silo_regions[region].aliases:
+                region_config = config.silo_regions[region]
+                break
+
+    if region_config is None:
+        raise ValueError(f"Region '{region_name}' not found")
+
+    return region_config
+
+
+@cache
 def load_customer_data(
     config: Config, customer_name: str, cluster_name: str
 ) -> Dict[str, Any]:
-    try:
-        customer_config = config.silo_regions[customer_name]
-    except KeyError:
-        die(
-            f"Customer '{customer_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_regions()}"
-        )
-    k8s_config = customer_config.k8s_config
+    region_config = get_region_config(config, customer_name)
+    k8s_config = region_config.k8s_config
 
     # If the customer has only one cluster, just use the value from config
     cluster_name = k8s_config.cluster_name or cluster_name
@@ -38,13 +49,7 @@ def load_customer_data(
 def load_region_helm_data(
     config: Config, region_name: str, cluster_name: str
 ) -> HelmData:
-    try:
-        region_config = config.silo_regions[region_name]
-    except KeyError:
-        die(
-            f"Region '{region_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_regions()}"
-        )
+    region_config = get_region_config(config, region_name)
     k8s_config = region_config.k8s_config
 
     # If the customer has only one cluster, just use the value from config
