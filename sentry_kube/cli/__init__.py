@@ -141,14 +141,6 @@ Valid regions:
 """
             )
 
-        if customer_config is None:
-            print(
-                f"""Invalid region specified, must be one of:
-{newline_customers}
-"""
-            )
-            exit(1)
-
         if not quiet:
             click.echo(f"Operating for customer {customer}.")
 
