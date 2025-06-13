@@ -132,7 +132,14 @@ Valid regions:
 """
             )
 
-        customer_config = get_region_config(config, customer)
+        try:
+            customer_config = get_region_config(config, customer)
+        except ValueError:
+            die(
+                f"""Invalid region specified, must be one of:
+{newline_customers}
+"""
+            )
 
         if customer_config is None:
             print(
