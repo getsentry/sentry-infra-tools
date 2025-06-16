@@ -346,18 +346,18 @@ def test_get_var_from_multilevel_dicts():
 
 def test_get_var_from_dicts_converts_non_strings():
     # Test with integer value
-    assert get_var_from_dicts("number", {"number": 42}) == "42"
+    assert get_var_from_dicts("number", {"number": 42}) == 42
 
     # Test with boolean value
-    assert get_var_from_dicts("flag", {"flag": True}) == "True"
+    assert get_var_from_dicts("flag", {"flag": True}) is True
 
     # Test with list value
-    assert get_var_from_dicts("items", {"items": [1, 2, 3]}) == "[1, 2, 3]"
+    assert get_var_from_dicts("items", {"items": [1, 2, 3]}) == [1, 2, 3]
 
     # Test with dict value
-    assert (
-        get_var_from_dicts("config", {"config": {"key": "value"}}) == "{'key': 'value'}"
-    )
+    assert get_var_from_dicts("config", {"config": {"key": "value"}}) == {
+        "key": "value"
+    }
 
     # Test that None is preserved
     assert get_var_from_dicts("empty", {"empty": None}) is None
