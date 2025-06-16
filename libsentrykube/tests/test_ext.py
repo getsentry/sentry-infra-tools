@@ -289,3 +289,56 @@ def test_get_var_from_dicts():
 
     # Test with None values
     assert get_var_from_dicts("color", {"color": None}, {"color": "blue"}) is None
+
+
+def test_get_var_from_multilevel_dicts():
+    # Test finding value in nested dict
+    assert (
+        get_var_from_dicts(
+            "rainbow.color",
+            {"rainbow": {"color": "red"}},
+            {"rainbow": {"color": "blue"}},
+        )
+        == "red"
+    )
+
+    # Test finding value in second dict when first dict is missing the key
+    assert (
+        get_var_from_dicts(
+            "rainbow.color", {"rainbow": {}}, {"rainbow": {"color": "blue"}}
+        )
+        == "blue"
+    )
+
+    # Test finding value in second dict when first dict is missing the parent key
+    assert (
+        get_var_from_dicts("rainbow.color", {}, {"rainbow": {"color": "blue"}})
+        == "blue"
+    )
+
+    # Test default value when key not found at any level
+    assert get_var_from_dicts("rainbow.color", {}, {}, default="green") == "green"
+
+    # Test None when not found and no default
+    assert get_var_from_dicts("rainbow.color", {}, {}) is None
+
+    # Test with multiple levels
+    assert (
+        get_var_from_dicts(
+            "a.b.c", {"a": {"b": {"c": "deep"}}}, {"a": {"b": {"c": "shallow"}}}
+        )
+        == "deep"
+    )
+
+    # Test with None values at any level
+    assert (
+        get_var_from_dicts("a.b.d", {"a": None}, {"a": {"b": {"c": "value"}}}) is None
+    )
+
+    # Test with non-dict value in the path
+    assert (
+        get_var_from_dicts(
+            "a.b.c", {"a": {"b": "not a dict"}}, {"a": {"b": {"c": "value"}}}
+        )
+        == "value"
+    )

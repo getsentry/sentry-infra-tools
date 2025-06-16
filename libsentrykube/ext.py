@@ -818,10 +818,26 @@ def get_var_from_dicts(
     """
     Search for a key in a sequence of dictionaries, returning the first value found.
     If no value is found, returns the default value.
+
+    If the key contains dots (e.g. "foo.bar"), it will attempt to traverse nested dictionaries.
+    For example, with key "foo.bar" it will look for d["foo"]["bar"] in each dictionary.
     """
+    key_parts = key.split(".")
+
     for d in dicts:
-        if key in d:
-            return d[key]
+        current = d
+        found = True
+
+        # Traverse the dictionary using the key parts
+        for part in key_parts:
+            if not isinstance(current, dict) or part not in current:
+                found = False
+                break
+            current = current[part]
+
+        if found:
+            return current
+
     return default
 
 
