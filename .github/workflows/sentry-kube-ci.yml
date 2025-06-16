@@ -22,13 +22,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: '1.22'
+          go-version: "1.22"
 
       - name: Install kube-linter
         # Needed for the kube-linter integration tests.
         # It this starts taking too long we can xfail those tests and isolate
         # the logic more.
-        run: go install golang.stackrox.io/kube-linter/cmd/kube-linter@v0.6.8
+        run: go install golang.stackrox.io/kube-linter/cmd/kube-linter@v0.7.3
 
       - name: Run sentry-kube tests
         run: |
