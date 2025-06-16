@@ -814,7 +814,7 @@ class MachineType(SimpleExtension):
 
 def get_var_from_dicts(
     key: str, *dicts: Dict[str, Any], default: str | None = None
-) -> str | None:
+) -> Any:
     """
     Search for a key in a sequence of dictionaries, returning the first value found.
     If no value is found, returns the default value.
