@@ -812,6 +812,19 @@ class MachineType(SimpleExtension):
         return {}
 
 
+def get_var_from_dicts(
+    key: str, *dicts: Dict[str, Any], default: str | None = None
+) -> str | None:
+    """
+    Search for a key in a sequence of dictionaries, returning the first value found.
+    If no value is found, returns the default value.
+    """
+    for d in dicts:
+        if key in d:
+            return d[key]
+    return default
+
+
 class GetVar(SimpleExtension):
     """
     This only exists because jinja2 doesn't support macros that return values.
@@ -826,7 +839,4 @@ class GetVar(SimpleExtension):
 
     @cache
     def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
-        for d in dicts:
-            if key in d:
-                return d[key]
-        return default
+        return get_var_from_dicts(key, *dicts, default=default)

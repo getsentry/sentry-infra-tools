@@ -8,6 +8,7 @@ from libsentrykube.ext import (
     format_slack_channels,
     format_slos,
     format_teams,
+    get_var_from_dicts,
 )
 
 
@@ -265,3 +266,26 @@ def test_format_teams_multi_tags():
     assert (
         format_teams(teams=teams) == "Ultra Mega Team (ultra_mega) tags={beast,kumbaya}"
     )
+
+
+def test_get_var_from_dicts():
+    # Test finding value in first dict
+    assert get_var_from_dicts("color", {"color": "red"}, {"color": "blue"}) == "red"
+
+    # Test finding value in second dict
+    assert get_var_from_dicts("color", {}, {"color": "blue"}) == "blue"
+
+    # Test default value when not found
+    assert get_var_from_dicts("color", {}, {}, default="green") == "green"
+
+    # Test None when not found and no default
+    assert get_var_from_dicts("color", {}, {}) is None
+
+    # Test with multiple dicts
+    assert (
+        get_var_from_dicts("color", {}, {"color": "yellow"}, {"color": "blue"})
+        == "yellow"
+    )
+
+    # Test with None values
+    assert get_var_from_dicts("color", {"color": None}, {"color": "blue"}) is None
