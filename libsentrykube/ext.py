@@ -853,6 +853,5 @@ class GetVar(SimpleExtension):
     params.get(var, component.get(var, service.get("some global default"))) => get_var(var, params, component, service, default="some global default")
     """
 
-    @cache
     def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
         return get_var_from_dicts(key, *dicts, default=default)
