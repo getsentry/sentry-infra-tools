@@ -1,3 +1,11 @@
+## 1.5.0
+
+### Various fixes & improvements
+
+- add support for multi-level dicts to getval (#129) by @mwarkentin
+- fix(config): Aliases aren't used every where (#128) by @rgibert
+- (test): fix test_lint failures (#130) by @mwarkentin
+
 ## 1.4.0
 
 ### Various fixes & improvements
