@@ -247,6 +247,8 @@ def render_templates(
     env = Environment(
         extensions=extensions,
         keep_trailing_newline=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
         undefined=StrictUndefined,
         loader=FileSystemLoader(str(service_path)),
     )
