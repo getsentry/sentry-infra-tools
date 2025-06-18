@@ -15,6 +15,7 @@ from libsentrykube.loader import load_macros
 from libsentrykube.service import (
     build_materialized_path,
     get_service_data,
+    get_service_flags,
     get_service_path,
     get_service_template_files,
     get_service_values,
@@ -31,6 +32,11 @@ from libsentrykube.utils import (
     kube_get_client,
     pretty,
 )
+
+
+DEFAULT_FLAGS = {
+    "jinja_whitespace_easymode": True,
+}
 
 
 @dataclass
@@ -227,6 +233,8 @@ def render_templates(
     filters: Optional[List[str]] = None,
 ) -> str:
     service_path = get_service_path(service_name)
+    service_flags = get_service_flags(service_name)
+    flags = DEFAULT_FLAGS | service_flags
     template_files = sorted(list(get_service_template_files(service_name)))
 
     # Sort files because configmaps need to be first
@@ -247,8 +255,8 @@ def render_templates(
     env = Environment(
         extensions=extensions,
         keep_trailing_newline=True,
-        trim_blocks=True,
-        lstrip_blocks=True,
+        trim_blocks=flags["jinja_whitespace_easymode"],
+        lstrip_blocks=flags["jinja_whitespace_easymode"],
         undefined=StrictUndefined,
         loader=FileSystemLoader(str(service_path)),
     )

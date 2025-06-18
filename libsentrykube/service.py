@@ -404,6 +404,20 @@ def write_managed_values_overrides(
         yaml.dump(values, file)
 
 
+def get_service_flags(service_name: str, namespace: str | None = None) -> dict:
+    service_dir = get_service_path(service_name, namespace=namespace)
+    if not service_dir.is_dir():
+        click.echo(f"Service directory {service_dir} not found.", err=True)
+        raise click.Abort()
+
+    flags_file = service_dir / "_service_flags.yaml"
+    if flags_file.exists():
+        with open(flags_file, "rb") as f:
+            flags = yaml.safe_load(f) or {}
+            return flags
+    return {}
+
+
 def get_service_data(
     customer_name: str, service_name: str, cluster_name: str = "default"
 ):
