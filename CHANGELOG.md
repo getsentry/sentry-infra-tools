@@ -1,3 +1,9 @@
+## 1.7.0
+
+### Various fixes & improvements
+
+- PRODENG-159: add service-level feature flag for simplified jinja whitespace handling (#131) by @mwarkentin
+
 ## 1.6.0
 
 ### Various fixes & improvements
