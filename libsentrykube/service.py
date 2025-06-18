@@ -410,7 +410,7 @@ def get_service_flags(service_name: str, namespace: str | None = None) -> dict:
         click.echo(f"Service directory {service_dir} not found.", err=True)
         raise click.Abort()
 
-    flags_file = service_dir / "_service_flags.yaml"
+    flags_file = service_dir / "_sk_flags.yaml"
     if flags_file.exists():
         with open(flags_file, "rb") as f:
             flags = yaml.safe_load(f) or {}
