@@ -624,19 +624,26 @@ class GeoIPInitContainer(SimpleExtension):
     used as a container inside of pod.spec.initContainers.
     """
 
-    def run(self, image: str = "busybox:1.36"):
-        return json.dumps(
-            {
-                "image": image,
-                "name": "init-geoip",
-                "args": [
-                    "/bin/sh",
-                    "-ec",
-                    "while [ ! -f /usr/local/share/GeoIP/GeoIP2-City.mmdb ]; do sleep 1; done",  # noqa: E501
-                ],
-                "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
+    def run(self, image: str = "busybox:1.36", security_hardened: bool = False):
+        res: dict[str, Any] = {
+            "image": image,
+            "name": "init-geoip",
+            "args": [
+                "/bin/sh",
+                "-ec",
+                "while [ ! -f /usr/local/share/GeoIP/GeoIP2-City.mmdb ]; do sleep 1; done",  # noqa: E501
+            ],
+            "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
+        }
+        if security_hardened:
+            res["securityContext"] = {
+                "allowPrivilegeEscalation": False,
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "runAsUser": 65534,
+                "runAsGroup": 65534,
             }
-        )
+        return json.dumps(res)
 
 
 class ServiceAccount(SimpleExtension):

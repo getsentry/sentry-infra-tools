@@ -1,3 +1,10 @@
+## 1.6.0
+
+### Various fixes & improvements
+
+- feat(k8s): security hardening of geoip and pgbouncer sidecar (#133) by @oioki
+- chore(pgbouncer): use auth unconditionally (#132) by @oioki
+
 ## 1.5.0
 
 ### Various fixes & improvements
