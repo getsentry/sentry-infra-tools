@@ -625,7 +625,7 @@ class GeoIPInitContainer(SimpleExtension):
     """
 
     def run(self, image: str = "busybox:1.36", security_hardened: bool = False):
-        res = {
+        res: dict[str, Any] = {
             "image": image,
             "name": "init-geoip",
             "args": [
