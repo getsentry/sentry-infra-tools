@@ -131,8 +131,8 @@ class PGBouncerSidecar(SimpleExtension):
         config_filename = "/etc/pgbouncer.ini"
         cmd = "exec su-exec pgbouncer pgbouncer /etc/pgbouncer.ini"
         if security_hardened:
-          config_filename = "/etc/pgbouncer/pgbouncer.ini"
-          cmd = "pgbouncer /etc/pgbouncer/pgbouncer.ini"
+            config_filename = "/etc/pgbouncer/pgbouncer.ini"
+            cmd = "pgbouncer /etc/pgbouncer/pgbouncer.ini"
 
         res: dict[str, Any] = {
             "image": image,
@@ -204,10 +204,12 @@ EOF
             }
         ]
         if security_hardened:
-            res["volumeMounts"].append({
-                "name": "etc-pgbouncer",
-                "mountPath": "/etc/pgbouncer",
-            })
+            res["volumeMounts"].append(
+                {
+                    "name": "etc-pgbouncer",
+                    "mountPath": "/etc/pgbouncer",
+                }
+            )
         if livenessProbe:
             res["livenessProbe"] = livenessProbe
         return json.dumps(res)
