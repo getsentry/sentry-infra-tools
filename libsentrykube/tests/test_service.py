@@ -2,7 +2,7 @@ import pytest
 from libsentrykube.context import init_cluster_context
 import os
 from pathlib import Path
-from unittest.mock import patch, Mock
+from unittest.mock import patch, Mock, mock_open
 
 from libsentrykube.service import (
     get_hierarchical_value_overrides,
@@ -16,6 +16,7 @@ from libsentrykube.service import (
     get_service_template_files,
     write_managed_values_overrides,
     merge_values_files_no_conflict,
+    get_service_flags,
 )
 from libsentrykube.utils import set_workspace_root_start
 from libsentrykube.utils import workspace_root
@@ -361,3 +362,151 @@ def test_verify_values_files_no_conflict_with_conflict():
 
     assert "Conflict detected when merging file" in str(excinfo.value)
     assert "duplicate keys {'workers'}" in str(excinfo.value)
+
+
+def test_get_service_flags_file_exists():
+    """Test get_service_flags when the _sk_flags.yaml file exists."""
+    expected_flags = {"feature_enabled": True, "max_instances": 5, "timeout": 30}
+
+    # Create a mock service directory with the flags file
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_flags_file = Mock()
+    mock_flags_file.exists.return_value = True
+
+    # Mock the path concatenation
+    def mock_truediv(self, other):
+        if other == "_sk_flags.yaml":
+            return mock_flags_file
+        return Mock()
+
+    mock_service_dir.__truediv__ = mock_truediv
+
+    with (
+        patch("libsentrykube.service.get_service_path", return_value=mock_service_dir),
+        patch(
+            "builtins.open",
+            mock_open(read_data="feature_enabled: true\nmax_instances: 5\ntimeout: 30"),
+        ),
+        patch("yaml.safe_load", return_value=expected_flags),
+    ):
+        result = get_service_flags("test-service")
+        assert result == expected_flags
+
+
+def test_get_service_flags_file_not_exists():
+    """Test get_service_flags when the _sk_flags.yaml file doesn't exist."""
+    # Create a mock service directory without the flags file
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_flags_file = Mock()
+    mock_flags_file.exists.return_value = False
+
+    # Mock the path concatenation
+    def mock_truediv(self, other):
+        if other == "_sk_flags.yaml":
+            return mock_flags_file
+        return Mock()
+
+    mock_service_dir.__truediv__ = mock_truediv
+
+    with patch("libsentrykube.service.get_service_path", return_value=mock_service_dir):
+        result = get_service_flags("test-service")
+        assert result == {}
+
+
+def test_get_service_flags_service_directory_not_exists():
+    """Test get_service_flags when the service directory doesn't exist."""
+    import click
+
+    # Create a mock service directory that doesn't exist
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = False
+
+    with (
+        patch("libsentrykube.service.get_service_path", return_value=mock_service_dir),
+        patch("click.echo") as mock_echo,
+    ):
+        with pytest.raises(click.Abort):
+            get_service_flags("test-service")
+        mock_echo.assert_called_once()
+
+
+def test_get_service_flags_with_namespace():
+    """Test get_service_flags with a specific namespace."""
+    expected_flags = {"namespace_flag": True}
+
+    # Create a mock service directory with the flags file
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_flags_file = Mock()
+    mock_flags_file.exists.return_value = True
+
+    # Mock the path concatenation
+    def mock_truediv(self, other):
+        if other == "_sk_flags.yaml":
+            return mock_flags_file
+        return Mock()
+
+    mock_service_dir.__truediv__ = mock_truediv
+
+    with (
+        patch("libsentrykube.service.get_service_path", return_value=mock_service_dir),
+        patch("builtins.open", mock_open(read_data="namespace_flag: true")),
+        patch("yaml.safe_load", return_value=expected_flags),
+    ):
+        result = get_service_flags("test-service", namespace="helm")
+        assert result == expected_flags
+
+
+def test_get_service_flags_empty_yaml():
+    """Test get_service_flags when the YAML file is empty or contains only comments."""
+    # Create a mock service directory with the flags file
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_flags_file = Mock()
+    mock_flags_file.exists.return_value = True
+
+    # Mock the path concatenation
+    def mock_truediv(self, other):
+        if other == "_sk_flags.yaml":
+            return mock_flags_file
+        return Mock()
+
+    mock_service_dir.__truediv__ = mock_truediv
+
+    with (
+        patch("libsentrykube.service.get_service_path", return_value=mock_service_dir),
+        patch(
+            "builtins.open",
+            mock_open(read_data="# This is a comment\n# Another comment"),
+        ),
+        patch("yaml.safe_load", return_value=None),
+    ):
+        result = get_service_flags("test-service")
+        assert result == {}
+
+
+def test_get_service_flags_invalid_yaml():
+    """Test get_service_flags when the YAML file is invalid."""
+    # Create a mock service directory with the flags file
+    mock_service_dir = Mock()
+    mock_service_dir.is_dir.return_value = True
+    mock_flags_file = Mock()
+    mock_flags_file.exists.return_value = True
+
+    # Mock the path concatenation
+    def mock_truediv(self, other):
+        if other == "_sk_flags.yaml":
+            return mock_flags_file
+        return Mock()
+
+    mock_service_dir.__truediv__ = mock_truediv
+
+    with (
+        patch("libsentrykube.service.get_service_path", return_value=mock_service_dir),
+        patch("builtins.open", mock_open(read_data="invalid: yaml: content:")),
+        patch("yaml.safe_load", side_effect=Exception("Invalid YAML")),
+    ):
+        with pytest.raises(Exception, match="Invalid YAML"):
+            get_service_flags("test-service")
