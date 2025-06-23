@@ -1,3 +1,9 @@
+## 1.8.1
+
+### Various fixes & improvements
+
+- fix(drift): Format code to linear markdown formatting (#135) by @nikhars
+
 ## 1.8.0
 
 ### Various fixes & improvements
