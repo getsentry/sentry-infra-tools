@@ -1,5 +1,6 @@
 import base64
 import difflib
+import hashlib
 import json
 import operator
 from dataclasses import dataclass
@@ -265,6 +266,7 @@ def render_templates(
     env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode(
         "utf-8"
     )
+    env.filters["md5"] = lambda x: hashlib.md5(x.encode()).hexdigest()
     env.filters["yaml"] = safe_dump
     # debugging filter which prints a var to console
     env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
