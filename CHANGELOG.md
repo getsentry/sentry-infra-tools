@@ -1,3 +1,9 @@
+## 1.8.0
+
+### Various fixes & improvements
+
+- feat: add `md5` jinja filter (#134) by @oioki
+
 ## 1.7.0
 
 ### Various fixes & improvements
