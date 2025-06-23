@@ -37,7 +37,7 @@ def detect_drift(ctx, issue):
             click.secho(e, fg="red")
             if issue:
                 error_report = (
-                    "{code}\n" + f"Jinja2 error for service {service}: {e}" + "\n{code}"
+                    "```bash\n" + f"Jinja2 error for service {service}: {e}" + "\n```"
                 )
                 drift_issue(ctx.obj.customer_name, service, error_report)
         # _run_kubectl_diff raises kubectl errors as ClickExceptions
@@ -45,18 +45,14 @@ def detect_drift(ctx, issue):
             click.secho(e, fg="red")
             if issue:
                 error_report = (
-                    "{code}\n"
-                    + f"kubectl error for service {service}: {e}"
-                    + "\n{code}"
+                    "```bash\n" + f"kubectl error for service {service}: {e}" + "```"
                 )
                 drift_issue(ctx.obj.customer_name, service, error_report)
 
         if output:
             click.echo(f"service {service} drifted!")
             drift_report = (
-                "{code}\n"
-                + "\n".join(output)[:MAX_JIRA_DESCRIPTION_LENGTH]
-                + "\n{code}"
+                "```diff\n" + "\n".join(output)[:MAX_JIRA_DESCRIPTION_LENGTH] + "```"
             )
             if issue:
                 drift_issue(ctx.obj.customer_name, service, drift_report)
