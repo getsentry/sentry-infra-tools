@@ -10,7 +10,7 @@ __all__ = ("kubectl",)
 
 @click.command(
     add_help_option=False,
-    context_settings=dict(allow_extra_args=True, ignore_unknown_options=True),
+    context_settings=dict(allow_extra_args=True, allow_interspersed_args=False, ignore_unknown_options=True),
 )
 @click.option("--yes", "-y", is_flag=True)
 @click.option("--quiet", "-q", is_flag=True)
