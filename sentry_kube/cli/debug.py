@@ -12,7 +12,11 @@ __all__ = ("debug",)
 
 @click.command(
     add_help_option=False,
-    context_settings=dict(allow_extra_args=True, allow_interspersed_args=False, ignore_unknown_options=True),
+    context_settings=dict(
+        allow_extra_args=True,
+        allow_interspersed_args=False,
+        ignore_unknown_options=True,
+    ),
 )
 @click.option("--container", "-c")
 @click.option("--image", "-i")
@@ -49,7 +53,10 @@ def debug(ctx, container, image, namespace, quiet):
     tmp = tempfile.NamedTemporaryFile(delete=True)
 
     if container:
-        container_spec = next((item for item in resp["spec"]["containers"] if item["name"] == container), None)
+        container_spec = next(
+            (item for item in resp["spec"]["containers"] if item["name"] == container),
+            None,
+        )
     else:
         container_spec = resp["spec"]["containers"][0]
         container = container_spec["name"]
@@ -85,11 +92,15 @@ def debug(ctx, container, image, namespace, quiet):
             new_mount_path = f"/subPathMounts{original_mount_dir}"
             vm["mountPath"] = new_mount_path
             mount_instructions += f"  mkdir -p {original_mount_dir}\n"
-            mount_instructions += f"  ln -sf /subPathMounts{original_mount_path} {original_mount_path}\n"
+            mount_instructions += (
+                f"  ln -sf /subPathMounts{original_mount_path} {original_mount_path}\n"
+            )
 
     if mount_instructions:
         click.echo("Subpath mounts are not allowed for ephemeral containers.")
-        click.echo("https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1EphemeralContainer.md")
+        click.echo(
+            "https://github.com/kubernetes-client/python/blob/master/kubernetes/docs/V1EphemeralContainer.md"
+        )
         click.echo("However, you can achieve almost the same by running:")
         click.echo(mount_instructions)
 
