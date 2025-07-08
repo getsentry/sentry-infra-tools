@@ -1,6 +1,7 @@
 import os
+from enum import Enum
 from pathlib import Path
-from typing import List, Mapping, Any
+from typing import List, Mapping, Any, Self, Optional
 
 import click
 import yaml
@@ -26,6 +27,34 @@ KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
 class CustomerTooOftenDefinedException(Exception):
     def __init__(self, message):
         super().__init__(message)
+
+
+class MergeConfig:
+    class MergeStrategy(Enum):
+        REJECT = "reject"
+        OVERWRITE = "overwrite"
+        APPEND = "append"
+
+    @classmethod
+    def load(cls, reader) -> dict[str, Any]:
+        return yaml.safe_load(reader)
+
+    @classmethod
+    def from_file(cls, filename) -> Optional[Self]:
+        try:
+            with open(filename) as f:
+                body = cls.load(f)
+                return cls(body)
+
+        except FileNotFoundError:
+            return None
+
+    def __init__(self, body: dict[str, Any]):
+        self.default = MergeConfig.MergeStrategy(body.get("default", "reject"))
+        self.paths: dict[str, MergeConfig.MergeStrategy] = {
+            path: MergeConfig.MergeStrategy(mode)
+            for path, mode in body.get("paths", dict()).items()
+        }
 
 
 def assert_customer_is_defined_at_most_once(
