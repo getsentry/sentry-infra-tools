@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
 from pprint import pformat
-from typing import Any
+from typing import Any, Literal
 
 import click
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -46,12 +46,48 @@ class HelmChart:
         return parent / self.name
 
 
+class HelmReleaseStrategy:
+    @classmethod
+    def from_spec(self, data):
+        if isinstance(data, str) and data == "standard":
+            return HelmStrategyStandard("standard")
+        if isinstance(data, dict):
+            if len(data.keys()) != 1:
+                raise ValueError("Invalid helm strategy")
+            kind = list(data.keys())[0]
+            if kind == "standard":
+                return HelmStrategyStandard("standard")
+            if kind == "bluegreen" and "flavor" in data[kind]:
+                return HelmStrategyBlueGreen("bluegreen", data[kind])
+        raise ValueError("Invalid helm strategy")
+
+
+@dataclass
+class HelmStrategyStandard:
+    kind: Literal["standard"]
+
+
+@dataclass
+class HelmStrategyBlueGreen:
+    kind: Literal["bluegreen"]
+    spec: dict[str, Any]
+
+    @property
+    def flavor(self):
+        return self.spec["flavor"]
+
+    @property
+    def flag(self):
+        return self.spec.get("flag", "bluegreen.active")
+
+
 @dataclass(frozen=True)
 class HelmRelease:
     name: str
     chart: HelmChart
     namespace: str
     templates: list[str]
+    strategy: HelmStrategyStandard | HelmStrategyBlueGreen
 
     def filter_template_files(self, cwd: Path, template_files):
         if not self.templates:
@@ -80,7 +116,7 @@ class HelmData:
 class HelmException(RuntimeError): ...
 
 
-def _run_helm(cmd: list[str]) -> str:
+def _run_helm(cmd: list[str], raise_on_err: bool = False) -> str:
     helm_cmd = ["helm"] + cmd
     helm_env = None
     child_process = subprocess.Popen(
@@ -88,8 +124,9 @@ def _run_helm(cmd: list[str]) -> str:
     )
     child_output = child_process.communicate()[0].decode("utf-8")
 
-    if not child_output and child_process != 0:
-        raise HelmException
+    if child_process.returncode != 0:
+        if raise_on_err or not child_output:
+            raise HelmException
     return child_output
 
 
@@ -188,28 +225,50 @@ def _helm_chart_ctx(region_name, service_name, cluster_name) -> list[HelmRelease
     if not releases_spec:
         # easy, just one release
         rv.append(
-            HelmRelease(service_name, chart=chart, namespace="default", templates=[])
+            HelmRelease(
+                service_name,
+                chart=chart,
+                namespace="default",
+                templates=[],
+                strategy=HelmReleaseStrategy.from_spec("standard"),
+            )
         )
         return rv
     for release_spec in releases_spec:
         if isinstance(release_spec, str):
             rv.append(
                 HelmRelease(
-                    release_spec, chart=chart, namespace="default", templates=[]
+                    release_spec,
+                    chart=chart,
+                    namespace="default",
+                    templates=[],
+                    strategy=HelmReleaseStrategy.from_spec("standard"),
                 )
             )
             continue
         try:
-            rv.append(
-                HelmRelease(
-                    name=release_spec.get("name"),
-                    chart=chart,
-                    namespace=release_spec.get("namespace", "default"),
-                    templates=release_spec.get("use", []),
-                )
+            rel = HelmRelease(
+                name=release_spec.get("name"),
+                chart=chart,
+                namespace=release_spec.get("namespace", "default"),
+                templates=release_spec.get("use", []),
+                strategy=HelmReleaseStrategy.from_spec(
+                    release_spec.get("strategy", "standard")
+                ),
             )
+            rv.append(rel)
         except Exception:
             click.echo(f"Invalid release spec for service {service_name}.", err=True)
+            raise click.Abort()
+    bgrels = list(filter(lambda r: r.strategy.kind == "bluegreen", rv))
+    if len(bgrels) not in [0, 2]:
+        click.echo(
+            f"Invalid releases spec for {service_name} selected strategy.", err=True
+        )
+        raise click.Abort()
+    if len(bgrels) == 2:
+        if not set(r.strategy.flavor for r in bgrels).issubset({"blue", "green"}):  # type: ignore
+            click.echo(f"Invalid blue-green spec for service {service_name}.", err=True)
             raise click.Abort()
     return rv
 
@@ -356,6 +415,51 @@ def get_remote_app_version(release: HelmRelease, tmpdir, targets, kctx=None):
         targets.append(f.name)
 
 
+def get_remote_bg_active(
+    release: HelmRelease, kctx=None
+) -> tuple[bool, dict[str, Any]] | None:
+    if release.strategy.kind != "bluegreen":
+        return None
+
+    helm_params = [
+        "get",
+        "values",
+        release.name,
+        "--namespace",
+        release.namespace,
+        "--output",
+        "yaml",
+    ]
+    if kctx:
+        helm_params.extend(["--kube-context", kctx])
+    flag_path = release.strategy.flag.split(".")
+    values: dict[str, Any] = {}
+    data_w = values
+    for path in flag_path[:-1]:
+        data_w[path] = {}
+        data_w = data_w[path]
+
+    try:
+        previous_values = _run_helm(helm_params)
+        data_r = list(safe_load_all(previous_values))[0]
+        for path in flag_path[:-1]:
+            data_r = data_r[path]
+        previous_flag = data_r[flag_path[-1]]
+    except Exception:
+        previous_flag = release.strategy.flavor == "green"
+
+    data_w[flag_path[-1]] = not previous_flag
+    return (previous_flag, values)
+
+
+def set_bg_active(data, tmpdir, targets):
+    with tempfile.NamedTemporaryFile(
+        delete=False, prefix=f"{tmpdir}/", suffix=".yaml"
+    ) as f:
+        f.write(safe_dump(data).encode("utf8"))
+        targets.append(f.name)
+
+
 def set_app_version(release: HelmRelease, target_cmd: list[str], app_version=None):
     if app_version is None:
         return
@@ -371,8 +475,26 @@ def helm_release_ctx(
     app_version=None,
     kctx=None,
 ):
-    for rendered_release, rendered_contents in _render_values(
+    rendered_data = _render_values(
         region_name, service_name, cluster_name, release=release
+    )
+
+    rendered_data_wstrategy = []
+    for rendered_release, rendered_contents in rendered_data:
+        bgdata = get_remote_bg_active(rendered_release, kctx=kctx)
+        if bgdata is None:
+            rendered_data_wstrategy.append(
+                (rendered_release, rendered_contents, 0, None)
+            )
+            continue
+        bgflag, bgcontent = bgdata
+        prio = 1 if not bgflag else 2
+        rendered_data_wstrategy.append(
+            (rendered_release, rendered_contents, prio, bgcontent)
+        )
+
+    for rendered_release, rendered_contents, _, bgdata in sorted(
+        rendered_data_wstrategy, key=lambda v: v[2]
     ):
         with tempfile.TemporaryDirectory() as tmpdirname:
             release_targets = []
@@ -386,6 +508,8 @@ def helm_release_ctx(
                 get_remote_app_version(
                     rendered_release, tmpdirname, release_targets, kctx
                 )
+            if bgdata is not None:
+                set_bg_active(bgdata, tmpdirname, release_targets)
             yield rendered_release, release_targets
 
 
@@ -514,6 +638,10 @@ def apply(
         for target in targets:
             helm_params.extend(["-f", target])
         set_app_version(helm_release, helm_params, app_version=app_version)
-        outputs.append(_run_helm(helm_params))
+        outputs.append(
+            _run_helm(
+                helm_params, raise_on_err=helm_release.strategy.kind == "bluegreen"
+            )
+        )
 
     return "\n".join(outputs)
