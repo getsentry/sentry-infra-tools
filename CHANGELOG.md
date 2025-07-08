@@ -1,3 +1,10 @@
+## 1.9.0
+
+### Various fixes & improvements
+
+- feat: add helm release strategies (#125) by @gi0baro
+- feat(run-pod): add `--no-security-context` option (#136) by @oioki
+
 ## 1.8.1
 
 ### Various fixes & improvements
