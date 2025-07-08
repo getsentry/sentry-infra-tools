@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, Mock, mock_open
 
 from libsentrykube.service import (
+    MergeConfig,
     get_hierarchical_value_overrides,
     get_service_ctx_overrides,
     get_service_data,
@@ -510,3 +511,47 @@ def test_get_service_flags_invalid_yaml():
     ):
         with pytest.raises(Exception, match="Invalid YAML"):
             get_service_flags("test-service")
+
+
+def test_merge_config_typical():
+    document = """
+    default: reject
+    paths:
+        worker_groups: append
+    """
+
+    config = MergeConfig(MergeConfig.load(document))
+    assert config.default == MergeConfig.MergeStrategy.REJECT
+    assert config.paths["worker_groups"] == MergeConfig.MergeStrategy.APPEND
+
+
+def test_merge_config_no_paths():
+    document = """
+    default: overwrite
+    """
+
+    config = MergeConfig(MergeConfig.load(document))
+    assert config.default == MergeConfig.MergeStrategy.OVERWRITE
+    assert len(config.paths) == 0
+
+
+def test_merge_config_no_defaults():
+    document = """
+    paths:
+        worker_groups: append
+    """
+
+    config = MergeConfig(MergeConfig.load(document))
+    assert config.default == MergeConfig.MergeStrategy.REJECT
+    assert len(config.paths) == 1
+
+
+def test_merge_config_invalid():
+    document = """
+    default: foobar
+    paths:
+        worker_groups: append
+    """
+
+    with pytest.raises(Exception, match="is not a valid"):
+        _config = MergeConfig(MergeConfig.load(document))
