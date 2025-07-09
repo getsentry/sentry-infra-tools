@@ -65,7 +65,11 @@ def debug(ctx, container, image, namespace, quiet):
         container = container_spec["name"]
     else:
         container_spec = next(
-            (item for item in resp["spec"]["containers"] if item["name"] not in EXCLUDED_CONTAINERS),
+            (
+                item
+                for item in resp["spec"]["containers"]
+                if item["name"] not in EXCLUDED_CONTAINERS
+            ),
             None,
         )
         container = container_spec["name"]
