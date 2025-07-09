@@ -9,6 +9,9 @@ from libsentrykube.utils import ensure_kubectl, should_run_with_empty_context
 
 __all__ = ("debug",)
 
+# Containers to exclude when auto-selecting a container for debugging
+EXCLUDED_CONTAINERS = {"envoy", "pgbouncer"}
+
 
 @click.command(
     add_help_option=False,
@@ -57,8 +60,14 @@ def debug(ctx, container, image, namespace, quiet):
             (item for item in resp["spec"]["containers"] if item["name"] == container),
             None,
         )
-    else:
+    elif len(resp["spec"]["containers"]) == 1:
         container_spec = resp["spec"]["containers"][0]
+        container = container_spec["name"]
+    else:
+        container_spec = next(
+            (item for item in resp["spec"]["containers"] if item["name"] not in EXCLUDED_CONTAINERS),
+            None,
+        )
         container = container_spec["name"]
 
     # use the target pod image by default
