@@ -115,7 +115,7 @@ def debug(ctx, container, image, namespace, quiet):
 
     custom_debug_profile = {
         # set the same env and volumeMounts as of the original container
-        "env": container_spec["env"],
+        "env": container_spec["env"] if "env" in container_spec else [],
         "volumeMounts": volume_mounts,
         # drop security features
         "securityContext": {
