@@ -1,3 +1,9 @@
+## 1.9.1
+
+### Various fixes & improvements
+
+- fix(kafkactl): add missing no_security_context=False (#138) by @oioki
+
 ## 1.9.0
 
 ### Various fixes & improvements
