@@ -26,7 +26,7 @@ from yaml import SafeDumper, safe_dump_all, safe_load_all
 # kubectl is supported within one minor version (older or newer) of kube-apiserver.
 # Also, you'll want to upgrade the python kubernetes client version accordingly.
 KUBECTL_BINARY = os.environ.get("SENTRY_KUBE_KUBECTL_BINARY", "kubectl")
-KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.30.4")
+KUBECTL_VERSION = os.environ.get("SENTRY_KUBE_KUBECTL_VERSION", "1.31.10")
 ENABLE_NOTIFICATIONS = os.environ.get("SENTRY_KUBE_ENABLE_NOTIFICATIONS", False)
 
 _kube_client = None
