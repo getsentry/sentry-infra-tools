@@ -424,6 +424,11 @@ def diff(
     is_flag=True,
     help="Allows regular diff/apply to spawn Jobs",
 )
+@click.option(
+    "--deployment-image",
+    type=str | None,
+    help="Override the deployment image for the services",
+)
 @click.pass_context
 @allow_for_all_services
 def apply(
@@ -438,7 +443,15 @@ def apply(
     skip_monitor_checks: bool,
     soak_only: bool,
     allow_jobs: bool,
+    deployment_image: str | None = None,
 ):
+    if len(services) > 1 and deployment_image:
+        raise click.BadArgumentUsage(
+            "Cannot specify --deployment-image with multiple services"
+        )
+    elif deployment_image:
+        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
 

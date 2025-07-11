@@ -142,6 +142,9 @@ class DeploymentImage(SimpleExtension):
         if "KUBERNETES_OFFLINE" in os.environ:
             return default
 
+        if "DEPLOYMENT_IMAGE" in os.environ:
+            return os.getenv("DEPLOYMENT_IMAGE")
+
         namespace, name = kube_extract_namespace(deployment_name)
         client = kube_get_client()
         try:
