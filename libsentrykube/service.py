@@ -536,8 +536,11 @@ def build_helm_materialized_path(
     )
 
 
-def get_service_deployment_image(service: str, container: str, default: str):
-    click.echo(f"Getting deployment image for {service}:{container}")
+def get_deployment_image(
+    deployment: str, container: str, default: str, quiet: bool = False
+):
+    if not quiet:
+        click.echo(f"Getting deployment image for {deployment}:{container}")
 
     if "KUBERNETES_OFFLINE" in os.environ:
         return default
@@ -545,10 +548,10 @@ def get_service_deployment_image(service: str, container: str, default: str):
     if "DEPLOYMENT_IMAGE" in os.environ:
         return os.getenv("DEPLOYMENT_IMAGE")
 
-    namespace, name = kube_extract_namespace(service)
+    namespace, name = kube_extract_namespace(deployment)
     client = kube_get_client()
     try:
-        deployment = AppsV1Api(client).read_namespaced_deployment(
+        deployment_obj = AppsV1Api(client).read_namespaced_deployment(
             name,
             namespace,
             _request_timeout=os.getenv(
@@ -559,7 +562,7 @@ def get_service_deployment_image(service: str, container: str, default: str):
         if e.status == 404:
             return default
         raise
-    for c in deployment.spec.template.spec.containers:
+    for c in deployment_obj.spec.template.spec.containers:
         if c.name == container:
             return c.image
     return default

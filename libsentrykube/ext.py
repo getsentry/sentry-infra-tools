@@ -17,7 +17,7 @@ from libsentrykube.kube import (
     render_service_values,
 )
 from libsentrykube.service import (
-    get_service_deployment_image,
+    get_deployment_image,
     KUBE_API_TIMEOUT_DEFAULT,
     KUBE_API_TIMEOUT_ENV_NAME,
 )
@@ -143,7 +143,9 @@ class DeploymentImage(SimpleExtension):
 
     @cache
     def run(self, deployment_name: str, container: str, default: str):
-        image = get_service_deployment_image(deployment_name, container, default)
+        image = get_deployment_image(
+            deployment=deployment_name, container=container, default=default, quiet=True
+        )
         return image
 
 

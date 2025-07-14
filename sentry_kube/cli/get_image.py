@@ -1,5 +1,5 @@
 import click
-from libsentrykube.service import get_service_deployment_image
+from libsentrykube.service import get_deployment_image
 
 __all__ = ("get_image",)
 
@@ -24,14 +24,18 @@ SERVICE_DEPLOYMENT_CONTAINER_MAP = {
 
 
 @click.command()
+@click.pass_context
 @click.argument("service", type=str)
-def get_image(service: str) -> None:
+def get_image(ctx, service: str) -> None:
     """
     Gets the deployment image for a specific service.
     """
-    service, container = SERVICE_DEPLOYMENT_CONTAINER_MAP[service]
+    deployment, container = SERVICE_DEPLOYMENT_CONTAINER_MAP[service]
 
-    image = get_service_deployment_image(
-        service=service, container=container, default="unknown"
+    image = get_deployment_image(
+        deployment=deployment,
+        container=container,
+        default="unknown",
+        quiet=ctx.obj.quiet_mode,
     )
     click.echo(image)
