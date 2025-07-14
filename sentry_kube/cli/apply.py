@@ -313,6 +313,15 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
             click.echo("".join(rendered))
 
 
+def _set_deployment_image(services: List[str], deployment_image: str | None) -> None:
+    if len(services) > 1 and deployment_image:
+        raise click.BadArgumentUsage(
+            "Cannot specify --deployment-image with multiple services"
+        )
+    elif deployment_image:
+        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+
+
 @click.command()
 @click.pass_context
 @click.option("--filter", "filters", multiple=True)
@@ -359,12 +368,7 @@ def diff(
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
     """
-    if len(services) > 1 and deployment_image:
-        raise click.BadArgumentUsage(
-            "Cannot specify --deployment-image with multiple services"
-        )
-    elif deployment_image:
-        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+    _set_deployment_image(services, deployment_image)
 
     click.echo(f"Rendering services: {', '.join(services)}")
     skip_kinds = ("Job",) if not allow_jobs else None
@@ -458,12 +462,7 @@ def apply(
     allow_jobs: bool,
     deployment_image: str | None = None,
 ):
-    if len(services) > 1 and deployment_image:
-        raise click.BadArgumentUsage(
-            "Cannot specify --deployment-image with multiple services"
-        )
-    elif deployment_image:
-        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+    _set_deployment_image(services, deployment_image)
 
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
