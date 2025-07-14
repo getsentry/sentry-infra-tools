@@ -523,3 +523,13 @@ def build_helm_materialized_path(
         )
         / target
     )
+
+
+def get_service_deployment_image(service: str, container: str):
+    click.echo(f"Getting deployment image for {service}:{container}")
+
+    from libsentrykube.ext import DeploymentImage
+
+    deployment_image_ext = DeploymentImage()
+    return deployment_image_ext.run(service, container, "unknown")
+    return "foo"
