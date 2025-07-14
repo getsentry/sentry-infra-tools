@@ -426,7 +426,7 @@ def diff(
 )
 @click.option(
     "--deployment-image",
-    type=str | None,
+    type=str,
     help="Override the deployment image for the services",
 )
 @click.pass_context
