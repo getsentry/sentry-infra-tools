@@ -11,5 +11,7 @@ def get_image(service: str, container: str) -> None:
     """
     Gets the deployment image for a specific service.
     """
-    image = get_service_deployment_image(service, container)
+    image = get_service_deployment_image(
+        service=service, container=container, default="unknown"
+    )
     click.echo(image)

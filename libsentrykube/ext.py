@@ -13,7 +13,14 @@ from kubernetes.client import AppsV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
-from libsentrykube.kube import render_service_values
+from libsentrykube.kube import (
+    render_service_values,
+)
+from libsentrykube.service import (
+    get_service_deployment_image,
+    KUBE_API_TIMEOUT_DEFAULT,
+    KUBE_API_TIMEOUT_ENV_NAME,
+)
 from libsentrykube.utils import (
     deep_merge_dict,
     get_service_registry_data,
@@ -22,9 +29,6 @@ from libsentrykube.utils import (
     md5_fileobj,
     workspace_root,
 )
-
-KUBE_API_TIMEOUT_DEFAULT: int = 3
-KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
 
 ENVOY_ENTRYPOINT = """
 cat << EOF > /etc/envoy/envoy.yaml
@@ -139,30 +143,8 @@ class DeploymentImage(SimpleExtension):
 
     @cache
     def run(self, deployment_name: str, container: str, default: str):
-        if "KUBERNETES_OFFLINE" in os.environ:
-            return default
-
-        if "DEPLOYMENT_IMAGE" in os.environ:
-            return os.getenv("DEPLOYMENT_IMAGE")
-
-        namespace, name = kube_extract_namespace(deployment_name)
-        client = kube_get_client()
-        try:
-            deployment = AppsV1Api(client).read_namespaced_deployment(
-                name,
-                namespace,
-                _request_timeout=os.getenv(
-                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
-                ),
-            )
-        except ApiException as e:
-            if e.status == 404:
-                return default
-            raise
-        for c in deployment.spec.template.spec.containers:
-            if c.name == container:
-                return c.image
-        return default
+        image = get_service_deployment_image(deployment_name, container, default)
+        return image
 
 
 class StatefulSetImage(SimpleExtension):
