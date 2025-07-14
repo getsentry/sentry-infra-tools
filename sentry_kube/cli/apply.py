@@ -336,6 +336,11 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
     is_flag=True,
     help="Allows regular diff/apply to spawn Jobs",
 )
+@click.option(
+    "--deployment-image",
+    type=str,
+    help="Override the deployment image for the services",
+)
 @allow_for_all_services
 def diff(
     ctx,
@@ -345,6 +350,7 @@ def diff(
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
+    deployment_image: str | None = None,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -353,6 +359,13 @@ def diff(
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
     """
+    if len(services) > 1 and deployment_image:
+        raise click.BadArgumentUsage(
+            "Cannot specify --deployment-image with multiple services"
+        )
+    elif deployment_image:
+        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+
     click.echo(f"Rendering services: {', '.join(services)}")
     skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
