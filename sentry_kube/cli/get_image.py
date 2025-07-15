@@ -1,7 +1,6 @@
 import click
 
 from libsentrykube.config import Config
-from libsentrykube.customer import get_service_container_map
 from libsentrykube.service import get_deployment_image
 
 __all__ = ("get_image",)
@@ -16,10 +15,8 @@ def get_image(ctx, service: str) -> None:
     """
 
     config = Config()
-    service_container_map = get_service_container_map(
-        config, ctx.obj.customer_name, ctx.obj.cluster_name
-    )
-    service_map = service_container_map[service]
+
+    service_map = config.service_container_map[service]
 
     image = get_deployment_image(
         deployment=service_map["deployment"],

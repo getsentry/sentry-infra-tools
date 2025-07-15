@@ -158,10 +158,3 @@ def get_machine_type_list(project: str, zone: str) -> List[Dict[str, Any]]:
     request = compute.machineTypes().list(project=project, zone=zone)
     raw_data = request.execute()
     return raw_data["items"]
-
-
-def get_service_container_map(
-    config: Config, customer_name: str, cluster_name: str
-) -> Dict[str, Dict[str, str]]:
-    cluster = load_customer_data(config, customer_name, cluster_name)
-    return cluster["service_container_map"]
