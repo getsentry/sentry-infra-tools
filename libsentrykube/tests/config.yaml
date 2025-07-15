@@ -1,3 +1,7 @@
+service_container_map:
+  foo:
+    deployment: foo-web-production
+    container: foo
 silo_regions:
   saas:
     aliases: ['saasalias']

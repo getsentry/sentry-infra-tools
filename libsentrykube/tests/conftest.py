@@ -72,6 +72,12 @@ CONFIGURATION = {
             },
         },
     },
+    "service_container_map": {
+        "foo": {
+            "deployment": "foo-web-production",
+            "container": "foo",
+        },
+    },
 }
 
 TOP_LEVEL_CONFIG = {"config": {"example": "example", "foo": "bar"}}
