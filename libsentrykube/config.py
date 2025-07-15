@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 from types import MappingProxyType
 from functools import cache
 
@@ -93,6 +93,10 @@ class Config:
             }
 
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
+        # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
+        self.service_container_map: Mapping[str, Dict[str, str]] = configuration[
+            "service_container_map"
+        ]
 
     @cache
     def get_regions(self) -> Sequence[str]:

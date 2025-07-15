@@ -66,6 +66,12 @@ CONFIGURATION = {
             },
         },
     },
+    "service_container_map": {
+        "foo": {
+            "deployment": "foo-web-production",
+            "container": "foo",
+        },
+    },
 }
 
 SNUBA_CONFIG = {"checks": {"exclude": ["check1", "check2"], "include": ["check3"]}}

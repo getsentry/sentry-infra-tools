@@ -1,15 +1,26 @@
+import os
 from pathlib import Path
 from typing import List, Mapping, Any
 
 import click
 import yaml
+from kubernetes.client.rest import ApiException
+from kubernetes.client import AppsV1Api
 
 from collections import OrderedDict
 from libsentrykube.config import Config
 from libsentrykube.customer import load_customer_data, load_region_helm_data
-from libsentrykube.utils import workspace_root, deep_merge_dict
+from libsentrykube.utils import (
+    deep_merge_dict,
+    kube_extract_namespace,
+    kube_get_client,
+    workspace_root,
+)
 
 _services: dict[str | None, dict[str, Any]] = {None: OrderedDict()}
+
+KUBE_API_TIMEOUT_DEFAULT: int = 3
+KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
 
 
 class CustomerTooOftenDefinedException(Exception):
@@ -523,3 +534,35 @@ def build_helm_materialized_path(
         )
         / target
     )
+
+
+def get_deployment_image(
+    deployment: str, container: str, default: str, quiet: bool = False
+):
+    if not quiet:
+        click.echo(f"Getting deployment image for {deployment}:{container}")
+
+    if "KUBERNETES_OFFLINE" in os.environ:
+        return default
+
+    if "DEPLOYMENT_IMAGE" in os.environ:
+        return os.getenv("DEPLOYMENT_IMAGE")
+
+    namespace, name = kube_extract_namespace(deployment)
+    client = kube_get_client()
+    try:
+        deployment_obj = AppsV1Api(client).read_namespaced_deployment(
+            name,
+            namespace,
+            _request_timeout=os.getenv(
+                KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+            ),
+        )
+    except ApiException as e:
+        if e.status == 404:
+            return default
+        raise
+    for c in deployment_obj.spec.template.spec.containers:
+        if c.name == container:
+            return c.image
+    return default
