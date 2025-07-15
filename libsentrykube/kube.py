@@ -39,9 +39,6 @@ DEFAULT_FLAGS = {
     "jinja_whitespace_easymode": True,
 }
 
-KUBE_API_TIMEOUT_DEFAULT: int = 3
-KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
-
 
 @dataclass
 class KubeResource:
