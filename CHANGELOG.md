@@ -1,3 +1,10 @@
+## 1.10.0
+
+### Various fixes & improvements
+
+- PRODENG-227: add sentry-kube get-image cmd (#140) by @mwarkentin
+- feat: Allow setting an override image SHA from the CLI for applies (#139) by @rgibert
+
 ## 1.9.1
 
 ### Various fixes & improvements
