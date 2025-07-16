@@ -194,6 +194,8 @@ EOF
                 "runAsUser": 1000,
                 "runAsGroup": 1000,
             }
+        else:
+            res["securityContext"] = None
 
         res["volumeMounts"] = [
             {
