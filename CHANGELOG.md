@@ -1,3 +1,10 @@
+## 1.11.0
+
+### Various fixes & improvements
+
+- PRODENG-227: handle unknown services (#141) by @mwarkentin
+- feat(sentry-kube): add `debug` subcommand (#137) by @oioki
+
 ## 1.10.0
 
 ### Various fixes & improvements
