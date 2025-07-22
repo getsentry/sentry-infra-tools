@@ -8,6 +8,7 @@ from typing import List, Optional
 import click
 import httpx
 from libsentrykube.config import Config
+from libsentrykube.customer import get_region_config
 
 DD_API_BASE = "https://api.datadoghq.com"
 
@@ -67,9 +68,9 @@ def _markdown_text(text: str) -> str:
     return f"%%%\n{text}\n%%%"
 
 
-def _get_sentry_region(customer_name: str) -> str:
-    silo_config = Config().silo_regions[customer_name]
-    return silo_config.sentry_region
+def _get_sentry_region(region_name: str) -> str:
+    _, region_config = get_region_config(Config(), region_name)
+    return region_config.sentry_region
 
 
 def report_terragrunt_event(
