@@ -38,7 +38,7 @@ def load_customer_data(
     config: Config, customer_name: str, cluster_name: str
 ) -> Dict[str, Any]:
     try:
-        region_name, region_config = get_region_config(config, customer_name)
+        _, region_config = get_region_config(config, customer_name)
     except ValueError:
         die(
             f"Region '{customer_name}' not found. Did you mean one of: \n\n"
@@ -59,7 +59,7 @@ def load_region_helm_data(
     config: Config, region_name: str, cluster_name: str
 ) -> HelmData:
     try:
-        region_name, region_config = get_region_config(config, region_name)
+        _, region_config = get_region_config(config, region_name)
     except ValueError:
         die(
             f"Region '{region_name}' not found. Did you mean one of: \n\n"
