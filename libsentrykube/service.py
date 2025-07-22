@@ -41,6 +41,16 @@ class MergeConfig:
 
     @classmethod
     def from_file(cls, filename) -> Optional[Self]:
+        """
+        Loads a MergeConfig from a file
+
+        Example `merge.yaml`:
+        ```
+        default: reject
+        paths:
+            worker_groups: append
+        ```
+        """
         try:
             with open(filename) as f:
                 body = cls.load(f)
@@ -48,6 +58,10 @@ class MergeConfig:
 
         except FileNotFoundError:
             return None
+
+    @classmethod
+    def defaults(cls) -> Self:
+        return cls({})
 
     def __init__(self, body: dict[str, Any]):
         self.default = MergeConfig.MergeStrategy(body.get("default", "reject"))
