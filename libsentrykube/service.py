@@ -149,7 +149,10 @@ def get_service_names(namespace: str | None = None) -> List[str]:
     return [s for s in _services.get(namespace, {}).keys()]
 
 
-def merge_values_files_no_conflict(base: dict, new: dict, file_name: str) -> dict:
+# TODO: Do this with OrderedDicts that preserve ordering from the source YAML
+def merge_values_files_no_conflict(
+    base: dict, new: dict, file_name: str, merge_config: MergeConfig
+) -> dict:
     """
     All values files in each level of overriding should be flatly combined together.
     There should be no key conflics
@@ -164,17 +167,33 @@ def merge_values_files_no_conflict(base: dict, new: dict, file_name: str) -> dic
             consumer-1:
                 data
     """
-    conflict_keys = base.keys() & new.keys()
-    if conflict_keys:
-        raise ValueError(
-            f"Conflict detected when merging file '{file_name}': duplicate keys {conflict_keys}"
-        )
-    base.update(new)
+    # TODO: make it work with nesting / recursively
+    for key, new_value in new.items():
+        if key in base:
+            mode = merge_config.default
+            if key in merge_config.paths.keys():
+                mode = merge_config.paths[key]
+
+            if mode == MergeConfig.MergeStrategy.REJECT:
+                raise ValueError(
+                    f"Conflict detected when merging file '{file_name}': duplicate keys '{key}'"
+                )
+            elif mode == MergeConfig.MergeStrategy.OVERWRITE:
+                base[key] = new[key]
+            elif mode == MergeConfig.MergeStrategy.APPEND:
+                if isinstance(base[key], Mapping) and isinstance(new[key], Mapping):
+                    base[key] |= new[key]
+                else:
+                    raise ValueError("Cannot perform an append with non-dict values")
+        else:
+            base[key] = new_value
+
     return base
 
 
 def get_service_ctx(
     service_name: str,
+    merge_config: MergeConfig,
     external: bool = False,
     namespace: str | None = None,
     src_files_prefix: str = "_values",
@@ -196,14 +215,18 @@ def get_service_ctx(
         try:
             with open(file, "rb") as f:
                 values = yaml.safe_load(f) or {}
-                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+                ctx = merge_values_files_no_conflict(
+                    ctx, values, file.name, merge_config
+                )
         except FileNotFoundError:
             continue
     return ctx
 
 
-def get_service_values(service_name: str, external: bool = False) -> dict:
-    return get_service_ctx(service_name, external=external)
+def get_service_values(
+    service_name: str, merge_config: MergeConfig, external: bool = False
+) -> dict:
+    return get_service_ctx(service_name, merge_config, external=external)
 
 
 def get_service_value_override_path(
@@ -233,6 +256,7 @@ def get_service_value_override_path(
 def get_service_ctx_overrides(
     service_name: str,
     region_name: str,
+    merge_config: MergeConfig,
     cluster_name: str = "default",
     external: bool = False,
     namespace: str | None = None,
@@ -260,7 +284,9 @@ def get_service_ctx_overrides(
                 continue
             with open(file, "rb") as f:
                 values = yaml.safe_load(f) or {}
-                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+                ctx = merge_values_files_no_conflict(
+                    ctx, values, file.name, merge_config
+                )
         except FileNotFoundError:
             raise
     return ctx
@@ -269,17 +295,23 @@ def get_service_ctx_overrides(
 def get_service_value_overrides(
     service_name: str,
     region_name: str,
+    merge_config: MergeConfig,
     cluster_name: str = "default",
     external: bool = False,
 ) -> dict:
     return get_service_ctx_overrides(
-        service_name, region_name, cluster_name=cluster_name, external=external
+        service_name,
+        region_name,
+        merge_config,
+        cluster_name=cluster_name,
+        external=external,
     )
 
 
 def get_common_regional_override(
     service_name: str,
     region_name: str,
+    merge_config: MergeConfig,
     external: bool = False,
     namespace: str | None = None,
     src_files_prefix: str = "_values",
@@ -298,7 +330,9 @@ def get_common_regional_override(
         try:
             with open(file, "rb") as f:
                 values = yaml.safe_load(f) or {}
-                ctx = merge_values_files_no_conflict(ctx, values, file.name)
+                ctx = merge_values_files_no_conflict(
+                    ctx, values, file.name, merge_config
+                )
         except FileNotFoundError:
             continue
     return ctx
@@ -332,11 +366,14 @@ def get_hierarchical_value_overrides(
     3. Top-level configuration
     """
     if external:
-        service_regions_path = workspace_root() / service_name
+        service_root_path = workspace_root() / service_name
     else:
-        service_regions_path = get_service_path(service_name, namespace=namespace)
+        service_root_path = get_service_path(service_name, namespace=namespace)
+    service_regions_path = service_root_path / "region_overrides"
 
-    service_regions_path = service_regions_path / "region_overrides"
+    merge_config = MergeConfig.from_file(f"{service_root_path}/sentry-kube/merge.yaml")
+    if merge_config is None:
+        merge_config = MergeConfig.defaults()
 
     if not service_regions_path.exists():
         return {}
@@ -352,7 +389,7 @@ def get_hierarchical_value_overrides(
                 with open(file, "rb") as f:
                     values = yaml.safe_load(f) or {}
                 base_values = merge_values_files_no_conflict(
-                    base_values, values, file.name
+                    base_values, values, file.name, merge_config
                 )
         except FileNotFoundError:
             base_values = {}
@@ -364,6 +401,7 @@ def get_hierarchical_value_overrides(
         region_values = get_service_ctx_overrides(
             service_name,
             region_path,
+            merge_config,
             cluster_name,
             external,
             namespace=namespace,
@@ -374,6 +412,7 @@ def get_hierarchical_value_overrides(
         common_service_values = get_common_regional_override(
             service_name,
             region_path,
+            merge_config,
             external,
             namespace=namespace,
             src_files_prefix=src_files_prefix,
