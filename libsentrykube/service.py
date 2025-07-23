@@ -176,7 +176,7 @@ def merge_values_files_no_conflict(
 
             if mode == MergeConfig.MergeStrategy.REJECT:
                 raise ValueError(
-                    f"Conflict detected when merging file '{file_name}': duplicate keys '{key}'"
+                    f"Conflict detected when merging file '{file_name}': duplicate key '{key}'"
                 )
             elif mode == MergeConfig.MergeStrategy.OVERWRITE:
                 base[key] = new[key]
