@@ -133,7 +133,7 @@ Valid regions:
             )
 
         try:
-            customer_config = get_region_config(config, customer)
+            customer_name, customer_config = get_region_config(config, customer)
         except ValueError:
             die(
                 f"""Invalid region specified, must be one of:
@@ -142,7 +142,7 @@ Valid regions:
             )
 
         if not quiet:
-            click.echo(f"Operating for customer {customer}.")
+            click.echo(f"Operating for customer {customer_name}.")
 
         cluster_to_load = customer_config.k8s_config.cluster_name or cluster_name
 
@@ -155,7 +155,7 @@ Valid regions:
         if ctx.invoked_subcommand == "ssh":
             ctx.obj = CliContext(
                 context_name=context_name,
-                customer_name=customer,
+                customer_name=customer_name,
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors={},  # type: ignore
@@ -175,7 +175,7 @@ Valid regions:
 
             ctx.obj = CliContext(
                 context_name=context_name,
-                customer_name=customer,
+                customer_name=customer_name,
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors=customer_config.service_monitors,
@@ -187,7 +187,7 @@ Valid regions:
 
         ctx.obj = CliContext(
             context_name=context_name,
-            customer_name=customer,
+            customer_name=customer_name,
             cluster_name=cluster.name,
             quiet_mode=quiet,
             cluster=cluster,

@@ -15,7 +15,7 @@ ALLOYDB_DISCOVERY_SERVICEURL = (
 
 
 @cache
-def get_region_config(config: Config, region_name: str) -> SiloRegion:
+def get_region_config(config: Config, region_name: str) -> tuple[str, SiloRegion]:
     region_config = None
     if region_name in config.silo_regions:
         region_config = config.silo_regions[region_name]
@@ -24,12 +24,13 @@ def get_region_config(config: Config, region_name: str) -> SiloRegion:
         for region in config.silo_regions:
             if region_name in config.silo_regions[region].aliases:
                 region_config = config.silo_regions[region]
+                region_name = region
                 break
 
     if region_config is None:
         raise ValueError(f"Region '{region_name}' not found")
 
-    return region_config
+    return region_name, region_config
 
 
 @cache
@@ -37,7 +38,7 @@ def load_customer_data(
     config: Config, customer_name: str, cluster_name: str
 ) -> Dict[str, Any]:
     try:
-        region_config = get_region_config(config, customer_name)
+        _, region_config = get_region_config(config, customer_name)
     except ValueError:
         die(
             f"Region '{customer_name}' not found. Did you mean one of: \n\n"
@@ -58,7 +59,7 @@ def load_region_helm_data(
     config: Config, region_name: str, cluster_name: str
 ) -> HelmData:
     try:
-        region_config = get_region_config(config, region_name)
+        _, region_config = get_region_config(config, region_name)
     except ValueError:
         die(
             f"Region '{region_name}' not found. Did you mean one of: \n\n"
@@ -67,7 +68,7 @@ def load_region_helm_data(
 
     k8s_config = region_config.k8s_config
 
-    # If the customer has only one cluster, just use the value from config
+    # If the region has only one cluster, just use the value from config
     cluster_name = k8s_config.cluster_name or cluster_name
 
     cluster = load_cluster_configuration(k8s_config, cluster_name)
