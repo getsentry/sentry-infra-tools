@@ -396,7 +396,8 @@ def get_remote_app_version(release: HelmRelease, tmpdir, targets, kctx=None):
     values: dict[str, Any] = {}
     data_w = values
     for path in dynamic_version_path[:-1]:
-        data_w = data_w[path] = {}
+        data_w[path] = {}
+        data_w = data_w[path]
 
     try:
         previous_values = _run_helm(helm_params)
