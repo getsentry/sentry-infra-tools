@@ -1,3 +1,10 @@
+## 1.11.1
+
+### Various fixes & improvements
+
+- fix: Pass back region_name when using alias so lookups always work (#143) by @rgibert
+- fix: helm `get_remote_app_version` (#144) by @gi0baro
+
 ## 1.11.0
 
 ### Various fixes & improvements
