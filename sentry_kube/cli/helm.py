@@ -71,7 +71,7 @@ def allow_for_all_services(f):
     return wrapper
 
 
-def _render(ctx, services, release, raw, renderer):
+def _render(ctx, services, release, namespace, raw, renderer):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -82,20 +82,23 @@ def _render(ctx, services, release, raw, renderer):
             service_name,
             cluster_name,
             release=release,
+            namespace=namespace,
             raw=raw,
             kctx=context_name,
         )
 
 
-def _materialize(ctx, services, release):
+def _materialize(ctx, services, release, namespace):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     for service in services:
-        _helm_materialize_values(customer_name, service, cluster_name, release=release)
+        _helm_materialize_values(
+            customer_name, service, cluster_name, release=release, namespace=namespace
+        )
 
 
 @check_helm_bin
-def _diff(ctx, services, release, app_version):
+def _diff(ctx, services, release, namespace, app_version):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -106,13 +109,14 @@ def _diff(ctx, services, release, app_version):
             service_name,
             cluster_name,
             release=release,
+            namespace=namespace,
             app_version=app_version,
             kctx=context_name,
         )
 
 
 @check_helm_bin
-def _apply(ctx, services, release, app_version, atomic, timeout):
+def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -124,6 +128,7 @@ def _apply(ctx, services, release, app_version, atomic, timeout):
                 service_name,
                 cluster_name,
                 release=release,
+                namespace=namespace,
                 app_version=app_version,
                 kctx=context_name,
                 atomic=atomic,
@@ -135,13 +140,14 @@ def _apply(ctx, services, release, app_version, atomic, timeout):
 
 @helm.command()
 @click.option("--release", help="Target a specific release")
+@click.option("--namespace", help="Targets a specific namespace")
 @click.option("--raw", is_flag=True)
 @click.option("--pager/--no-pager", default=True)
 @click.option("--values-only", is_flag=True, help="Render Helm values only")
 @click.option("--materialize", is_flag=True)
 @click.pass_context
 @allow_for_all_services
-def render(ctx, services, release, raw, pager, values_only, materialize):
+def render(ctx, services, release, namespace, raw, pager, values_only, materialize):
     """
     Render helm service(s).
 
@@ -149,12 +155,14 @@ def render(ctx, services, release, raw, pager, values_only, materialize):
     """
 
     if materialize:
-        _materialize(ctx, services, release)
+        _materialize(ctx, services, release, namespace)
         return
     if values_only:
-        rendered = _render(ctx, services, release, raw, _helm_render_values)
+        rendered = _render(ctx, services, release, namespace, raw, _helm_render_values)
     else:
-        rendered = check_helm_bin(_render)(ctx, services, release, raw, _helm_render)
+        rendered = check_helm_bin(_render)(
+            ctx, services, release, namespace, raw, _helm_render
+        )
     if pager:
         click.echo_via_pager(rendered)
     else:
@@ -163,11 +171,12 @@ def render(ctx, services, release, raw, pager, values_only, materialize):
 
 @helm.command()
 @click.option("--release", help="Target a specific release")
+@click.option("--namespace", help="Targets a specific namespace")
 @click.option("--app-version", help="Use a specific app version")
 @click.option("--pager/--no-pager", default=True)
 @click.pass_context
 @allow_for_all_services
-def diff(ctx, services, release, app_version, pager):
+def diff(ctx, services, release, namespace, app_version, pager):
     """
     Render a diff between production and local configs, using a wrapper around
     "helm diff".
@@ -177,7 +186,7 @@ def diff(ctx, services, release, app_version, pager):
     """
 
     click.echo(f"Rendering services: {', '.join(services)}")
-    rendered = _diff(ctx, services, release, app_version)
+    rendered = _diff(ctx, services, release, namespace, app_version)
     if pager:
         click.echo_via_pager(rendered)
     else:
@@ -186,6 +195,7 @@ def diff(ctx, services, release, app_version, pager):
 
 @helm.command()
 @click.option("--release", help="Target a specific release")
+@click.option("--namespace", help="Targets a specific namespace")
 @click.option("--app-version", help="Use a specific app version")
 @click.option("--yes", "-y", is_flag=True)
 @click.option(
@@ -196,7 +206,7 @@ def diff(ctx, services, release, app_version, pager):
 @click.option("--timeout", default=300)
 @click.pass_context
 @allow_for_all_services
-def apply(ctx, services, release, app_version, yes, atomic, timeout):
+def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
     """
     Apply helm service(s) to production
     """
@@ -204,7 +214,7 @@ def apply(ctx, services, release, app_version, yes, atomic, timeout):
     if not yes:
         click.echo(f"Rendering services: {', '.join(services)}")
 
-        rendered = _diff(ctx, services, release, app_version)
+        rendered = _diff(ctx, services, release, namespace, app_version)
         click.echo("".join(rendered))
 
         if not click.confirm(
@@ -216,5 +226,5 @@ def apply(ctx, services, release, app_version, yes, atomic, timeout):
         ):
             raise click.Abort()
 
-    for res in _apply(ctx, services, release, app_version, atomic, timeout):
+    for res in _apply(ctx, services, release, namespace, app_version, atomic, timeout):
         click.echo("".join(res))

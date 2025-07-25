@@ -284,6 +284,7 @@ def _render_values(
     service_name,
     cluster_name="default",
     release=None,
+    namespace=None,
 ):
     from libsentrykube.service import (
         get_service_path,
@@ -327,6 +328,8 @@ def _render_values(
     for helm_release in helm_releases:
         if release is not None and helm_release.name != release:
             continue
+        if namespace is not None and helm_release.namespace != namespace:
+            continue
         render_data["_helm"] = {"release": helm_release.name}
         release_templates = []
         for template in helm_release.filter_template_files(
@@ -341,19 +344,33 @@ def _render_values(
 
 
 def render_values(
-    region_name, service_name, cluster_name="default", release=None, raw=True, **kwargs
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    raw=True,
+    **kwargs,
 ):
-    rendered = _render_values(region_name, service_name, cluster_name, release=release)
+    rendered = _render_values(
+        region_name, service_name, cluster_name, release=release, namespace=namespace
+    )
     out_filter = pretty if not raw else lambda v: v
     return "\n".join([out_filter(v[1]) for _, rel in rendered for v in rel])
 
 
-def materialize_values(region_name, service_name, cluster_name="default", release=None):
+def materialize_values(
+    region_name, service_name, cluster_name="default", release=None, namespace=None
+):
     from libsentrykube.service import build_helm_materialized_path
 
     rv = False
     for helm_release, rendered_contents in _render_values(
-        region_name, service_name, cluster_name, release=release
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
     ):
         materialize_rel_path = helm_release.name != service_name and helm_release.name
         for src_path, rendered_content in rendered_contents:
@@ -473,11 +490,12 @@ def helm_release_ctx(
     service_name,
     cluster_name="default",
     release=None,
+    namespace=None,
     app_version=None,
     kctx=None,
 ):
     rendered_data = _render_values(
-        region_name, service_name, cluster_name, release=release
+        region_name, service_name, cluster_name, release=release, namespace=namespace
     )
 
     rendered_data_wstrategy = []
@@ -515,7 +533,13 @@ def helm_release_ctx(
 
 
 def render(
-    region_name, service_name, cluster_name="default", release=None, raw=True, kctx=None
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    raw=True,
+    kctx=None,
 ):
     from libsentrykube.service import get_service_path
 
@@ -523,7 +547,12 @@ def render(
 
     service_path = get_service_path(service_name, namespace="helm")
     for helm_release, targets in helm_release_ctx(
-        region_name, service_name, cluster_name, release=release, kctx=kctx
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
+        kctx=kctx,
     ):
         helm_params = [
             "template",
@@ -551,6 +580,7 @@ def diff(
     service_name,
     cluster_name="default",
     release=None,
+    namespace=None,
     app_version=None,
     kctx=None,
 ):
@@ -564,6 +594,7 @@ def diff(
         service_name,
         cluster_name,
         release=release,
+        namespace=namespace,
         app_version=app_version,
         kctx=kctx,
     ):
@@ -600,6 +631,7 @@ def apply(
     service_name,
     cluster_name="default",
     release=None,
+    namespace=None,
     app_version=None,
     kctx=None,
     atomic=True,
@@ -615,6 +647,7 @@ def apply(
         service_name,
         cluster_name,
         release=release,
+        namespace=namespace,
         app_version=app_version,
         kctx=kctx,
     ):
