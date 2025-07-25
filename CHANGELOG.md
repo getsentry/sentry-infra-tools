@@ -1,3 +1,9 @@
+## 1.12.0
+
+### Various fixes & improvements
+
+- feat: add helm namespace filter (#146) by @gi0baro
+
 ## 1.11.1
 
 ### Various fixes & improvements
