@@ -102,12 +102,10 @@ def debug(ctx, container, image, namespace, quiet):
             del vm["subPath"]
             original_mount_path = vm["mountPath"]
             original_mount_dir = "/".join(vm["mountPath"].split("/")[:-1])
-            new_mount_path = f"/subPathMounts{original_mount_dir}"
+            new_mount_path = f"/subPathMounts/{vm['name']}/{original_mount_dir}"
             vm["mountPath"] = new_mount_path
             mount_instructions += f"  mkdir -p {original_mount_dir}\n"
-            mount_instructions += (
-                f"  ln -sf /subPathMounts{original_mount_path} {original_mount_path}\n"
-            )
+            mount_instructions += f"  ln -sf /subPathMounts/{vm['name']}/{original_mount_path} {original_mount_path}\n"
 
     if mount_instructions:
         click.echo("Subpath mounts are not allowed for ephemeral containers.")
