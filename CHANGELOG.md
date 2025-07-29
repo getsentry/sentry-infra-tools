@@ -1,3 +1,10 @@
+## 1.13.0
+
+### Various fixes & improvements
+
+- fix: set security_hardened=True by default (#148) by @oioki
+- fix(debug): Filter duplicated mount paths (#147) by @Dav1dde
+
 ## 1.12.0
 
 ### Various fixes & improvements
