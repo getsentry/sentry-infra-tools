@@ -98,7 +98,7 @@ class PGBouncerSidecar(SimpleExtension):
         resources: Optional[dict] = None,
         custom_pre_stop_command: Optional[str] = None,
         use_auth: bool = True,
-        security_hardened: bool = False,
+        security_hardened: bool = True,
     ):
         if application_name:
             # Prepend supplied application_name to the pgbouncer options
