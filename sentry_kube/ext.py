@@ -180,14 +180,14 @@ pgbouncer /etc/pgbouncer/pgbouncer.ini""",
             },
             "volumeMounts": [
                 {
-                    "name": "etc-pgbouncer",
-                    "mountPath": "/etc/pgbouncer",
-                },
-                {
                     "name": "pgbouncer-secrets",
                     "subPath": "userlist",
                     "mountPath": "/etc/pgbouncer/userlist.txt",
                     "readOnly": True,
+                },
+                {
+                    "name": "etc-pgbouncer",
+                    "mountPath": "/etc/pgbouncer",
                 },
             ],
         }
