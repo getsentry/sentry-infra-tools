@@ -92,7 +92,7 @@ class PGBouncerSidecar(SimpleExtension):
         maxClientConn: int = 100,
         defaultPoolSize: int = 25,
         serverLifetime: int = 300,
-        version: str = "1.23.1-alpine3.20",
+        version: str = "1.24.1-alpine3.22",
         application_name: Optional[str] = None,
         livenessProbe: Optional[dict] = None,
         resources: Optional[dict] = None,
