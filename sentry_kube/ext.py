@@ -97,8 +97,6 @@ class PGBouncerSidecar(SimpleExtension):
         livenessProbe: Optional[dict] = None,
         resources: Optional[dict] = None,
         custom_pre_stop_command: Optional[str] = None,
-        use_auth: bool = True,
-        security_hardened: bool = True,
     ):
         if application_name:
             # Prepend supplied application_name to the pgbouncer options
@@ -128,19 +126,13 @@ class PGBouncerSidecar(SimpleExtension):
         if ".pkg.dev/" in repository:
             image = f"{repository}/pgbouncer/image:{version}"
 
-        config_filename = "/etc/pgbouncer.ini"
-        cmd = "exec su-exec pgbouncer pgbouncer /etc/pgbouncer.ini"
-        if security_hardened:
-            config_filename = "/etc/pgbouncer/pgbouncer.ini"
-            cmd = "pgbouncer /etc/pgbouncer/pgbouncer.ini"
-
         res: dict[str, Any] = {
             "image": image,
             "name": "pgbouncer",
             "args": [
                 "/bin/sh",
                 "-ec",
-                f"""cat << EOF > {config_filename}
+                f"""cat << EOF > /etc/pgbouncer/pgbouncer.ini
 [databases]
 {databases_str}
 [pgbouncer]
@@ -166,7 +158,7 @@ log_pooler_errors = 1
 server_round_robin = 1
 tcp_keepalive = 1
 EOF
-{cmd}""",
+pgbouncer /etc/pgbouncer/pgbouncer.ini""",
             ],
             "lifecycle": {
                 "preStop": {
@@ -179,6 +171,25 @@ EOF
                     }
                 }
             },
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "runAsUser": 1000,
+                "runAsGroup": 1000,
+            },
+            "volumeMounts": [
+                {
+                    "name": "etc-pgbouncer",
+                    "mountPath": "/etc/pgbouncer",
+                },
+                {
+                    "name": "pgbouncer-secrets",
+                    "subPath": "userlist",
+                    "mountPath": "/etc/pgbouncer/userlist.txt",
+                    "readOnly": True,
+                },
+            ],
         }
         _resources = {
             "requests": {"cpu": "50m", "memory": "25Mi"},
@@ -186,30 +197,7 @@ EOF
         }
         _resources.update(resources or {})
         res["resources"] = _resources
-        if security_hardened:
-            res["securityContext"] = {
-                "allowPrivilegeEscalation": False,
-                "readOnlyRootFilesystem": True,
-                "runAsNonRoot": True,
-                "runAsUser": 1000,
-                "runAsGroup": 1000,
-            }
 
-        res["volumeMounts"] = [
-            {
-                "name": "pgbouncer-secrets",
-                "subPath": "userlist",
-                "mountPath": "/etc/pgbouncer/userlist.txt",
-                "readOnly": True,
-            }
-        ]
-        if security_hardened:
-            res["volumeMounts"].append(
-                {
-                    "name": "etc-pgbouncer",
-                    "mountPath": "/etc/pgbouncer",
-                }
-            )
         if livenessProbe:
             res["livenessProbe"] = livenessProbe
         return json.dumps(res)
