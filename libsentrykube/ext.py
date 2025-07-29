@@ -112,11 +112,6 @@ XDS_BOOTSTRAP_ENTRYPOINT = f"""
 xds -mode bootstrap {XDS_BASE_ARGS}
 """  # noqa: E501
 
-IPTABLES_ENTRYPOINT = """
-iptables -t nat -A OUTPUT -m addrtype --src-type LOCAL --dst-type LOCAL -p udp --dport 8126 -j DNAT --to-destination $HOST_IP:8126
-iptables -t nat -C POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE 2>/dev/null >/dev/null || iptables -t nat -A POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE
-"""  # noqa: E501
-
 
 class SimpleExtension(Extension):
     key = None
@@ -539,34 +534,6 @@ class EnvoySidecar(SimpleExtension):
             res["readinessProbe"] = readinessProbe
 
         return json.dumps(res)
-
-
-class DogstatsdPortForwardingInitContainer(SimpleExtension):
-    """
-    An initContainer for setting up port-forwarding from within the Pod
-    out to the host's IP address. This exposes a dogstatsd agent UDP port
-    inside the Pod over the loopback interface (127.0.0.1).
-    To be used as a container within pod.spec.initContainers.
-    """
-
-    def run(self, version: str = "latest"):
-        iptables_entrypoint = IPTABLES_ENTRYPOINT
-        env = [
-            {
-                "name": "HOST_IP",
-                "valueFrom": {"fieldRef": {"fieldPath": "status.hostIP"}},
-            },
-        ]
-
-        return json.dumps(
-            {
-                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
-                "name": "init-port-forward",
-                "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
-                "env": env,
-                "securityContext": {"capabilities": {"add": ["NET_ADMIN"]}},
-            }
-        )
 
 
 class GeoIPVolume(SimpleExtension):
