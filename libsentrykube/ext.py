@@ -611,7 +611,7 @@ class GeoIPInitContainer(SimpleExtension):
     used as a container inside of pod.spec.initContainers.
     """
 
-    def run(self, image: str = "busybox:1.36", security_hardened: bool = False):
+    def run(self, image: str = "busybox:1.36", security_hardened: bool = True):
         res: dict[str, Any] = {
             "image": image,
             "name": "init-geoip",
