@@ -1,3 +1,12 @@
+## 1.14.0
+
+### Various fixes & improvements
+
+- unit tests (#145) by @keeakita
+- plumb merge config through (#145) by @keeakita
+- helper method, classdoc (#145) by @keeakita
+- add merge config scaffolding (#145) by @keeakita
+
 ## 1.13.0
 
 ### Various fixes & improvements
