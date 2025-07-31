@@ -13,7 +13,6 @@ default_macros = [
     "ha_pod_affinity=libsentrykube.ext:HAPodAffinity",
     "internal_service=libsentrykube.ext:InternalService",
     "envoy_sidecar=libsentrykube.ext:EnvoySidecar",
-    "dogstatsd_port_forward_initcontainer=libsentrykube.ext:DogstatsdPortForwardingInitContainer",  # noqa: E501
     "geoip_volume=libsentrykube.ext:GeoIPVolume",
     "geoip_volumemount=libsentrykube.ext:GeoIPVolumeMount",
     "geoip_initcontainer=libsentrykube.ext:GeoIPInitContainer",

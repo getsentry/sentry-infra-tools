@@ -112,11 +112,6 @@ XDS_BOOTSTRAP_ENTRYPOINT = f"""
 xds -mode bootstrap {XDS_BASE_ARGS}
 """  # noqa: E501
 
-IPTABLES_ENTRYPOINT = """
-iptables -t nat -A OUTPUT -m addrtype --src-type LOCAL --dst-type LOCAL -p udp --dport 8126 -j DNAT --to-destination $HOST_IP:8126
-iptables -t nat -C POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE 2>/dev/null >/dev/null || iptables -t nat -A POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE
-"""  # noqa: E501
-
 
 class SimpleExtension(Extension):
     key = None
@@ -541,34 +536,6 @@ class EnvoySidecar(SimpleExtension):
         return json.dumps(res)
 
 
-class DogstatsdPortForwardingInitContainer(SimpleExtension):
-    """
-    An initContainer for setting up port-forwarding from within the Pod
-    out to the host's IP address. This exposes a dogstatsd agent UDP port
-    inside the Pod over the loopback interface (127.0.0.1).
-    To be used as a container within pod.spec.initContainers.
-    """
-
-    def run(self, version: str = "latest"):
-        iptables_entrypoint = IPTABLES_ENTRYPOINT
-        env = [
-            {
-                "name": "HOST_IP",
-                "valueFrom": {"fieldRef": {"fieldPath": "status.hostIP"}},
-            },
-        ]
-
-        return json.dumps(
-            {
-                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
-                "name": "init-port-forward",
-                "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
-                "env": env,
-                "securityContext": {"capabilities": {"add": ["NET_ADMIN"]}},
-            }
-        )
-
-
 class GeoIPVolume(SimpleExtension):
     """
     Provide the GeoIP volume to the Pod for containers to use. Not required,
@@ -611,7 +578,7 @@ class GeoIPInitContainer(SimpleExtension):
     used as a container inside of pod.spec.initContainers.
     """
 
-    def run(self, image: str = "busybox:1.36", security_hardened: bool = True):
+    def run(self, image: str = "busybox:1.36"):
         res: dict[str, Any] = {
             "image": image,
             "name": "init-geoip",
@@ -620,16 +587,15 @@ class GeoIPInitContainer(SimpleExtension):
                 "-ec",
                 "while [ ! -f /usr/local/share/GeoIP/GeoIP2-City.mmdb ]; do sleep 1; done",  # noqa: E501
             ],
-            "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
-        }
-        if security_hardened:
-            res["securityContext"] = {
+            "securityContext": {
                 "allowPrivilegeEscalation": False,
                 "readOnlyRootFilesystem": True,
                 "runAsNonRoot": True,
                 "runAsUser": 65534,
                 "runAsGroup": 65534,
-            }
+            },
+            "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
+        }
         return json.dumps(res)
 
 
