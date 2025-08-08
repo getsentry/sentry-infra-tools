@@ -3,7 +3,6 @@ import contextlib
 import copy
 import functools
 import os
-import sys
 import subprocess
 import tempfile
 import urllib.error
@@ -389,7 +388,7 @@ def diff(
             fg="red",
         )
 
-    sys.exit(
+    ctx.exit(
         _diff_kubectl(
             ctx=ctx,
             definitions=definitions,
@@ -622,4 +621,4 @@ def _apply(
 
     macos_notify("sentry-kube apply", "Apply complete.")
 
-    sys.exit(0)
+    ctx.exit(0)
