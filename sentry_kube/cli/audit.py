@@ -38,6 +38,7 @@ def audit(ctx, services):
         "CoreV1": kubernetes.client.CoreV1Api(client),
         "BatchV1": kubernetes.client.BatchV1Api(client),
         "AutoscalingV1": kubernetes.client.AutoscalingV1Api(client),
+        "RbacAuthorizationV1": kubernetes.client.RbacAuthorizationV1Api(client),
         "CustomObjects": kubernetes.client.CustomObjectsApi(client),
     }
     listing_funcs = {
@@ -53,6 +54,8 @@ def audit(ctx, services):
         "HorizontalPodAutoscaler": apis[
             "AutoscalingV1"
         ].list_horizontal_pod_autoscaler_for_all_namespaces,
+        "Role": apis["RbacAuthorizationV1"].list_role_for_all_namespaces,
+        "RoleBinding": apis["RbacAuthorizationV1"].list_role_binding_for_all_namespaces,
         "ManagedCertificate": functools.partial(
             apis["CustomObjects"].list_cluster_custom_object,
             group="networking.gke.io",
@@ -70,6 +73,12 @@ def audit(ctx, services):
             group="autoscaling.k8s.io",
             version="v1",
             plural="verticalpodautoscalers",
+        ),
+        "ScaledObject": functools.partial(
+            apis["CustomObjects"].list_cluster_custom_object,
+            group="keda.sh",
+            version="v1alpha1",
+            plural="scaledobjects",
         ),
     }
     crds = [
