@@ -112,6 +112,8 @@ def audit(ctx, services):
             click.echo(f"getting {kind} remote names")
         remote_names = set()
         selector = f"service in ({','.join(services)})"
+        if kind == "HorizontalPodAutoscaler":
+            selector += ",!scaledobject.keda.sh/name"
         items = listing_funcs[kind](label_selector=selector, limit=100)
         while True:
             if kind in crds:
