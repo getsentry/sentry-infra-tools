@@ -157,6 +157,9 @@ class StatefulSetImage(SimpleExtension):
         if os.getenv("KUBERNETES_OFFLINE"):
             return default
 
+        if "DEPLOYMENT_IMAGE" in os.environ:
+            return os.getenv("DEPLOYMENT_IMAGE")
+
         namespace, name = kube_extract_namespace(stateful_set_name)
         client = kube_get_client()
         try:
