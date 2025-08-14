@@ -177,14 +177,14 @@ def _diff_kubectl(
     definitions,
     server_side=None,
     important_diffs_only: bool = False,
-):
+) -> bool:
     """
     Run kubectl-based diff concurrently and print out the results in color.
     """
     # Handle scenarios where an empty definitions is passed in, like when filters
     # don't have any matches
     if not definitions:
-        return []
+        return False
 
     click.echo("Waiting on kubectl diff.")
     cmd = [
@@ -260,7 +260,7 @@ def _diff_kubectl(
 
     # Output is empty or just whitespaces/newlines
     if not output or output.isspace():
-        return []
+        return False
 
     # Print the colored diff
     lines = output.split("\n")
@@ -286,7 +286,7 @@ def _diff_kubectl(
             click.echo(line)
 
     macos_notify("sentry-kube diff", "Diff complete.")
-    return lines
+    return len(lines) > 0
 
 
 @click.command()
@@ -388,11 +388,13 @@ def diff(
             fg="red",
         )
 
-    return _diff_kubectl(
-        ctx=ctx,
-        definitions=definitions,
-        server_side=server_side,
-        important_diffs_only=important_diffs_only,
+    ctx.exit(
+        _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+            server_side=server_side,
+            important_diffs_only=important_diffs_only,
+        )
     )
 
 
@@ -553,7 +555,7 @@ def _apply(
     allow_jobs: bool,
     use_canary: bool,
     quiet: bool = False,
-) -> bool:
+):
     """
     Apply a service(s) to production, using a basic confirmation wrapper around
     "kubectl apply".
@@ -619,4 +621,4 @@ def _apply(
 
     macos_notify("sentry-kube apply", "Apply complete.")
 
-    return True
+    ctx.exit(0)
