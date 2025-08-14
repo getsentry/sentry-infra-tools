@@ -1,3 +1,7 @@
+## 1.15.2
+
+- No documented changes.
+
 ## 1.14.1
 
 ### Various fixes & improvements
