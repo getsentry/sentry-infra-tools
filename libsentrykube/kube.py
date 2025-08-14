@@ -33,6 +33,7 @@ from libsentrykube.utils import (
     kube_convert_kind_to_func,
     kube_get_client,
     pretty,
+    workspace_root,
 )
 
 
@@ -146,7 +147,11 @@ def _consolidate_variables(
           patch the regional override preserving comments.
     """
 
-    service_path = get_service_path(service_name)
+    if external:
+        service_path = workspace_root() / service_name
+    else:
+        # TODO: plumb namespace down to here when external = true from values_of Jinja macro
+        service_path = get_service_path(service_name)
     merge_config = MergeConfig.from_file(f"{service_path}/sentry-kube/merge.yaml")
     if merge_config is None:
         merge_config = MergeConfig.defaults()
