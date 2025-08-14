@@ -147,7 +147,6 @@ def _consolidate_variables(
           patch the regional override preserving comments.
     """
 
-    click.echo(f"consolidate: {service_name}", err=True)
     if external:
         service_path = workspace_root() / service_name
     else:
