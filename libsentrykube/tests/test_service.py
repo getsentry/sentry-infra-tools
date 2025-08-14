@@ -5,7 +5,6 @@ from pathlib import Path
 from unittest.mock import patch, Mock, mock_open
 
 from libsentrykube.service import (
-    MergeConfig,
     get_hierarchical_value_overrides,
     get_service_ctx_overrides,
     get_service_data,
@@ -108,25 +107,19 @@ expected_regional_cluster_helmcfg = {"releases": ["production", "canary"]}
 def test_get_service_values_not_external():
     region = "saas"
     cluster = "customer"
-    merge_config = MergeConfig.defaults()
     for service in ["service1", "service2"]:
         init_cluster_context(region, cluster)
-        returned = get_service_values(
-            service_name=service, merge_config=merge_config, external=False
-        )
+        returned = get_service_values(service_name=service, external=False)
         assert returned == expected_service_values[region][cluster][service]
 
 
 def test_get_service_values_external():
     region = "saas"
     cluster = "customer"
-    merge_config = MergeConfig.defaults()
     for service in ["service1", "service2"]:
         init_cluster_context(region, cluster)
         returned = get_service_values(
-            service_name=f"k8s_root/services/{service}",
-            merge_config=merge_config,
-            external=True,
+            service_name=f"k8s_root/services/{service}", external=True
         )
         assert returned == expected_service_values[region][cluster][service]
 
@@ -148,14 +141,12 @@ def test_service_override_path() -> None:
 def test_get_service_value_overrides_present():
     region = "saas"
     cluster = "customer"
-    merge_config = MergeConfig.defaults()
     for service in ["service1", "service2"]:
         init_cluster_context(region, cluster)
         returned = get_service_value_overrides(
             service_name=service,
             region_name=region,
             cluster_name=cluster,
-            merge_config=merge_config,
             external=False,
         )
         assert returned == expected_service_value_overrides[region][cluster][service]
@@ -183,14 +174,9 @@ def test_get_service_value_overrides_missing():
     region = "saas"
     cluster = "customer"
     service = "service2"
-    merge_config = MergeConfig.defaults()
     init_cluster_context(region, cluster)
     returned = get_service_value_overrides(
-        service_name=service,
-        region_name=region,
-        cluster_name=cluster,
-        merge_config=merge_config,
-        external=False,
+        service_name=service, region_name=region, cluster_name=cluster, external=False
     )
     assert returned == expected_service_value_overrides[region][cluster][service]
 
@@ -291,13 +277,11 @@ def test_regional_cluster_value_overrides(
         workspace_root() / "cli_config/configuration.yaml"
     )
     init_cluster_context("customer1", "cluster1")
-    merge_config = MergeConfig.defaults()
 
     returned = get_service_value_overrides(
         service_name="my_service",
         region_name="customer1",
         cluster_name="cluster1",
-        merge_config=merge_config,
     )
 
     assert returned == expected_regional_cluster_values
@@ -311,12 +295,10 @@ def test_helm_regional_cluster_value_overrides(
         workspace_root() / "cli_config/configuration.yaml"
     )
     init_cluster_context("customer1", "cluster1")
-    merge_config = MergeConfig.defaults()
 
     returned_values = get_service_ctx_overrides(
         service_name="my_helm_service",
         region_name="customer1",
-        merge_config=merge_config,
         cluster_name="cluster1",
         namespace="helm",
         cluster_as_folder=True,
@@ -324,7 +306,6 @@ def test_helm_regional_cluster_value_overrides(
     returned_helmcfg = get_service_ctx_overrides(
         service_name="my_helm_service",
         region_name="customer1",
-        merge_config=merge_config,
         cluster_name="cluster1",
         namespace="helm",
         src_files_prefix="_helm",
@@ -363,67 +344,24 @@ def test_get_service_template_files():
 
 
 def test_verify_values_files_no_conflict_no_conflict():
-    merge_config = MergeConfig.defaults()
     base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
     new = {"consumer_groups": {"consumer-1": {"other": "data"}}}
     expected = {
         "workers": {"rabbit-worker-1": {"some": "data"}},
         "consumer_groups": {"consumer-1": {"other": "data"}},
     }
-    result = merge_values_files_no_conflict(
-        base.copy(), new, "_values_consumers.yaml", merge_config
-    )
+    result = merge_values_files_no_conflict(base.copy(), new, "_values_consumers.yaml")
     assert result == expected
 
 
 def test_verify_values_files_no_conflict_with_conflict():
     base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
     new = {"workers": {"rabbit-worker-2": {"other": "data"}}}
-    merge_config = MergeConfig.defaults()
     with pytest.raises(ValueError) as excinfo:
-        merge_values_files_no_conflict(
-            base.copy(), new, "_values_consumers.yaml", merge_config
-        )
+        merge_values_files_no_conflict(base.copy(), new, "_values_consumers.yaml")
 
     assert "Conflict detected when merging file" in str(excinfo.value)
-    assert "duplicate key 'workers'" in str(excinfo.value)
-
-
-def test_verify_values_files_no_conflict_with_conflict_overwrite():
-    base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
-    new = {"workers": {"rabbit-worker-2": {"other": "data"}}}
-    merge_config = MergeConfig({"default": "reject", "paths": {"workers": "overwrite"}})
-    expected = {
-        "workers": {
-            "rabbit-worker-2": {
-                "other": "data",
-            },
-        },
-    }
-    result = merge_values_files_no_conflict(
-        base.copy(), new, "_values_consumers.yaml", merge_config
-    )
-    assert result == expected
-
-
-def test_verify_values_files_no_conflict_with_conflict_append():
-    base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
-    new = {"workers": {"rabbit-worker-2": {"other": "data"}}}
-    merge_config = MergeConfig({"default": "append"})
-    expected = {
-        "workers": {
-            "rabbit-worker-1": {
-                "some": "data",
-            },
-            "rabbit-worker-2": {
-                "other": "data",
-            },
-        },
-    }
-    result = merge_values_files_no_conflict(
-        base.copy(), new, "_values_consumers.yaml", merge_config
-    )
-    assert result == expected
+    assert "duplicate keys {'workers'}" in str(excinfo.value)
 
 
 def test_get_service_flags_file_exists():
@@ -572,47 +510,3 @@ def test_get_service_flags_invalid_yaml():
     ):
         with pytest.raises(Exception, match="Invalid YAML"):
             get_service_flags("test-service")
-
-
-def test_merge_config_typical():
-    document = """
-    default: reject
-    paths:
-        worker_groups: append
-    """
-
-    config = MergeConfig(MergeConfig.load(document))
-    assert config.default == MergeConfig.MergeStrategy.REJECT
-    assert config.paths["worker_groups"] == MergeConfig.MergeStrategy.APPEND
-
-
-def test_merge_config_no_paths():
-    document = """
-    default: overwrite
-    """
-
-    config = MergeConfig(MergeConfig.load(document))
-    assert config.default == MergeConfig.MergeStrategy.OVERWRITE
-    assert len(config.paths) == 0
-
-
-def test_merge_config_no_defaults():
-    document = """
-    paths:
-        worker_groups: append
-    """
-
-    config = MergeConfig(MergeConfig.load(document))
-    assert config.default == MergeConfig.MergeStrategy.REJECT
-    assert len(config.paths) == 1
-
-
-def test_merge_config_invalid():
-    document = """
-    default: foobar
-    paths:
-        worker_groups: append
-    """
-
-    with pytest.raises(Exception, match="is not a valid"):
-        _config = MergeConfig(MergeConfig.load(document))

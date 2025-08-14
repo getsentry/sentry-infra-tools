@@ -14,7 +14,6 @@ from yaml import dump_all, safe_dump, safe_load, safe_load_all
 
 from libsentrykube.loader import load_macros
 from libsentrykube.service import (
-    MergeConfig,
     build_materialized_path,
     get_service_data,
     get_service_flags,
@@ -146,26 +145,21 @@ def _consolidate_variables(
           patch the regional override preserving comments.
     """
 
-    service_path = get_service_path(service_name)
-    merge_config = MergeConfig.from_file(f"{service_path}/sentry-kube/merge.yaml")
-    if merge_config is None:
-        merge_config = MergeConfig.defaults()
-
     # check that there is a single customer dir per service
     assert_customer_is_defined_at_most_once(service_name, customer_name, external)
 
     # Service defaults from _values
     # Always gets loaded even if no region_override exists
-    service_values = get_service_values(service_name, merge_config, external)
+    service_values = get_service_values(service_name, external)
 
     # Service data overrides from services/SERVICE/region_overrides/
     service_value_overrides = get_service_value_overrides(
-        service_name, customer_name, merge_config, cluster_name, external
+        service_name, customer_name, cluster_name, external
     )
 
     # Service data overrides from services/SERVICE/region_overrides/REGION/_values.yaml
     common_service_values = get_common_regional_override(
-        service_name, customer_name, merge_config, external
+        service_name, customer_name, external
     )
 
     # If a cluster or region common config exists in region_overrides/REGION/
@@ -254,9 +248,7 @@ def render_templates(
     )
 
     render_data["values"] = _consolidate_variables(
-        customer_name,
-        service_name,
-        cluster_name,
+        customer_name, service_name, cluster_name
     )
 
     extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
