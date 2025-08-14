@@ -1,3 +1,11 @@
+## 1.14.1
+
+### Various fixes & improvements
+
+- remove debug log (#153) by @keeakita
+- values_for -> values_of (#153) by @keeakita
+- fix loading values with external=True (#153) by @keeakita
+
 ## 1.15.0
 
 ### Various fixes & improvements
