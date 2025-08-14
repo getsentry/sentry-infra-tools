@@ -1,3 +1,23 @@
+## 1.15.2
+
+- No documented changes.
+
+## 1.14.1
+
+### Various fixes & improvements
+
+- remove debug log (#153) by @keeakita
+- values_for -> values_of (#153) by @keeakita
+- fix loading values with external=True (#153) by @keeakita
+
+## 1.15.0
+
+### Various fixes & improvements
+
+- (fix): add $DEPLOYMENT_IMAGE parsing to statefulset image extension (#152) by @mwarkentin
+- chore: remove insecure macros or their insecure variants (#149) by @oioki
+- Adds Role, Rolebinding and ScaledObject to audit. (#151) by @ellisonmarks
+
 ## 1.14.0
 
 ### Various fixes & improvements
