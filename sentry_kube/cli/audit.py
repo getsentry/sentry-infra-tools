@@ -32,6 +32,8 @@ def audit(ctx, services):
             )
         )
     )
+    if "getsentry" in services:
+        services.append("sentry")
     client = kube_get_client()
     apis = {
         "AppsV1": kubernetes.client.AppsV1Api(client),
