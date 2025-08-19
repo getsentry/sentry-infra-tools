@@ -1,3 +1,11 @@
+## 1.15.3
+
+### Various fixes & improvements
+
+- merge config for helm contexts (#156) by @keeakita
+- Fixes audit to account for ST getsentry service name. (#155) by @ellisonmarks
+- chore: diff should exit non-zero when a diff is present (#150) by @rgibert
+
 ## 1.15.2
 
 - No documented changes.
