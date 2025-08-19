@@ -146,12 +146,14 @@ def _consolidate_ctx(
     region_name, service_name, cluster_name, src_files_prefix="_values"
 ):
     from libsentrykube.service import (
+        get_service_path,
         get_service_ctx,
         get_service_ctx_overrides,
         get_hierarchical_value_overrides,
         get_common_regional_override,
         get_helm_service_data,
         assert_customer_is_defined_at_most_once,
+        MergeConfig,
     )
 
     if src_files_prefix == "_values":
@@ -159,8 +161,16 @@ def _consolidate_ctx(
             service_name, region_name, namespace="helm"
         )
 
+    service_path = get_service_path(service_name, namespace="helm")
+    merge_config = MergeConfig.from_file(f"{service_path}/sentry-kube/merge.yaml")
+    if merge_config is None:
+        merge_config = MergeConfig.defaults()
+
     ctx = get_service_ctx(
-        service_name, namespace="helm", src_files_prefix=src_files_prefix
+        service_name,
+        namespace="helm",
+        src_files_prefix=src_files_prefix,
+        merge_config=merge_config,
     )
     ctx_overrides = get_service_ctx_overrides(
         service_name,
@@ -171,7 +181,11 @@ def _consolidate_ctx(
         cluster_as_folder=True,
     )
     ctx_common = get_common_regional_override(
-        service_name, region_name, namespace="helm", src_files_prefix=src_files_prefix
+        service_name,
+        region_name,
+        namespace="helm",
+        src_files_prefix=src_files_prefix,
+        merge_config=merge_config,
     )
     if ctx_overrides or ctx_common:
         deep_merge_dict(ctx, ctx_common)
