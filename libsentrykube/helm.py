@@ -175,10 +175,11 @@ def _consolidate_ctx(
     ctx_overrides = get_service_ctx_overrides(
         service_name,
         region_name,
-        cluster_name,
+        cluster_name=cluster_name,
         namespace="helm",
         src_files_prefix=src_files_prefix,
         cluster_as_folder=True,
+        merge_config=merge_config,
     )
     ctx_common = get_common_regional_override(
         service_name,
