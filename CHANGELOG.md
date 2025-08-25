@@ -1,3 +1,9 @@
+## 1.15.4
+
+### Various fixes & improvements
+
+- fix: merge arguments passed in Helm functions (#157) by @gi0baro
+
 ## 1.15.3
 
 ### Various fixes & improvements
