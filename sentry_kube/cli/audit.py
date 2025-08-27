@@ -45,6 +45,7 @@ def audit(ctx, services):
     }
     listing_funcs = {
         "Deployment": apis["AppsV1"].list_deployment_for_all_namespaces,
+        "DaemonSet": apis["AppsV1"].list_daemon_set_for_all_namespaces,
         "PersistentVolume": apis["CoreV1"].list_persistent_volume,
         "PersistentVolumeClaim": apis[
             "CoreV1"
@@ -57,7 +58,9 @@ def audit(ctx, services):
             "AutoscalingV1"
         ].list_horizontal_pod_autoscaler_for_all_namespaces,
         "Role": apis["RbacAuthorizationV1"].list_role_for_all_namespaces,
+        "ClusterRole": apis["RbacAuthorizationV1"].list_cluster_role,
         "RoleBinding": apis["RbacAuthorizationV1"].list_role_binding_for_all_namespaces,
+        "ClusterRoleBinding": apis["RbacAuthorizationV1"].list_cluster_role_binding,
         "ManagedCertificate": functools.partial(
             apis["CustomObjects"].list_cluster_custom_object,
             group="networking.gke.io",
