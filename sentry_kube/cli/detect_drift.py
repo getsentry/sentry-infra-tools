@@ -32,7 +32,12 @@ def detect_drift(ctx, issue):
     for service in services:
         output = None
         try:
-            output = ctx.invoke(diff, services=[service], important_diffs_only=True)
+            output = ctx.invoke(
+                diff,
+                services=[service],
+                important_diffs_only=True,
+                always_exit_with_zero=True,
+            )
         except TemplateError as e:
             click.secho(e, fg="red")
             if issue:
