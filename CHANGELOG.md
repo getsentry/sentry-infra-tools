@@ -1,3 +1,9 @@
+## 1.15.5
+
+### Various fixes & improvements
+
+- fix(diff): Allow drift detection to force diff to exit 0 (#158) by @rgibert
+
 ## 1.15.4
 
 ### Various fixes & improvements
