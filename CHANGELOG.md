@@ -1,3 +1,9 @@
+## 1.15.6
+
+### Various fixes & improvements
+
+- Adds daemonset, ClusterRole and ClusterRoleBinding to the audit script. (#159) by @ellisonmarks
+
 ## 1.15.5
 
 ### Various fixes & improvements
