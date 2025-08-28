@@ -1,3 +1,9 @@
+## 1.15.7
+
+### Various fixes & improvements
+
+- fix(detect-drift): Don't exit when running diff from detect-drift (#160) by @rgibert
+
 ## 1.15.6
 
 ### Various fixes & improvements
