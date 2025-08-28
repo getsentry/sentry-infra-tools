@@ -36,7 +36,7 @@ def detect_drift(ctx, issue):
                 diff,
                 services=[service],
                 important_diffs_only=True,
-                always_exit_with_zero=True,
+                exit_with_result=False,
             )
         except TemplateError as e:
             click.secho(e, fg="red")

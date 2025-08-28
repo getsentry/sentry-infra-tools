@@ -360,7 +360,7 @@ def diff(
     use_canary: bool,
     allow_jobs: bool,
     deployment_image: str | None = None,
-    always_exit_with_zero: bool = False,
+    exit_with_result: bool = True,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -389,16 +389,15 @@ def diff(
             fg="red",
         )
 
-    diff_ret = _diff_kubectl(
-        ctx=ctx,
-        definitions=definitions,
-        server_side=server_side,
-        important_diffs_only=important_diffs_only,
-    )
-
-    ret = 0 if always_exit_with_zero else diff_ret
-
-    ctx.exit(ret)
+    if exit_with_result:
+        ctx.exit(
+            _diff_kubectl(
+                ctx=ctx,
+                definitions=definitions,
+                server_side=server_side,
+                important_diffs_only=important_diffs_only,
+            )
+        )
 
 
 @click.command()
