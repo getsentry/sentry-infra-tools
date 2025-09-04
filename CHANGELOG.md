@@ -1,3 +1,9 @@
+## 1.15.8
+
+### Various fixes & improvements
+
+- this fixes drift detection with the help of claude code (#161) by @kneeyo1
+
 ## 1.15.7
 
 ### Various fixes & improvements
