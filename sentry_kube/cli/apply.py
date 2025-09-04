@@ -177,13 +177,16 @@ def _diff_kubectl(
     definitions,
     server_side=None,
     important_diffs_only: bool = False,
-) -> bool:
+    return_output: bool = False,
+):
     """
     Run kubectl-based diff concurrently and print out the results in color.
     """
     # Handle scenarios where an empty definitions is passed in, like when filters
     # don't have any matches
     if not definitions:
+        if return_output:
+            return (False, None)
         return False
 
     click.echo("Waiting on kubectl diff.")
@@ -260,6 +263,8 @@ def _diff_kubectl(
 
     # Output is empty or just whitespaces/newlines
     if not output or output.isspace():
+        if return_output:
+            return (False, None)
         return False
 
     # Print the colored diff
@@ -286,7 +291,10 @@ def _diff_kubectl(
             click.echo(line)
 
     macos_notify("sentry-kube diff", "Diff complete.")
-    return len(lines) > 0
+    has_diffs = len(lines) > 0
+    if return_output:
+        return (has_diffs, lines if has_diffs else None)
+    return has_diffs
 
 
 @click.command()
@@ -390,14 +398,22 @@ def diff(
         )
 
     if exit_with_result:
-        ctx.exit(
-            _diff_kubectl(
-                ctx=ctx,
-                definitions=definitions,
-                server_side=server_side,
-                important_diffs_only=important_diffs_only,
-            )
+        diff_result = _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+            server_side=server_side,
+            important_diffs_only=important_diffs_only,
         )
+        ctx.exit(diff_result)
+    else:
+        diff_result, output_lines = _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+            server_side=server_side,
+            important_diffs_only=important_diffs_only,
+            return_output=True,
+        )
+        return output_lines
 
 
 @click.command()
