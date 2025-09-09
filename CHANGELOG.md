@@ -1,3 +1,9 @@
+## 1.15.9
+
+### Various fixes & improvements
+
+- chore(helm): return proper exit codes on apply (#162) by @gi0baro
+
 ## 1.15.8
 
 ### Various fixes & improvements
