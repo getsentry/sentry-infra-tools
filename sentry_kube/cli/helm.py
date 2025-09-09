@@ -121,9 +121,11 @@ def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
 
+    errored = False
+
     for service_name in services:
         try:
-            yield _helm_apply(
+            for item in _helm_apply(
                 customer_name,
                 service_name,
                 cluster_name,
@@ -133,9 +135,13 @@ def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
                 kctx=context_name,
                 atomic=atomic,
                 timeout=timeout,
-            )
+            ):
+                yield item
         except HelmException:
-            pass
+            errored = True
+
+    if errored:
+        raise click.Abort()
 
 
 @helm.command()
@@ -227,4 +233,4 @@ def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
             raise click.Abort()
 
     for res in _apply(ctx, services, release, namespace, app_version, atomic, timeout):
-        click.echo("".join(res))
+        click.echo(res)
