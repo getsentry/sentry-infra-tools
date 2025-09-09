@@ -126,7 +126,7 @@ def _run_helm(cmd: list[str], raise_on_err: bool = False) -> str:
 
     if child_process.returncode != 0:
         if raise_on_err or not child_output:
-            raise HelmException
+            raise HelmException(child_output)
     return child_output
 
 
@@ -654,7 +654,7 @@ def apply(
 ):
     from libsentrykube.service import get_service_path
 
-    outputs = []
+    errors = []
 
     service_path = get_service_path(service_name, namespace="helm")
     for helm_release, targets in helm_release_ctx(
@@ -687,10 +687,21 @@ def apply(
         for target in targets:
             helm_params.extend(["-f", target])
         set_app_version(helm_release, helm_params, app_version=app_version)
-        outputs.append(
-            _run_helm(
-                helm_params, raise_on_err=helm_release.strategy.kind == "bluegreen"
-            )
-        )
 
-    return "\n".join(outputs)
+        yield f"Applying release {helm_release.name} to namespace {helm_release.namespace}.."
+
+        try:
+            output = _run_helm(helm_params, raise_on_err=True)
+            yield output
+        except HelmException as e:
+            yield f"Release {helm_release.name} failed."
+            if e.args[0]:
+                yield e.args[0]
+            errors.append((helm_release.name, helm_release.namespace))
+
+            if helm_release.strategy.kind == "bluegreen":
+                yield "blue-green release strategy detected, aborting"
+                raise e
+
+    if errors:
+        raise HelmException
