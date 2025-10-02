@@ -215,7 +215,7 @@ def run_pod(
     else:
         default_service, default_deployment = (
             "getsentry",
-            "worker-save",
+            "web",
         )
 
     if service == _DEFAULT_STR:
