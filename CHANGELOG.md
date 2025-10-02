@@ -1,3 +1,9 @@
+## 1.15.10
+
+### Various fixes & improvements
+
+- chore: Update default ST deployment (#163) by @rgibert
+
 ## 1.15.9
 
 ### Various fixes & improvements
