@@ -24,9 +24,10 @@ EXCLUDED_CONTAINERS = {"envoy", "pgbouncer"}
 @click.option("--container", "-c")
 @click.option("--image", "-i")
 @click.option("--namespace", "-n", default="default")
+@click.option("--privileged", "-p", is_flag=True)
 @click.option("--quiet", "-q", is_flag=True)
 @click.pass_context
-def debug(ctx, container, image, namespace, quiet):
+def debug(ctx, container, image, namespace, privileged, quiet):
     """
     Convenient wrapper for running "kubectl debug" with env and volume mounts
     """
@@ -128,6 +129,12 @@ def debug(ctx, container, image, namespace, quiet):
             "runAsGroup": 0,
         },
     }
+
+    if privileged:
+        custom_debug_profile["securityContext"]["privileged"] = True
+        custom_debug_profile["securityContext"]["capabilities"] = {
+            "add": ["CAP_SYS_ADMIN"]
+        }
 
     # write the custom debug profile
     tmp.write(json.dumps(custom_debug_profile).encode("utf-8"))
