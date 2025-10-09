@@ -210,7 +210,7 @@ def run_pod(
     if customer_name == "saas" or customer_name == "de" or customer_name == "us":
         default_service, default_deployment = (
             "getsentry",
-            "getsentry-worker-save-production",
+            "getsentry-web-default-common-production",
         )
     else:
         default_service, default_deployment = (
