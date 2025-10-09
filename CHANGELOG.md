@@ -1,3 +1,10 @@
+## 1.16.0
+
+### Various fixes & improvements
+
+- Fixes run-pod default deployment for SaaS. (#165) by @ellisonmarks
+- feat(debug): Add commandline flag to start debug container priviledged (#164) by @Dav1dde
+
 ## 1.15.10
 
 ### Various fixes & improvements
