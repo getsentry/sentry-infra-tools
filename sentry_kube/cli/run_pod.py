@@ -160,6 +160,12 @@ _DEFAULT_STR = "__default__"
     help="Used with `--exec` to allocate TTY for containers. Default `False`",
 )
 @click.option(
+    "--no-security-context",
+    is_flag=True,
+    default=False,
+    help="Remove any securityContext options.",
+)
+@click.option(
     "--root",
     is_flag=True,
     default=False,
@@ -194,21 +200,22 @@ def run_pod(
     exec_,
     interactive,
     tty,
+    no_security_context,
     root,
     safe_to_evict,
     memory,
 ):
     customer_name = ctx.obj.customer_name
 
-    if customer_name == "saas" or customer_name == "de":
+    if customer_name == "saas" or customer_name == "de" or customer_name == "us":
         default_service, default_deployment = (
             "getsentry",
-            "getsentry-worker-save-production",
+            "getsentry-web-default-common-production",
         )
     else:
         default_service, default_deployment = (
             "getsentry",
-            "worker-save",
+            "web",
         )
 
     if service == _DEFAULT_STR:
@@ -334,6 +341,9 @@ def run_pod(
     container.pop("livenessProbe", None)
     container.pop("readinessProbe", None)
     container.pop("startupProbe", None)
+
+    if no_security_context:
+        container.pop("securityContext", None)
 
     if root:
         container.setdefault("securityContext", {})["runAsUser"] = 0

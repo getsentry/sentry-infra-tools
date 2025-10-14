@@ -177,6 +177,7 @@ def _diff_kubectl(
     definitions,
     server_side=None,
     important_diffs_only: bool = False,
+    return_output: bool = False,
 ):
     """
     Run kubectl-based diff concurrently and print out the results in color.
@@ -184,7 +185,9 @@ def _diff_kubectl(
     # Handle scenarios where an empty definitions is passed in, like when filters
     # don't have any matches
     if not definitions:
-        return []
+        if return_output:
+            return (False, None)
+        return False
 
     click.echo("Waiting on kubectl diff.")
     cmd = [
@@ -260,7 +263,9 @@ def _diff_kubectl(
 
     # Output is empty or just whitespaces/newlines
     if not output or output.isspace():
-        return []
+        if return_output:
+            return (False, None)
+        return False
 
     # Print the colored diff
     lines = output.split("\n")
@@ -286,7 +291,10 @@ def _diff_kubectl(
             click.echo(line)
 
     macos_notify("sentry-kube diff", "Diff complete.")
-    return lines
+    has_diffs = len(lines) > 0
+    if return_output:
+        return (has_diffs, lines if has_diffs else None)
+    return has_diffs
 
 
 @click.command()
@@ -313,6 +321,15 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
             click.echo("".join(rendered))
 
 
+def _set_deployment_image(services: List[str], deployment_image: str | None) -> None:
+    if len(services) > 1 and deployment_image:
+        raise click.BadArgumentUsage(
+            "Cannot specify --deployment-image with multiple services"
+        )
+    elif deployment_image:
+        os.environ["DEPLOYMENT_IMAGE"] = deployment_image
+
+
 @click.command()
 @click.pass_context
 @click.option("--filter", "filters", multiple=True)
@@ -336,6 +353,11 @@ def render(ctx, services, raw, pager, filters, materialize, use_canary: bool):
     is_flag=True,
     help="Allows regular diff/apply to spawn Jobs",
 )
+@click.option(
+    "--deployment-image",
+    type=str,
+    help="Override the deployment image for the services",
+)
 @allow_for_all_services
 def diff(
     ctx,
@@ -345,6 +367,8 @@ def diff(
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
+    deployment_image: str | None = None,
+    exit_with_result: bool = True,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -353,6 +377,8 @@ def diff(
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
     """
+    _set_deployment_image(services, deployment_image)
+
     click.echo(f"Rendering services: {', '.join(services)}")
     skip_kinds = ("Job",) if not allow_jobs else None
     definitions = "".join(
@@ -371,12 +397,23 @@ def diff(
             fg="red",
         )
 
-    return _diff_kubectl(
-        ctx=ctx,
-        definitions=definitions,
-        server_side=server_side,
-        important_diffs_only=important_diffs_only,
-    )
+    if exit_with_result:
+        diff_result = _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+            server_side=server_side,
+            important_diffs_only=important_diffs_only,
+        )
+        ctx.exit(diff_result)
+    else:
+        diff_result, output_lines = _diff_kubectl(
+            ctx=ctx,
+            definitions=definitions,
+            server_side=server_side,
+            important_diffs_only=important_diffs_only,
+            return_output=True,
+        )
+        return output_lines
 
 
 @click.command()
@@ -424,6 +461,11 @@ def diff(
     is_flag=True,
     help="Allows regular diff/apply to spawn Jobs",
 )
+@click.option(
+    "--deployment-image",
+    type=str,
+    help="Override the deployment image for the services",
+)
 @click.pass_context
 @allow_for_all_services
 def apply(
@@ -438,7 +480,10 @@ def apply(
     skip_monitor_checks: bool,
     soak_only: bool,
     allow_jobs: bool,
+    deployment_image: str | None = None,
 ):
+    _set_deployment_image(services, deployment_image)
+
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
 
@@ -528,7 +573,7 @@ def _apply(
     allow_jobs: bool,
     use_canary: bool,
     quiet: bool = False,
-) -> bool:
+):
     """
     Apply a service(s) to production, using a basic confirmation wrapper around
     "kubectl apply".
@@ -594,4 +639,4 @@ def _apply(
 
     macos_notify("sentry-kube apply", "Apply complete.")
 
-    return True
+    ctx.exit(0)

@@ -8,6 +8,7 @@ from typing import List, Optional
 import click
 import httpx
 from libsentrykube.config import Config
+from libsentrykube.customer import get_region_config
 
 DD_API_BASE = "https://api.datadoghq.com"
 
@@ -67,9 +68,9 @@ def _markdown_text(text: str) -> str:
     return f"%%%\n{text}\n%%%"
 
 
-def _get_sentry_region(customer_name: str) -> str:
-    silo_config = Config().silo_regions[customer_name]
-    return silo_config.sentry_region
+def _get_sentry_region(region_name: str) -> str:
+    _, region_config = get_region_config(Config(), region_name)
+    return region_config.sentry_region
 
 
 def report_terragrunt_event(
@@ -81,16 +82,13 @@ def report_terragrunt_event(
     if "terraform/" in os.getcwd():
         tgroot = "terraform"
         tgslice = os.getcwd().split("terraform/")[1]
-        region = "saas"
+        region = "us"
     elif "terragrunt/" in os.getcwd():
         tgroot = "terragrunt"
         tgslice = os.getcwd().split("terragrunt/")[1].split("/.terragrunt-cache/")[0]
         region = tgslice.split("/")[-1]
     else:
         raise RuntimeError("Unable to determine what slice you're running in.")
-
-    if region == "us":
-        region = "saas"
 
     sentry_region = Config().silo_regions[region].sentry_region
 

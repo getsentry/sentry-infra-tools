@@ -1,3 +1,270 @@
+## 1.16.0
+
+### Various fixes & improvements
+
+- Fixes run-pod default deployment for SaaS. (#165) by @ellisonmarks
+- feat(debug): Add commandline flag to start debug container priviledged (#164) by @Dav1dde
+
+## 1.15.10
+
+### Various fixes & improvements
+
+- chore: Update default ST deployment (#163) by @rgibert
+
+## 1.15.9
+
+### Various fixes & improvements
+
+- chore(helm): return proper exit codes on apply (#162) by @gi0baro
+
+## 1.15.8
+
+### Various fixes & improvements
+
+- this fixes drift detection with the help of claude code (#161) by @kneeyo1
+
+## 1.15.7
+
+### Various fixes & improvements
+
+- fix(detect-drift): Don't exit when running diff from detect-drift (#160) by @rgibert
+
+## 1.15.6
+
+### Various fixes & improvements
+
+- Adds daemonset, ClusterRole and ClusterRoleBinding to the audit script. (#159) by @ellisonmarks
+
+## 1.15.5
+
+### Various fixes & improvements
+
+- fix(diff): Allow drift detection to force diff to exit 0 (#158) by @rgibert
+
+## 1.15.4
+
+### Various fixes & improvements
+
+- fix: merge arguments passed in Helm functions (#157) by @gi0baro
+
+## 1.15.3
+
+### Various fixes & improvements
+
+- merge config for helm contexts (#156) by @keeakita
+- Fixes audit to account for ST getsentry service name. (#155) by @ellisonmarks
+- chore: diff should exit non-zero when a diff is present (#150) by @rgibert
+
+## 1.15.2
+
+- No documented changes.
+
+## 1.14.1
+
+### Various fixes & improvements
+
+- remove debug log (#153) by @keeakita
+- values_for -> values_of (#153) by @keeakita
+- fix loading values with external=True (#153) by @keeakita
+
+## 1.15.0
+
+### Various fixes & improvements
+
+- (fix): add $DEPLOYMENT_IMAGE parsing to statefulset image extension (#152) by @mwarkentin
+- chore: remove insecure macros or their insecure variants (#149) by @oioki
+- Adds Role, Rolebinding and ScaledObject to audit. (#151) by @ellisonmarks
+
+## 1.14.0
+
+### Various fixes & improvements
+
+- unit tests (#145) by @keeakita
+- plumb merge config through (#145) by @keeakita
+- helper method, classdoc (#145) by @keeakita
+- add merge config scaffolding (#145) by @keeakita
+
+## 1.13.0
+
+### Various fixes & improvements
+
+- fix: set security_hardened=True by default (#148) by @oioki
+- fix(debug): Filter duplicated mount paths (#147) by @Dav1dde
+
+## 1.12.0
+
+### Various fixes & improvements
+
+- feat: add helm namespace filter (#146) by @gi0baro
+
+## 1.11.1
+
+### Various fixes & improvements
+
+- fix: Pass back region_name when using alias so lookups always work (#143) by @rgibert
+- fix: helm `get_remote_app_version` (#144) by @gi0baro
+
+## 1.11.0
+
+### Various fixes & improvements
+
+- PRODENG-227: handle unknown services (#141) by @mwarkentin
+- feat(sentry-kube): add `debug` subcommand (#137) by @oioki
+
+## 1.10.0
+
+### Various fixes & improvements
+
+- PRODENG-227: add sentry-kube get-image cmd (#140) by @mwarkentin
+- feat: Allow setting an override image SHA from the CLI for applies (#139) by @rgibert
+
+## 1.9.1
+
+### Various fixes & improvements
+
+- fix(kafkactl): add missing no_security_context=False (#138) by @oioki
+
+## 1.9.0
+
+### Various fixes & improvements
+
+- feat: add helm release strategies (#125) by @gi0baro
+- feat(run-pod): add `--no-security-context` option (#136) by @oioki
+
+## 1.8.1
+
+### Various fixes & improvements
+
+- fix(drift): Format code to linear markdown formatting (#135) by @nikhars
+
+## 1.8.0
+
+### Various fixes & improvements
+
+- feat: add `md5` jinja filter (#134) by @oioki
+
+## 1.7.0
+
+### Various fixes & improvements
+
+- PRODENG-159: add service-level feature flag for simplified jinja whitespace handling (#131) by @mwarkentin
+
+## 1.6.0
+
+### Various fixes & improvements
+
+- feat(k8s): security hardening of geoip and pgbouncer sidecar (#133) by @oioki
+- chore(pgbouncer): use auth unconditionally (#132) by @oioki
+
+## 1.5.0
+
+### Various fixes & improvements
+
+- add support for multi-level dicts to getval (#129) by @mwarkentin
+- fix(config): Aliases aren't used every where (#128) by @rgibert
+- (test): fix test_lint failures (#130) by @mwarkentin
+
+## 1.4.0
+
+### Various fixes & improvements
+
+- feat: Support skipping validating regions (#127) by @rgibert
+- feat: support region aliases (#124) by @rgibert
+- fixed mypy issue (#122) by @ghengiskhanh
+- fixed method return call for precommit hook (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- fixed mypy issues (#122) by @ghengiskhanh
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#122) by @ghengiskhanh
+- Customer is now added to the issue; updated globals (#122) by @ghengiskhanh
+- added Linear integraiton for Drift tickets and swapped it in instead of jira (#122) by @ghengiskhanh
+- [pre-commit.ci] pre-commit autoupdate (#116) by @pre-commit-ci
+- improve error messages on missing jinja include (#121) by @keeakita
+
+## 1.3.2
+
+### Various fixes & improvements
+
+- feat(secrets): add `--copy-entry` mode (#119) by @oioki
+- feat: universal secrets (#120) by @oioki
+
+## 1.3.1
+
+### Various fixes & improvements
+
+- fix: helm with OCI repos (#118) by @gi0baro
+
+## 1.3.0
+
+- No documented changes.
+
+## 1.2.3
+
+### Various fixes & improvements
+
+- chore(docs): Add note about determining new versions (#117) by @rgibert
+- [pre-commit.ci] auto fixes from pre-commit.com hooks (#114) by @victoria-yining-huang
+- add combine default values files (#114) by @victoria-yining-huang
+- sentry-kube pg: support optional namespace via / (#110) by @oioki
+- [pre-commit.ci] pre-commit autoupdate (#113) by @pre-commit-ci
+- [pre-commit.ci] pre-commit autoupdate (#94) by @pre-commit-ci
+- Revert "chore: Add config defaults" (#111) by @rgibert
+
+## 1.2.2
+
+### Various fixes & improvements
+
+- cleanup: remove unused commands (#108) by @bmckerry
+
+## 1.2.1
+
+### Various fixes & improvements
+
+- chore: Add config defaults (#65) by @rgibert
+
+## 1.2.0
+
+### Various fixes & improvements
+
+- chore: Add support for us region to replace saas (#60) by @rgibert
+
+## 1.1.3
+
+### Various fixes & improvements
+
+- feat(kubectl): remove old private DNS connection to clusters (#109) by @bmckerry
+
+## 1.1.2
+
+### Various fixes & improvements
+
+- fix(readme): update install info (#107) by @bmckerry
+
+## 1.1.1
+
+### Various fixes & improvements
+
+- Minor helm enhancements (#106) by @gi0baro
+
+## 1.1.0
+
+### Various fixes & improvements
+
+- feat(helm): add reversemap support (#105) by @gi0baro
+
+## 1.0.0
+
+### Various fixes & improvements
+
+- Merge pull request #104 from getsentry/gi0baro/helm (#104) by @gi0baro
+
+## 0.0.37
+
+### Various fixes & improvements
+
+- fix: Support .yaml.j2 extensions for templates (#102) by @rgibert
+
 ## 0.0.36
 
 ### Various fixes & improvements

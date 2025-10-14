@@ -1,5 +1,5 @@
 # sentry-kube
-# -C saas
+# -C us
 # run-pod
 # --exec
 # -it
@@ -38,6 +38,7 @@ def kafkactl(ctx):
         keep_args=True,
         exec_=True,
         tty=True,
+        no_security_context=False,
         interactive=True,
         namespace="sentry-system",
         version=None,
@@ -59,6 +60,7 @@ def kafkactl(ctx):
         keep_args=True,
         exec_=True,
         tty=True,
+        no_security_context=False,
         interactive=True,
         namespace="sentry-system",
         version=None,

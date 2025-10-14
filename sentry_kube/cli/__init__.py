@@ -12,6 +12,7 @@ import sentry_sdk
 from libsentrykube.cluster import Cluster
 from libsentrykube.cluster import load_cluster_configuration
 from libsentrykube.config import Config
+from libsentrykube.customer import get_region_config
 from libsentrykube.events import ensure_datadog_api_key_set
 from libsentrykube.iap import ensure_iap_tunnel
 from libsentrykube.service import set_service_paths
@@ -131,18 +132,17 @@ Valid regions:
 """
             )
 
-        if customer in config.silo_regions:
-            customer_config = config.silo_regions[customer]
-        else:
-            print(
+        try:
+            customer_name, customer_config = get_region_config(config, customer)
+        except ValueError:
+            die(
                 f"""Invalid region specified, must be one of:
 {newline_customers}
 """
             )
-            exit(1)
 
         if not quiet:
-            click.echo(f"Operating for customer {customer}.")
+            click.echo(f"Operating for customer {customer_name}.")
 
         cluster_to_load = customer_config.k8s_config.cluster_name or cluster_name
 
@@ -155,14 +155,14 @@ Valid regions:
         if ctx.invoked_subcommand == "ssh":
             ctx.obj = CliContext(
                 context_name=context_name,
-                customer_name=customer,
+                customer_name=customer_name,
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors={},  # type: ignore
             )
             return
 
-        set_service_paths(cluster.services)
+        set_service_paths(cluster.services, helm=cluster.helm_services.services)
 
         if ctx.invoked_subcommand in (
             "rendervalues",
@@ -175,7 +175,7 @@ Valid regions:
 
             ctx.obj = CliContext(
                 context_name=context_name,
-                customer_name=customer,
+                customer_name=customer_name,
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors=customer_config.service_monitors,
@@ -187,14 +187,14 @@ Valid regions:
 
         ctx.obj = CliContext(
             context_name=context_name,
-            customer_name=customer,
+            customer_name=customer_name,
             cluster_name=cluster.name,
             quiet_mode=quiet,
             cluster=cluster,
             service_monitors=customer_config.service_monitors,
         )
 
-        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx, quiet)
+        os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx)
 
         kube_set_context(context_name, kubeconfig=kubeconfig)
 

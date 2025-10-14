@@ -13,7 +13,14 @@ from kubernetes.client import AppsV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
-from libsentrykube.kube import render_service_values
+from libsentrykube.kube import (
+    render_service_values,
+)
+from libsentrykube.service import (
+    get_deployment_image,
+    KUBE_API_TIMEOUT_DEFAULT,
+    KUBE_API_TIMEOUT_ENV_NAME,
+)
 from libsentrykube.utils import (
     deep_merge_dict,
     get_service_registry_data,
@@ -22,9 +29,6 @@ from libsentrykube.utils import (
     md5_fileobj,
     workspace_root,
 )
-
-KUBE_API_TIMEOUT_DEFAULT: int = 3
-KUBE_API_TIMEOUT_ENV_NAME: str = "SK_KUBE_TIMEOUT"
 
 ENVOY_ENTRYPOINT = """
 cat << EOF > /etc/envoy/envoy.yaml
@@ -108,11 +112,6 @@ XDS_BOOTSTRAP_ENTRYPOINT = f"""
 xds -mode bootstrap {XDS_BASE_ARGS}
 """  # noqa: E501
 
-IPTABLES_ENTRYPOINT = """
-iptables -t nat -A OUTPUT -m addrtype --src-type LOCAL --dst-type LOCAL -p udp --dport 8126 -j DNAT --to-destination $HOST_IP:8126
-iptables -t nat -C POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE 2>/dev/null >/dev/null || iptables -t nat -A POSTROUTING -m addrtype --src-type LOCAL --dst-type UNICAST -j MASQUERADE
-"""  # noqa: E501
-
 
 class SimpleExtension(Extension):
     key = None
@@ -139,27 +138,10 @@ class DeploymentImage(SimpleExtension):
 
     @cache
     def run(self, deployment_name: str, container: str, default: str):
-        if "KUBERNETES_OFFLINE" in os.environ:
-            return default
-
-        namespace, name = kube_extract_namespace(deployment_name)
-        client = kube_get_client()
-        try:
-            deployment = AppsV1Api(client).read_namespaced_deployment(
-                name,
-                namespace,
-                _request_timeout=os.getenv(
-                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
-                ),
-            )
-        except ApiException as e:
-            if e.status == 404:
-                return default
-            raise
-        for c in deployment.spec.template.spec.containers:
-            if c.name == container:
-                return c.image
-        return default
+        image = get_deployment_image(
+            deployment=deployment_name, container=container, default=default, quiet=True
+        )
+        return image
 
 
 class StatefulSetImage(SimpleExtension):
@@ -174,6 +156,9 @@ class StatefulSetImage(SimpleExtension):
     def run(self, stateful_set_name: str, container: str, default: str):
         if os.getenv("KUBERNETES_OFFLINE"):
             return default
+
+        if "DEPLOYMENT_IMAGE" in os.environ:
+            return os.getenv("DEPLOYMENT_IMAGE")
 
         namespace, name = kube_extract_namespace(stateful_set_name)
         client = kube_get_client()
@@ -554,34 +539,6 @@ class EnvoySidecar(SimpleExtension):
         return json.dumps(res)
 
 
-class DogstatsdPortForwardingInitContainer(SimpleExtension):
-    """
-    An initContainer for setting up port-forwarding from within the Pod
-    out to the host's IP address. This exposes a dogstatsd agent UDP port
-    inside the Pod over the loopback interface (127.0.0.1).
-    To be used as a container within pod.spec.initContainers.
-    """
-
-    def run(self, version: str = "latest"):
-        iptables_entrypoint = IPTABLES_ENTRYPOINT
-        env = [
-            {
-                "name": "HOST_IP",
-                "valueFrom": {"fieldRef": {"fieldPath": "status.hostIP"}},
-            },
-        ]
-
-        return json.dumps(
-            {
-                "image": f"us-central1-docker.pkg.dev/sentryio/iptables/image:{version}",
-                "name": "init-port-forward",
-                "args": ["/bin/sh", "-ec", iptables_entrypoint.strip()],
-                "env": env,
-                "securityContext": {"capabilities": {"add": ["NET_ADMIN"]}},
-            }
-        )
-
-
 class GeoIPVolume(SimpleExtension):
     """
     Provide the GeoIP volume to the Pod for containers to use. Not required,
@@ -625,18 +582,24 @@ class GeoIPInitContainer(SimpleExtension):
     """
 
     def run(self, image: str = "busybox:1.36"):
-        return json.dumps(
-            {
-                "image": image,
-                "name": "init-geoip",
-                "args": [
-                    "/bin/sh",
-                    "-ec",
-                    "while [ ! -f /usr/local/share/GeoIP/GeoIP2-City.mmdb ]; do sleep 1; done",  # noqa: E501
-                ],
-                "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
-            }
-        )
+        res: dict[str, Any] = {
+            "image": image,
+            "name": "init-geoip",
+            "args": [
+                "/bin/sh",
+                "-ec",
+                "while [ ! -f /usr/local/share/GeoIP/GeoIP2-City.mmdb ]; do sleep 1; done",  # noqa: E501
+            ],
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "runAsUser": 65534,
+                "runAsGroup": 65534,
+            },
+            "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
+        }
+        return json.dumps(res)
 
 
 class ServiceAccount(SimpleExtension):
@@ -812,6 +775,35 @@ class MachineType(SimpleExtension):
         return {}
 
 
+def get_var_from_dicts(
+    key: str, *dicts: Dict[str, Any], default: str | None = None
+) -> Any:
+    """
+    Search for a key in a sequence of dictionaries, returning the first value found.
+    If no value is found, returns the default value.
+
+    If the key contains dots (e.g. "foo.bar"), it will attempt to traverse nested dictionaries.
+    For example, with key "foo.bar" it will look for d["foo"]["bar"] in each dictionary.
+    """
+    key_parts = key.split(".")
+
+    for d in dicts:
+        current = d
+        found = True
+
+        # Traverse the dictionary using the key parts
+        for part in key_parts:
+            if not isinstance(current, dict) or part not in current:
+                found = False
+                break
+            current = current[part]
+
+        if found:
+            return current
+
+    return default
+
+
 class GetVar(SimpleExtension):
     """
     This only exists because jinja2 doesn't support macros that return values.
@@ -824,9 +816,5 @@ class GetVar(SimpleExtension):
     params.get(var, component.get(var, service.get("some global default"))) => get_var(var, params, component, service, default="some global default")
     """
 
-    @cache
     def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
-        for d in dicts:
-            if key in d:
-                return d[key]
-        return default
+        return get_var_from_dicts(key, *dicts, default=default)

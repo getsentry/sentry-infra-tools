@@ -32,16 +32,20 @@ def audit(ctx, services):
             )
         )
     )
+    if "getsentry" in services:
+        services.append("sentry")
     client = kube_get_client()
     apis = {
         "AppsV1": kubernetes.client.AppsV1Api(client),
         "CoreV1": kubernetes.client.CoreV1Api(client),
         "BatchV1": kubernetes.client.BatchV1Api(client),
         "AutoscalingV1": kubernetes.client.AutoscalingV1Api(client),
+        "RbacAuthorizationV1": kubernetes.client.RbacAuthorizationV1Api(client),
         "CustomObjects": kubernetes.client.CustomObjectsApi(client),
     }
     listing_funcs = {
         "Deployment": apis["AppsV1"].list_deployment_for_all_namespaces,
+        "DaemonSet": apis["AppsV1"].list_daemon_set_for_all_namespaces,
         "PersistentVolume": apis["CoreV1"].list_persistent_volume,
         "PersistentVolumeClaim": apis[
             "CoreV1"
@@ -53,6 +57,10 @@ def audit(ctx, services):
         "HorizontalPodAutoscaler": apis[
             "AutoscalingV1"
         ].list_horizontal_pod_autoscaler_for_all_namespaces,
+        "Role": apis["RbacAuthorizationV1"].list_role_for_all_namespaces,
+        "ClusterRole": apis["RbacAuthorizationV1"].list_cluster_role,
+        "RoleBinding": apis["RbacAuthorizationV1"].list_role_binding_for_all_namespaces,
+        "ClusterRoleBinding": apis["RbacAuthorizationV1"].list_cluster_role_binding,
         "ManagedCertificate": functools.partial(
             apis["CustomObjects"].list_cluster_custom_object,
             group="networking.gke.io",
@@ -70,6 +78,12 @@ def audit(ctx, services):
             group="autoscaling.k8s.io",
             version="v1",
             plural="verticalpodautoscalers",
+        ),
+        "ScaledObject": functools.partial(
+            apis["CustomObjects"].list_cluster_custom_object,
+            group="keda.sh",
+            version="v1alpha1",
+            plural="scaledobjects",
         ),
     }
     crds = [
@@ -103,6 +117,8 @@ def audit(ctx, services):
             click.echo(f"getting {kind} remote names")
         remote_names = set()
         selector = f"service in ({','.join(services)})"
+        if kind == "HorizontalPodAutoscaler":
+            selector += ",!scaledobject.keda.sh/name"
         items = listing_funcs[kind](label_selector=selector, limit=100)
         while True:
             if kind in crds:

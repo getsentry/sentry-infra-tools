@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 from types import MappingProxyType
 from functools import cache
 
@@ -34,6 +34,8 @@ class K8sConfig:
     # materialize the rendered manifest. Each cluster is a
     # subdirectory in this directory.
     materialized_manifests: str
+    # Same thing as `materialized_manifests`, but for helm values
+    materialized_helm_values: str
 
     @classmethod
     def from_conf(cls, conf: Mapping[str, Any]) -> K8sConfig:
@@ -44,11 +46,20 @@ class K8sConfig:
             if "cluster_name" in conf
             else None,
             materialized_manifests=str(conf["materialized_manifests"]),
+            materialized_helm_values=str(
+                conf.get(
+                    "materialized_helm_values",
+                    conf["materialized_manifests"].replace(
+                        "materialized_manifests", "materialized_helm_values"
+                    ),
+                )
+            ),
         )
 
 
 @dataclass(frozen=True)
 class SiloRegion:
+    aliases: list[str]
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
@@ -57,6 +68,7 @@ class SiloRegion:
     def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
         k8s_config = silo_regions_conf["k8s"]
         return SiloRegion(
+            aliases=silo_regions_conf.get("aliases", []),
             k8s_config=K8sConfig.from_conf(k8s_config),
             sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
             service_monitors=silo_regions_conf.get("service_monitors", {}),
@@ -81,6 +93,10 @@ class Config:
             }
 
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
+        # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
+        self.service_container_map: Mapping[str, Dict[str, str]] = configuration[
+            "service_container_map"
+        ]
 
     @cache
     def get_regions(self) -> Sequence[str]:

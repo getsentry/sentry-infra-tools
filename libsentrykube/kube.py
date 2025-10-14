@@ -1,5 +1,6 @@
 import base64
 import difflib
+import hashlib
 import json
 import yaml
 import operator
@@ -10,14 +11,15 @@ from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
 
 import click
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
-from kubernetes import client
 from kubernetes.client.rest import ApiException
 from yaml import dump_all, safe_dump, safe_load, safe_load_all
 
 from libsentrykube.loader import load_macros
 from libsentrykube.service import (
+    MergeConfig,
     build_materialized_directory,
     get_service_data,
+    get_service_flags,
     get_service_path,
     get_service_template_files,
     get_service_values,
@@ -33,7 +35,13 @@ from libsentrykube.utils import (
     kube_convert_kind_to_func,
     kube_get_client,
     pretty,
+    workspace_root,
 )
+
+
+DEFAULT_FLAGS = {
+    "jinja_whitespace_easymode": True,
+}
 
 
 @dataclass
@@ -123,25 +131,48 @@ def _consolidate_variables(
        preserve comments.
     6. overridden by the cluster file. Which is likely going to be replaced by 2 and 3.
 
+    ***
+    For all levels of overrides listed above, in the same directory of file system, we support
+    merging separete values files together, before proceding with the overriding logic
+    Most common examples (numbers refer to override level listed above):
+    1. `k8s/services/getsentry/_values.yaml` content will be combined with `k8s/services/getsentry/_values_consumers.yaml`
+    3. `k8s/services/getsentry/regional_overrides/s4s/_values.yaml` content will be combined with
+       `k8s/services/getsentry/regional_overrides/s4s/_values_consumers.yaml`
+    4. `k8s/services/seer/region_overrides/de/default.yaml` content will be combined with `k8s/services/seer/region_overrides/de/default_2.yaml`
+    Files that should be combined have constraints:
+    - files cannot have conflicting keys. It will fail.
+    - files must be in the same directory in the file system
+    - file names must start with `_values` to be combined with `_values.yaml` file, or must start with `<cluster>` to be combined with `<cluster>.yaml`
+
+
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
     """
+
+    if external:
+        service_path = workspace_root() / service_name
+    else:
+        # TODO: plumb namespace down to here when external = true from values_of Jinja macro
+        service_path = get_service_path(service_name)
+    merge_config = MergeConfig.from_file(f"{service_path}/sentry-kube/merge.yaml")
+    if merge_config is None:
+        merge_config = MergeConfig.defaults()
 
     # check that there is a single customer dir per service
     assert_customer_is_defined_at_most_once(service_name, customer_name, external)
 
     # Service defaults from _values
     # Always gets loaded even if no region_override exists
-    service_values = get_service_values(service_name, external)
+    service_values = get_service_values(service_name, merge_config, external)
 
     # Service data overrides from services/SERVICE/region_overrides/
     service_value_overrides = get_service_value_overrides(
-        service_name, customer_name, cluster_name, external
+        service_name, customer_name, merge_config, cluster_name, external
     )
 
     # Service data overrides from services/SERVICE/region_overrides/REGION/_values.yaml
     common_service_values = get_common_regional_override(
-        service_name, customer_name, external
+        service_name, customer_name, merge_config, external
     )
 
     # If a cluster or region common config exists in region_overrides/REGION/
@@ -216,6 +247,8 @@ def render_templates(
     filters: Optional[List[str]] = None,
 ) -> str:
     service_path = get_service_path(service_name)
+    service_flags = get_service_flags(service_name)
+    flags = DEFAULT_FLAGS | service_flags
     template_files = sorted(list(get_service_template_files(service_name)))
 
     # Sort files because configmaps need to be first
@@ -228,7 +261,9 @@ def render_templates(
     )
 
     render_data["values"] = _consolidate_variables(
-        customer_name, service_name, cluster_name
+        customer_name,
+        service_name,
+        cluster_name,
     )
 
     extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
@@ -236,6 +271,8 @@ def render_templates(
     env = Environment(
         extensions=extensions,
         keep_trailing_newline=True,
+        trim_blocks=flags["jinja_whitespace_easymode"],
+        lstrip_blocks=flags["jinja_whitespace_easymode"],
         undefined=StrictUndefined,
         loader=FileSystemLoader(str(service_path)),
     )
@@ -244,6 +281,7 @@ def render_templates(
     env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode(
         "utf-8"
     )
+    env.filters["md5"] = lambda x: hashlib.md5(x.encode()).hexdigest()
     env.filters["yaml"] = safe_dump
     # debugging filter which prints a var to console
     env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
@@ -634,51 +672,3 @@ def apply(items: List[KubeResource]):
             else:
                 getattr(item.api, f"patch_{item.func}")(item.name, item.local_doc)
                 click.echo(f'{item.kind} "{item.name}" updated')
-
-
-def rollout_status_deployment(
-    api: client.AppsV1Api, name: str, namespace: str
-) -> Tuple[str, bool]:
-    deployment = api.read_namespaced_deployment(name=name, namespace=namespace)
-    if deployment.metadata.generation > deployment.status.observed_generation:
-        # the desired generation is greater than the live (observed) generation,
-        # so we're waiting on k8s to recognize changes.
-        return (
-            f"Waiting for deployment {repr(name)} spec update to be observed...",
-            False,
-        )
-
-    # TimedOutReason is added in a deployment when its newest replica set
-    # fails to show any progress within the given deadline (progressDeadlineSeconds).
-    for condition in deployment.status.conditions:
-        if condition.type == "Progressing":
-            if condition.reason == "ProgressDeadlineExceeded":
-                return f"deployment {repr(name)} exceeded its progress deadline", False
-
-    spec_replicas = deployment.spec.replicas
-    status_replicas = deployment.status.replicas or 0
-    updated_replicas = deployment.status.updated_replicas or 0
-    available_replicas = deployment.status.available_replicas or 0
-
-    if updated_replicas < spec_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{updated_replicas} out of {spec_replicas} new "
-            "replicas have been updated...",
-            False,
-        )
-    if status_replicas > updated_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{status_replicas - updated_replicas} old replicas "
-            "are pending termination...",
-            False,
-        )
-    if available_replicas < updated_replicas:
-        return (
-            f"Waiting for deployment {repr(name)} rollout to finish: "
-            f"{available_replicas} of {updated_replicas} "
-            "updated replicas are available...",
-            False,
-        )
-    return f"Deployment {repr(name)} successfully rolled out", True

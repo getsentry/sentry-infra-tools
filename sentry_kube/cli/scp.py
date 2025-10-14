@@ -22,7 +22,6 @@ __all__ = ("scp",)
 def scp(ctx, *, compression, source, target):
     """
     Use SCP to transfer a file.
-
     You will also need an ephmeral bastion connection, otherwise this won't work.
     Use `connect` to get a short-lived sshuttle tunnel.
     """

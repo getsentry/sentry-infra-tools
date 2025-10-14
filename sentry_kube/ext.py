@@ -92,12 +92,11 @@ class PGBouncerSidecar(SimpleExtension):
         maxClientConn: int = 100,
         defaultPoolSize: int = 25,
         serverLifetime: int = 300,
-        version: str = "1.23.1-alpine3.20",
+        version: str = "1.24.1-alpine3.22",
         application_name: Optional[str] = None,
         livenessProbe: Optional[dict] = None,
         resources: Optional[dict] = None,
         custom_pre_stop_command: Optional[str] = None,
-        use_auth: bool = False,
     ):
         if application_name:
             # Prepend supplied application_name to the pgbouncer options
@@ -123,21 +122,9 @@ class PGBouncerSidecar(SimpleExtension):
         if custom_pre_stop_command:
             pre_stop_command = custom_pre_stop_command
 
-        stats_users_statement = "stats_users = datadog\n"
-        userlist_init_cmd = ""
-        if not use_auth:
-            stats_users_statement = ""
-            userlist_init_cmd = """cat << EOF > /etc/pgbouncer/userlist.txt
-"postgres" ""
-"maintenance" ""
-EOF
-"""
-
         image = f"{repository}/pgbouncer:{version}"
         if ".pkg.dev/" in repository:
             image = f"{repository}/pgbouncer/image:{version}"
-
-        admin_user = "pgbouncer" if use_auth else "postgres"
 
         res: dict[str, Any] = {
             "image": image,
@@ -145,20 +132,18 @@ EOF
             "args": [
                 "/bin/sh",
                 "-ec",
-                userlist_init_cmd
-                + f"""cat << EOF > /etc/pgbouncer.ini
+                f"""cat << EOF > /etc/pgbouncer/pgbouncer.ini
 [databases]
 {databases_str}
 [pgbouncer]
 listen_addr = 0.0.0.0
 listen_port = 6432
 unix_socket_dir =
-auth_type = {"scram-sha-256" if use_auth else "trust"}
+auth_type = scram-sha-256
 auth_file = /etc/pgbouncer/userlist.txt
-admin_users = {admin_user}
-"""
-                + stats_users_statement
-                + f"""pool_mode = transaction
+admin_users = pgbouncer
+stats_users = datadog
+pool_mode = transaction
 server_reset_query = DISCARD ALL
 ignore_startup_parameters = extra_float_digits
 server_check_query = select 1
@@ -173,7 +158,7 @@ log_pooler_errors = 1
 server_round_robin = 1
 tcp_keepalive = 1
 EOF
-exec su-exec pgbouncer pgbouncer /etc/pgbouncer.ini""",
+pgbouncer /etc/pgbouncer/pgbouncer.ini""",
             ],
             "lifecycle": {
                 "preStop": {
@@ -186,6 +171,25 @@ exec su-exec pgbouncer pgbouncer /etc/pgbouncer.ini""",
                     }
                 }
             },
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": True,
+                "runAsUser": 1000,
+                "runAsGroup": 1000,
+            },
+            "volumeMounts": [
+                {
+                    "name": "pgbouncer-secrets",
+                    "subPath": "userlist",
+                    "mountPath": "/etc/pgbouncer/userlist.txt",
+                    "readOnly": True,
+                },
+                {
+                    "name": "etc-pgbouncer",
+                    "mountPath": "/etc/pgbouncer",
+                },
+            ],
         }
         _resources = {
             "requests": {"cpu": "50m", "memory": "25Mi"},
@@ -193,15 +197,7 @@ exec su-exec pgbouncer pgbouncer /etc/pgbouncer.ini""",
         }
         _resources.update(resources or {})
         res["resources"] = _resources
-        if use_auth:
-            res["volumeMounts"] = [
-                {
-                    "name": "pgbouncer-secrets",
-                    "subPath": "userlist",
-                    "mountPath": "/etc/pgbouncer/userlist.txt",
-                    "readOnly": True,
-                }
-            ]
+
         if livenessProbe:
             res["livenessProbe"] = livenessProbe
         return json.dumps(res)
