@@ -336,7 +336,7 @@ def materialize(customer_name: str, service_name: str, cluster_name: str) -> boo
         existing_content = ""
         for file_to_read in os.listdir(output_path):
             if file_to_read.endswith(".yaml"):
-                existing_content += "---" + open(output_path / file_to_read).read()
+                existing_content += "\n---\n" + open(output_path / file_to_read).read()
     except Exception:
         existing_content = None
 
