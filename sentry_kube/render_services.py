@@ -17,8 +17,13 @@ logging.basicConfig(level=logging.INFO)
 @click.command()
 @click.option("--fast", is_flag=True, help="Only render the specified services")
 @click.option("--debug", is_flag=True, help="Print debug information")
+@click.option(
+    "--split-by-kind", is_flag=True, help="Split the rendered service by kind"
+)
 @click.argument("filename", nargs=-1)
-def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
+def render_services(
+    fast: bool, debug: bool, split_by_kind: bool, filename: Sequence[str]
+) -> None:
     """
     Identifies which services and clusters need to be re-rendered
     depending on the file names passed as arguments.
@@ -68,6 +73,7 @@ def render_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
                 customer_name=resource.customer_name,
                 service_name=s,
                 cluster_name=resource.cluster_name,
+                split_by_kind=split_by_kind,
             )
             if changed:
                 changes_made = True
