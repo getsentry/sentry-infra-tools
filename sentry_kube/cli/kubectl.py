@@ -34,7 +34,12 @@ def kubectl(ctx, quiet, yes):
 
     # todo untested
     if not should_run_with_empty_context():
-        cmd += ["--context", context]
+        context_flag = ["--context", context]
+        try:
+            index = cmd.index("--")
+            cmd[index:index] = context_flag
+        except ValueError:
+            cmd += context_flag
 
     if not quiet:
         click.echo(
