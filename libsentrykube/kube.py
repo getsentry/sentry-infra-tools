@@ -108,7 +108,7 @@ def _get_path(obj, *pathparts, default=None):
     return obj.get(pathparts[-1], default)
 
 
-def _include_raw(name: str, loader: FileSystemLoader, env: Environment):
+def _include_raw(name: str, loader: FileSystemLoader, env: Environment) -> Markup:
     """
     Helper function which loads the given file without attempting to render
     any Jinja templating in the file.
