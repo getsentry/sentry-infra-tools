@@ -1,3 +1,9 @@
+## 1.16.2
+
+### Various fixes & improvements
+
+- Prevents --context from falling after the "--". (#167) by @ellisonmarks
+
 ## 1.16.1
 
 ### Various fixes & improvements
