@@ -1,3 +1,9 @@
+## 1.17.2
+
+### Various fixes & improvements
+
+- fix: add sorting logic to fix over-materialization (#169) by @rgibert
+
 ## 1.17.1
 
 ### Various fixes & improvements
