@@ -12,7 +12,7 @@ from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
 import click
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from kubernetes.client.rest import ApiException
-from yaml import dump_all, safe_dump, safe_load, safe_load_all
+from yaml import dump_all, safe_dump, safe_dump_all, safe_load, safe_load_all
 
 from libsentrykube.loader import load_macros
 from libsentrykube.service import (
@@ -316,6 +316,28 @@ def render_templates(
     return "\n---\n".join(rendered_templates)
 
 
+def _normalize_yaml_content(content: str | None) -> str | None:
+    """
+    Normalize YAML content by parsing documents, sorting them by kind and name,
+    and re-dumping them. This ensures consistent ordering for comparison.
+    Uses the same YAML dumper as pretty() to ensure consistent formatting.
+    """
+    if not content:
+        return None
+
+    documents = list(safe_load_all(content))
+    # Filter out None/empty documents
+    documents = [doc for doc in documents if doc]
+
+    # Sort documents by kind and name for consistent ordering
+    documents.sort(
+        key=lambda doc: (doc.get("kind", ""), doc.get("metadata", {}).get("name", ""))
+    )
+
+    # Use safe_dump_all with same parameters as pretty() for consistent formatting
+    return safe_dump_all(documents, sort_keys=True)
+
+
 def materialize(
     customer_name: str,
     service_name: str,
@@ -340,7 +362,7 @@ def materialize(
     try:
         existing_content = ""
         if split_by_kind:
-            for file_to_read in os.listdir(output_path):
+            for file_to_read in sorted(os.listdir(output_path)):
                 if file_to_read.endswith(".yaml"):
                     existing_content += (
                         "\n---\n" + open(output_path / file_to_read).read()
@@ -350,16 +372,22 @@ def materialize(
     except Exception:
         existing_content = None
 
-    if existing_content != rendered_service:
+    # Normalize both for comparison to ensure consistent document ordering
+    existing_content_normalized = _normalize_yaml_content(existing_content)
+    rendered_service_normalized = _normalize_yaml_content(rendered_service)
+
+    if existing_content_normalized != rendered_service_normalized:
         yamldoc = yaml.safe_load_all(rendered_service)
         if split_by_kind:
             for doc in yamldoc:
+                namespace = doc.get("metadata", {}).get("namespace", "default")
                 with open(
                     output_path
-                    / f"{doc['kind'].lower()}-{doc['metadata']['name'].lower()}.yaml",
+                    / f"{namespace}-{doc['kind'].lower()}-{doc['metadata']['name'].lower()}.yaml",
                     "w",
                 ) as file_to_write:
-                    file_to_write.write(yaml.dump(doc))
+                    # Use safe_dump with sort_keys for consistency with pretty()
+                    file_to_write.write(safe_dump(doc, sort_keys=True))
         else:
             with open(output_path / "deployment.yaml", "w") as file_to_write:
                 file_to_write.write(rendered_service)
