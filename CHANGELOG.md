@@ -1,3 +1,15 @@
+## 1.16.2
+
+### Various fixes & improvements
+
+- Prevents --context from falling after the "--". (#167) by @ellisonmarks
+
+## 1.16.1
+
+### Various fixes & improvements
+
+- (fix): add context after cmd (#166) by @mwarkentin
+
 ## 1.16.0
 
 ### Various fixes & improvements

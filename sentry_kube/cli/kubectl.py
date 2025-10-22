@@ -29,11 +29,17 @@ def kubectl(ctx, quiet, yes):
     quiet = ctx.obj.quiet_mode or quiet
 
     cmd = [f"{ensure_kubectl()}"]
-    # todo untested
-    if not should_run_with_empty_context():
-        cmd += ["--context", context]
 
     cmd += list(args)
+
+    # todo untested
+    if not should_run_with_empty_context():
+        context_flag = ["--context", context]
+        try:
+            index = cmd.index("--")
+            cmd[index:index] = context_flag
+        except ValueError:
+            cmd += context_flag
 
     if not quiet:
         click.echo(
