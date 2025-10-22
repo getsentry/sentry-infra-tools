@@ -1,3 +1,9 @@
+## 1.17.1
+
+### Various fixes & improvements
+
+- feat: add include_raw jinja global (#168) by @bmckerry
+
 ## 1.17.0
 
 ### Various fixes & improvements
