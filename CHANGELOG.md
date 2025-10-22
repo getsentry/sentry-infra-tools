@@ -1,3 +1,9 @@
+## 1.17.0
+
+### Various fixes & improvements
+
+- feat: break out rendered files per resource for better diffs (#101) by @rgibert
+
 ## 1.16.2
 
 ### Various fixes & improvements
