@@ -10,7 +10,9 @@ from pprint import pformat
 from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
 
 import click
+from functools import partial
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
+from markupsafe import Markup
 from kubernetes.client.rest import ApiException
 from yaml import dump_all, safe_dump, safe_dump_all, safe_load, safe_load_all
 
@@ -106,6 +108,14 @@ def _get_path(obj, *pathparts, default=None):
     for pathpart in pathparts[:-1]:
         obj = obj.get(pathpart, {})
     return obj.get(pathparts[-1], default)
+
+
+def _include_raw(name: str, loader: FileSystemLoader, env: Environment) -> Markup:
+    """
+    Helper function which loads the given file without attempting to render
+    any Jinja templating in the file.
+    """
+    return Markup(loader.get_source(env, name)[0])
 
 
 def _consolidate_variables(
@@ -268,13 +278,14 @@ def render_templates(
 
     extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
     extensions.extend(load_macros())
+    loader = FileSystemLoader(str(service_path))
     env = Environment(
         extensions=extensions,
         keep_trailing_newline=True,
         trim_blocks=flags["jinja_whitespace_easymode"],
         lstrip_blocks=flags["jinja_whitespace_easymode"],
         undefined=StrictUndefined,
-        loader=FileSystemLoader(str(service_path)),
+        loader=loader,
     )
 
     # Add custom jinja filters here
@@ -287,6 +298,8 @@ def render_templates(
     env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
     # helper to safely get nested path or default
     env.filters["get_path"] = _get_path
+
+    env.globals["include_raw"] = partial(_include_raw, loader=loader, env=env)
 
     rendered_templates = []
     for template in template_files:

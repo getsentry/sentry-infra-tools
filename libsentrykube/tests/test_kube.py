@@ -1,8 +1,12 @@
 import os
 import pytest
 
+from jinja2 import Environment, FileSystemLoader
+from markupsafe import Markup
+from unittest.mock import patch
+
 from libsentrykube.context import init_cluster_context
-from libsentrykube.kube import _consolidate_variables
+from libsentrykube.kube import _consolidate_variables, _include_raw
 from libsentrykube.service import CustomerTooOftenDefinedException
 from libsentrykube.utils import set_workspace_root_start, workspace_root
 
@@ -214,8 +218,21 @@ def test_consolidate_variables_hierarchical_and_regional_config_without_cluster_
     )
 
 
+def test_include_raw() -> None:
+    dummy_file_text = """name: foo
+description: '{{ look at me I'm a jinja-templated var }}'
+"""
+    with patch("libsentrykube.kube.FileSystemLoader.get_source") as mock_get_source:
+        mock_get_source.return_value = (dummy_file_text, None, None)
+        assert _include_raw(
+            "fake-file.txt", FileSystemLoader("."), Environment()
+        ) == Markup(dummy_file_text)
+
+
 def initialize_cluster(
-    workspace_root_path: str, customer_name="customer1", cluster_name="cluster1"
+    workspace_root_path: str,
+    customer_name="customer1",
+    cluster_name="cluster1",
 ):
     set_workspace_root_start(workspace_root_path)
     os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(

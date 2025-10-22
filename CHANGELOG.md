@@ -1,3 +1,15 @@
+## 1.17.1
+
+### Various fixes & improvements
+
+- feat: add include_raw jinja global (#168) by @bmckerry
+
+## 1.17.0
+
+### Various fixes & improvements
+
+- feat: break out rendered files per resource for better diffs (#101) by @rgibert
+
 ## 1.16.2
 
 ### Various fixes & improvements
