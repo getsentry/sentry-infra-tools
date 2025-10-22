@@ -394,6 +394,7 @@ def materialize(
         if split_by_kind:
             for doc in yamldoc:
                 namespace = doc.get("metadata", {}).get("namespace", "default")
+                # Naming standard is namespace-kind-name as name is not required to be unique across namespaces/kinds.
                 with open(
                     output_path
                     / f"{namespace}-{doc['kind'].lower()}-{doc['metadata']['name'].lower()}.yaml",
