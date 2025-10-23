@@ -42,7 +42,7 @@ from libsentrykube.utils import (
 )
 
 
-logging.basicConfig(level="INFO")
+logging.basicConfig(level=os.getenv("SENTRY_KUBE_LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger(__name__)
 
 DEFAULT_FLAGS = {
