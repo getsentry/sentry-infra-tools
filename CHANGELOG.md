@@ -1,3 +1,9 @@
+## 1.17.3
+
+### Various fixes & improvements
+
+- fix: Add namespace to yaml sorting (#170) by @rgibert
+
 ## 1.17.2
 
 ### Various fixes & improvements
