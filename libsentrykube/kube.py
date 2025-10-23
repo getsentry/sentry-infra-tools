@@ -339,7 +339,7 @@ def _normalize_yaml_content(content: str | None) -> str | None:
     and re-dumping them. This ensures consistent ordering for comparison.
     Uses the same YAML dumper as pretty() to ensure consistent formatting.
     """
-    if not content:
+    if not content or content.strip() == "":
         return None
 
     documents = list(safe_load_all(content))
