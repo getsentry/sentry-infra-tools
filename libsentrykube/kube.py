@@ -4,6 +4,7 @@ import hashlib
 import json
 import yaml
 import operator
+import logging
 from dataclasses import dataclass
 import os
 from pprint import pformat
@@ -40,6 +41,9 @@ from libsentrykube.utils import (
     workspace_root,
 )
 
+
+logging.basicConfig(level=os.getenv("SENTRY_KUBE_LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger(__name__)
 
 DEFAULT_FLAGS = {
     "jinja_whitespace_easymode": True,
@@ -335,7 +339,7 @@ def _normalize_yaml_content(content: str | None) -> str | None:
     and re-dumping them. This ensures consistent ordering for comparison.
     Uses the same YAML dumper as pretty() to ensure consistent formatting.
     """
-    if not content:
+    if not content or content.strip() == "":
         return None
 
     documents = list(safe_load_all(content))
@@ -344,7 +348,11 @@ def _normalize_yaml_content(content: str | None) -> str | None:
 
     # Sort documents by kind and name for consistent ordering
     documents.sort(
-        key=lambda doc: (doc.get("kind", ""), doc.get("metadata", {}).get("name", ""))
+        key=lambda doc: (
+            doc.get("kind", ""),
+            doc.get("metadata", {}).get("name", ""),
+            doc.get("metadata", {}).get("namespace", ""),
+        )
     )
 
     # Use safe_dump_all with same parameters as pretty() for consistent formatting
@@ -390,6 +398,8 @@ def materialize(
     rendered_service_normalized = _normalize_yaml_content(rendered_service)
 
     if existing_content_normalized != rendered_service_normalized:
+        logger.debug(f"Existing content (normalized): {existing_content_normalized}")
+        logger.debug(f"Rendered service (normalized): {rendered_service_normalized}")
         yamldoc = yaml.safe_load_all(rendered_service)
         if split_by_kind:
             for doc in yamldoc:
