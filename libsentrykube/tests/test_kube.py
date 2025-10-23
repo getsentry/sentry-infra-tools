@@ -6,7 +6,11 @@ from markupsafe import Markup
 from unittest.mock import patch
 
 from libsentrykube.context import init_cluster_context
-from libsentrykube.kube import _consolidate_variables, _include_raw
+from libsentrykube.kube import (
+    _consolidate_variables,
+    _include_raw,
+    _normalize_yaml_content,
+)
 from libsentrykube.service import CustomerTooOftenDefinedException
 from libsentrykube.utils import set_workspace_root_start, workspace_root
 
@@ -227,6 +231,189 @@ description: '{{ look at me I'm a jinja-templated var }}'
         assert _include_raw(
             "fake-file.txt", FileSystemLoader("."), Environment()
         ) == Markup(dummy_file_text)
+
+
+def test_normalize_yaml_content_none():
+    """Test that None input returns None."""
+    assert _normalize_yaml_content(None) is None
+
+
+def test_normalize_yaml_content_empty_string():
+    """Test that empty string returns None."""
+    assert _normalize_yaml_content("") is None
+    assert _normalize_yaml_content("   ") is None
+
+
+def test_normalize_yaml_content_single_document():
+    """Test normalization of a single YAML document."""
+    yaml_content = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key1: value1
+  key2: value2
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    assert "kind: ConfigMap" in result
+    assert "name: test-config" in result
+    # Verify keys are sorted
+    assert result.index("key1") < result.index("key2")
+
+
+def test_normalize_yaml_content_multiple_documents():
+    """Test normalization of multiple YAML documents."""
+    yaml_content = """
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+  namespace: default
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+  namespace: default
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    # Documents should be sorted by kind (ConfigMap < Deployment < Service)
+    cm_pos = result.index("kind: ConfigMap")
+    deploy_pos = result.index("kind: Deployment")
+    svc_pos = result.index("kind: Service")
+    assert cm_pos < deploy_pos < svc_pos
+
+
+def test_normalize_yaml_content_sorts_by_name():
+    """Test that documents with the same kind are sorted by name."""
+    yaml_content = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zebra-config
+  namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alpha-config
+  namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: middle-config
+  namespace: default
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    alpha_pos = result.index("name: alpha-config")
+    middle_pos = result.index("name: middle-config")
+    zebra_pos = result.index("name: zebra-config")
+    assert alpha_pos < middle_pos < zebra_pos
+
+
+def test_normalize_yaml_content_sorts_by_namespace():
+    """Test that documents with the same kind and name are sorted by namespace."""
+    yaml_content = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: prod
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: staging
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    # Should be sorted: default < prod < staging
+    default_pos = result.index("namespace: default")
+    prod_pos = result.index("namespace: prod")
+    staging_pos = result.index("namespace: staging")
+    assert default_pos < prod_pos < staging_pos
+
+
+def test_normalize_yaml_content_filters_empty_documents():
+    """Test that empty/None documents are filtered out."""
+    yaml_content = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+data:
+  key: value
+---
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    # Should only have 2 documents (empty ones filtered out)
+    assert result.count("---") == 1  # One separator between two documents
+
+
+def test_normalize_yaml_content_sorts_keys():
+    """Test that keys within documents are sorted."""
+    yaml_content = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  zebra: z
+  alpha: a
+  middle: m
+"""
+    result = _normalize_yaml_content(yaml_content)
+    assert result is not None
+    # Within data section, keys should be sorted
+    data_section = result[result.index("data:") :]
+    alpha_pos = data_section.index("alpha")
+    middle_pos = data_section.index("middle")
+    zebra_pos = data_section.index("zebra")
+    assert alpha_pos < middle_pos < zebra_pos
+
+
+def test_normalize_yaml_content_idempotent():
+    """Test that normalizing the same content twice produces the same result."""
+    yaml_content = """
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-config
+"""
+    result1 = _normalize_yaml_content(yaml_content)
+    result2 = _normalize_yaml_content(result1)
+    assert result1 == result2
 
 
 def initialize_cluster(
