@@ -426,3 +426,217 @@ def initialize_cluster(
         workspace_root() / "cli_config/configuration.yaml"
     )
     init_cluster_context(customer_name, cluster_name)
+
+
+def test_materialize_transition_single_to_split_by_kind(tmp_path):
+    """Test transition from single deployment.yaml to split-by-kind files."""
+    from libsentrykube.kube import materialize
+
+    mock_yaml = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+"""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    # Create initial single deployment.yaml file
+    with open(output_dir / "deployment.yaml", "w") as f:
+        f.write(mock_yaml)
+
+    # Mock the functions
+    with (
+        patch("libsentrykube.kube.render_templates") as mock_render,
+        patch("libsentrykube.kube.build_materialized_directory") as mock_build,
+    ):
+        mock_render.return_value = mock_yaml
+        mock_build.return_value = output_dir
+
+        # Call materialize with split_by_kind=True
+        result = materialize("customer1", "my_service", "cluster1", split_by_kind=True)
+
+        # Should return True since we're changing structure
+        assert result is True
+
+        # deployment.yaml should be removed
+        assert not (output_dir / "deployment.yaml").exists()
+
+        # Should have created split files
+        files = sorted(os.listdir(output_dir))
+        assert len(files) == 2
+        assert "default-configmap-test-config.yaml" in files
+        assert "default-deployment-test-deployment.yaml" in files
+
+
+def test_materialize_transition_split_to_single(tmp_path):
+    """Test transition from split-by-kind files to single deployment.yaml."""
+    from libsentrykube.kube import materialize
+
+    mock_yaml = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+"""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    # Create initial split files
+    configmap_content = """
+apiVersion: v1
+data:
+  key: value
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+"""
+    deployment_content = """
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+"""
+
+    with open(output_dir / "default-configmap-test-config.yaml", "w") as f:
+        f.write(configmap_content)
+    with open(output_dir / "default-deployment-test-deployment.yaml", "w") as f:
+        f.write(deployment_content)
+
+    # Mock the functions
+    with (
+        patch("libsentrykube.kube.render_templates") as mock_render,
+        patch("libsentrykube.kube.build_materialized_directory") as mock_build,
+    ):
+        mock_render.return_value = mock_yaml
+        mock_build.return_value = output_dir
+
+        # Call materialize with split_by_kind=False
+        result = materialize("customer1", "my_service", "cluster1", split_by_kind=False)
+
+        # Should return True since we're changing structure
+        assert result is True
+
+        # Split files should be removed
+        assert not (output_dir / "default-configmap-test-config.yaml").exists()
+        assert not (output_dir / "default-deployment-test-deployment.yaml").exists()
+
+        # Should have created single deployment.yaml
+        assert (output_dir / "deployment.yaml").exists()
+
+
+def test_materialize_split_by_kind_removes_deleted_resources(tmp_path):
+    """Test that when using split-by-kind, removed resources delete their files."""
+    from libsentrykube.kube import materialize
+
+    # Initial state: 3 resources
+    initial_yaml = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-service
+  namespace: default
+spec:
+  ports:
+  - port: 80
+"""
+
+    # Updated state: only 2 resources (Service removed)
+    updated_yaml = """
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-config
+  namespace: default
+data:
+  key: value
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-deployment
+  namespace: default
+spec:
+  replicas: 1
+"""
+
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    # First call: create initial split files
+    with (
+        patch("libsentrykube.kube.render_templates") as mock_render,
+        patch("libsentrykube.kube.build_materialized_directory") as mock_build,
+    ):
+        mock_render.return_value = initial_yaml
+        mock_build.return_value = output_dir
+
+        materialize("customer1", "my_service", "cluster1", split_by_kind=True)
+
+        # Verify all 3 files exist
+        assert (output_dir / "default-configmap-test-config.yaml").exists()
+        assert (output_dir / "default-deployment-test-deployment.yaml").exists()
+        assert (output_dir / "default-service-test-service.yaml").exists()
+
+    # Second call: update with service removed
+    with (
+        patch("libsentrykube.kube.render_templates") as mock_render,
+        patch("libsentrykube.kube.build_materialized_directory") as mock_build,
+    ):
+        mock_render.return_value = updated_yaml
+        mock_build.return_value = output_dir
+
+        result = materialize("customer1", "my_service", "cluster1", split_by_kind=True)
+
+        # Should return True since content changed
+        assert result is True
+
+        # Verify only 2 files exist now
+        assert (output_dir / "default-configmap-test-config.yaml").exists()
+        assert (output_dir / "default-deployment-test-deployment.yaml").exists()
+        # Service file should be removed
+        assert not (output_dir / "default-service-test-service.yaml").exists()

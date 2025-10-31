@@ -397,10 +397,23 @@ def materialize(
     existing_content_normalized = _normalize_yaml_content(existing_content)
     rendered_service_normalized = _normalize_yaml_content(rendered_service)
 
-    if existing_content_normalized != rendered_service_normalized:
+    content_difference = existing_content_normalized != rendered_service_normalized
+    structure_difference = split_by_kind and os.path.isfile(
+        output_path / "deployment.yaml"
+    )
+
+    if content_difference or structure_difference:
+        logger.debug(f"Content difference found: {content_difference}")
+        logger.debug(f"Structure difference found: {structure_difference}")
         logger.debug(f"Existing content (normalized): {existing_content_normalized}")
         logger.debug(f"Rendered service (normalized): {rendered_service_normalized}")
         yamldoc = yaml.safe_load_all(rendered_service)
+
+        # Ensure that we aren't leaving any orphaned files behind. Let's start fresh if we need to update materializations
+        for file in output_path.iterdir():
+            if file.is_file():
+                file.unlink()
+
         if split_by_kind:
             for doc in yamldoc:
                 namespace = doc.get("metadata", {}).get("namespace", "default")
