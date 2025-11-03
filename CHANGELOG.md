@@ -1,3 +1,10 @@
+## 1.18.0
+
+### Various fixes & improvements
+
+- feat(helm): add rollback cmd wrappers (#172) by @gi0baro
+- release: 1.17.4 (c76ae275) by @getsentry-bot
+
 ## 1.17.4
 
 - No documented changes.
