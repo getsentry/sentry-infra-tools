@@ -705,3 +705,52 @@ def apply(
 
     if errors:
         raise HelmException
+
+
+def rollback(
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    kctx=None,
+    timeout=None,
+):
+    errors = []
+
+    for helm_release, targets in helm_release_ctx(
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
+        kctx=kctx,
+    ):
+        helm_params = [
+            "rollback",
+            helm_release.name,
+            "--namespace",
+            helm_release.namespace,
+        ]
+        if timeout:
+            helm_params.extend(["--timeout", f"{timeout}s"])
+        if kctx:
+            helm_params.extend(["--kube-context", kctx])
+
+        yield f"Rolling-back release {helm_release.name} in namespace {helm_release.namespace}.."
+
+        try:
+            output = _run_helm(helm_params, raise_on_err=True)
+            yield output
+        except HelmException as e:
+            yield f"Release {helm_release.name} failed."
+            if e.args[0]:
+                yield e.args[0]
+            errors.append((helm_release.name, helm_release.namespace))
+
+            if helm_release.strategy.kind == "bluegreen":
+                yield "blue-green release strategy detected, aborting"
+                raise e
+
+    if errors:
+        raise HelmException

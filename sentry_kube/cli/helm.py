@@ -9,6 +9,7 @@ from libsentrykube.helm import (
     diff as _helm_diff,
     render as _helm_render,
     render_values as _helm_render_values,
+    rollback as _helm_rollback,
     materialize_values as _helm_materialize_values,
 )
 from libsentrykube.service import get_service_names
@@ -144,6 +145,33 @@ def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
         raise click.Abort()
 
 
+@check_helm_bin
+def _rollback(ctx, services, release, namespace, timeout):
+    customer_name = ctx.obj.customer_name
+    cluster_name = ctx.obj.cluster_name
+    context_name = ctx.obj.context_name
+
+    errored = False
+
+    for service_name in services:
+        try:
+            for item in _helm_rollback(
+                customer_name,
+                service_name,
+                cluster_name,
+                release=release,
+                namespace=namespace,
+                kctx=context_name,
+                timeout=timeout,
+            ):
+                yield item
+        except HelmException:
+            errored = True
+
+    if errored:
+        raise click.Abort()
+
+
 @helm.command()
 @click.option("--release", help="Target a specific release")
 @click.option("--namespace", help="Targets a specific namespace")
@@ -233,4 +261,19 @@ def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
             raise click.Abort()
 
     for res in _apply(ctx, services, release, namespace, app_version, atomic, timeout):
+        click.echo(res)
+
+
+@helm.command()
+@click.option("--release", help="Target a specific release")
+@click.option("--namespace", help="Targets a specific namespace")
+@click.option("--timeout", default=None)
+@click.pass_context
+@allow_for_all_services
+def rollback(ctx, services, release, namespace, timeout):
+    """
+    Rollback helm service(s) to previous release
+    """
+
+    for res in _rollback(ctx, services, release, namespace, timeout):
         click.echo(res)
