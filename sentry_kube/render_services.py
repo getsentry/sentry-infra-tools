@@ -1,5 +1,6 @@
 import logging
 import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Sequence
 
@@ -14,15 +15,95 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
+def _materialize_service_worker(
+    customer_name: str, service_name: str, cluster_name: str, split_by_kind: bool
+) -> tuple[str, str, str, bool]:
+    os.environ["KUBERNETES_OFFLINE"] = "1"
+    init_cluster_context(customer_name, cluster_name)
+    changed = materialize(
+        customer_name=customer_name,
+        service_name=service_name,
+        cluster_name=cluster_name,
+        split_by_kind=split_by_kind,
+    )
+    return customer_name, cluster_name, service_name, changed
+
+
+def _render_multithreaded(
+    resources_to_render, split_by_kind: bool, workers: int
+) -> bool:
+    work_items = []
+    for resource in resources_to_render:
+        logger.debug(
+            f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
+        )
+        init_cluster_context(resource.customer_name, resource.cluster_name)
+
+        if resource.service_name is not None:
+            logger.debug(f"Materializing service: {resource.service_name}")
+            services_to_materialize = [resource.service_name]
+        else:
+            logger.debug("Getting all service names")
+            services_to_materialize = get_service_names()
+
+        logger.debug(f"Services to materialize: {services_to_materialize}")
+
+        for service_name in services_to_materialize:
+            work_items.append(
+                (resource.customer_name, service_name, resource.cluster_name)
+            )
+
+    changes_made = False
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(
+                _materialize_service_worker,
+                customer_name,
+                service_name,
+                cluster_name,
+                split_by_kind,
+            )
+            for customer_name, service_name, cluster_name in work_items
+        ]
+
+        for future in as_completed(futures):
+            customer_name, cluster_name, service_name, changed = future.result()
+            if changed:
+                changes_made = True
+                click.echo(
+                    f"Service materialized: {customer_name} : {cluster_name} : {service_name}"
+                )
+            else:
+                click.echo(
+                    f"Service unchanged: {customer_name} : {cluster_name} : {service_name}"
+                )
+
+    return changes_made
+
+
 @click.command()
 @click.option("--fast", is_flag=True, help="Only render the specified services")
 @click.option("--debug", is_flag=True, help="Print debug information")
 @click.option(
     "--split-by-kind", is_flag=True, help="Split the rendered service by kind"
 )
+@click.option(
+    "--multithreaded", is_flag=True, default=False, help="Use multithreaded rendering"
+)
+@click.option(
+    "--workers",
+    type=int,
+    default=os.cpu_count() or 1,
+    help="Number of parallel workers",
+)
 @click.argument("filename", nargs=-1)
 def render_services(
-    fast: bool, debug: bool, split_by_kind: bool, filename: Sequence[str]
+    fast: bool,
+    debug: bool,
+    split_by_kind: bool,
+    multithreaded: bool,
+    workers: int,
+    filename: Sequence[str],
 ) -> None:
     """
     Identifies which services and clusters need to be re-rendered
@@ -52,44 +133,56 @@ def render_services(
 
     os.environ["KUBERNETES_OFFLINE"] = "1"
     changes_made = False
-    for resource in resources_to_render:
-        logger.debug(
-            f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
+
+    if multithreaded:
+        changes_made = _render_multithreaded(
+            resources_to_render, split_by_kind, workers
         )
-        init_cluster_context(resource.customer_name, resource.cluster_name)
 
-        if resource.service_name is not None:
-            logger.debug(f"Materializing service: {resource.service_name}")
-            services_to_materialize = [resource.service_name]
-        else:
-            logger.debug("Getting all service names")
-            services_to_materialize = get_service_names()
-
-        logger.debug(f"Services to materialize: {services_to_materialize}")
-
-        for s in services_to_materialize:
-            logger.debug(f"Materializing service: {s}")
-            changed = materialize(
-                customer_name=resource.customer_name,
-                service_name=s,
-                cluster_name=resource.cluster_name,
-                split_by_kind=split_by_kind,
+        if changes_made:
+            click.echo(
+                "I made changes to the materialized config. Please stage them and commit again."
             )
-            if changed:
-                changes_made = True
-                click.echo(
-                    f"Service materialized: {resource.customer_name} : {resource.cluster_name} : {s}"
-                )
-            else:
-                click.echo(
-                    f"Service unchanged: {resource.customer_name} : {resource.cluster_name} : {s}"
-                )
+            exit(-1)
+    else:
+        for resource in resources_to_render:
+            logger.debug(
+                f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
+            )
+            init_cluster_context(resource.customer_name, resource.cluster_name)
 
-    if changes_made:
-        click.echo(
-            "I made changes to the materialized config. Please stage them and commit again."
-        )
-        exit(-1)
+            if resource.service_name is not None:
+                logger.debug(f"Materializing service: {resource.service_name}")
+                services_to_materialize = [resource.service_name]
+            else:
+                logger.debug("Getting all service names")
+                services_to_materialize = get_service_names()
+
+            logger.debug(f"Services to materialize: {services_to_materialize}")
+
+            for s in services_to_materialize:
+                logger.debug(f"Materializing service: {s}")
+                changed = materialize(
+                    customer_name=resource.customer_name,
+                    service_name=s,
+                    cluster_name=resource.cluster_name,
+                    split_by_kind=split_by_kind,
+                )
+                if changed:
+                    changes_made = True
+                    click.echo(
+                        f"Service materialized: {resource.customer_name} : {resource.cluster_name} : {s}"
+                    )
+                else:
+                    click.echo(
+                        f"Service unchanged: {resource.customer_name} : {resource.cluster_name} : {s}"
+                    )
+
+        if changes_made:
+            click.echo(
+                "I made changes to the materialized config. Please stage them and commit again."
+            )
+            exit(-1)
 
 
 if __name__ == "__main__":
