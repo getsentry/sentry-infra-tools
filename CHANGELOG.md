@@ -1,3 +1,9 @@
+## 1.19.0
+
+### Various fixes & improvements
+
+- Multi-thread the k8s materialization step (#173) by @BojanOro
+
 ## 1.18.0
 
 ### Various fixes & improvements
