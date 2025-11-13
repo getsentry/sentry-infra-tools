@@ -6,6 +6,7 @@ from setuptools import setup
 macros = [
     "iap_service=sentry_kube.ext:IAPService",
     "pgbouncer_sidecar=sentry_kube.ext:PGBouncerSidecar",
+    "pgbouncer_init_sidecar=sentry_kube.ext:PGBouncerInitSidecar",
     "xds_configmap_from=sentry_kube.ext:XDSConfigMapFrom",
     "raise=libsentrykube.ext:RaiseExtension",
     "json_file=libsentrykube.ext:JsonFile",
