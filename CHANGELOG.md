@@ -1,3 +1,9 @@
+## 1.20.0
+
+### Various fixes & improvements
+
+- Adds sidecar init container for pgbouncer (#174) by @ellisonmarks
+
 ## 1.19.0
 
 ### Various fixes & improvements
