@@ -41,6 +41,7 @@ def audit(ctx, services):
         "BatchV1": kubernetes.client.BatchV1Api(client),
         "AutoscalingV1": kubernetes.client.AutoscalingV1Api(client),
         "RbacAuthorizationV1": kubernetes.client.RbacAuthorizationV1Api(client),
+        "PolicyV1": kubernetes.client.PolicyV1Api(client),
         "CustomObjects": kubernetes.client.CustomObjectsApi(client),
     }
     listing_funcs = {
@@ -61,6 +62,7 @@ def audit(ctx, services):
         "ClusterRole": apis["RbacAuthorizationV1"].list_cluster_role,
         "RoleBinding": apis["RbacAuthorizationV1"].list_role_binding_for_all_namespaces,
         "ClusterRoleBinding": apis["RbacAuthorizationV1"].list_cluster_role_binding,
+        "PodDisruptionBudget": apis["PolicyV1"].list_pod_disruption_budget_for_all_namespaces,
         "ManagedCertificate": functools.partial(
             apis["CustomObjects"].list_cluster_custom_object,
             group="networking.gke.io",
