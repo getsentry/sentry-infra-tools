@@ -1,3 +1,9 @@
+## 1.20.1
+
+### Various fixes & improvements
+
+- Adds PodDisruptionBudget to audit. (#176) by @ellisonmarks
+
 ## 1.20.0
 
 ### Various fixes & improvements
