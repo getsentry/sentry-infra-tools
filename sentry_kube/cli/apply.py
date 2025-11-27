@@ -573,7 +573,7 @@ def _apply(
     allow_jobs: bool,
     use_canary: bool,
     quiet: bool = False,
-):
+) -> bool:
     """
     Apply a service(s) to production, using a basic confirmation wrapper around
     "kubectl apply".
@@ -639,4 +639,4 @@ def _apply(
 
     macos_notify("sentry-kube apply", "Apply complete.")
 
-    ctx.exit(0)
+    return True
