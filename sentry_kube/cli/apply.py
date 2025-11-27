@@ -488,6 +488,8 @@ def apply(
     service_monitors = ctx.obj.service_monitors
 
     if use_canary:
+        canary_applied = False
+
         # Start with canary if we haven't said to retry soak
         if not soak_only:
             click.secho("\nStarting by deploying to canaries only first.\n")
