@@ -1,3 +1,7 @@
+## 1.20.2
+
+- fix(apply): Fix canary applies exit early by @rgibert in [#179](https://github.com/getsentry/sentry-infra-tools/pull/179)
+
 ## 1.20.1
 
 ### Various fixes & improvements
