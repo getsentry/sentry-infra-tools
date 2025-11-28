@@ -1,3 +1,8 @@
+## 1.20.3
+
+- fix(include_raw): add YAML file separator to end of included template by @bmckerry in [#181](https://github.com/getsentry/sentry-infra-tools/pull/181)
+- fix(apply): If soak-only is specified canary_applied never gets set by @rgibert in [#180](https://github.com/getsentry/sentry-infra-tools/pull/180)
+
 ## 1.20.2
 
 - fix(apply): Fix canary applies exit early by @rgibert in [#179](https://github.com/getsentry/sentry-infra-tools/pull/179)
