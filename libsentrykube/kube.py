@@ -119,7 +119,9 @@ def _include_raw(name: str, loader: FileSystemLoader, env: Environment) -> Marku
     Helper function which loads the given file without attempting to render
     any Jinja templating in the file.
     """
-    return Markup(loader.get_source(env, name)[0])
+    markup = Markup(loader.get_source(env, name)[0])
+    markup += "---\n"
+    return markup
 
 
 def _consolidate_variables(

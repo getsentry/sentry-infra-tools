@@ -228,9 +228,10 @@ description: '{{ look at me I'm a jinja-templated var }}'
 """
     with patch("libsentrykube.kube.FileSystemLoader.get_source") as mock_get_source:
         mock_get_source.return_value = (dummy_file_text, None, None)
-        assert _include_raw(
-            "fake-file.txt", FileSystemLoader("."), Environment()
-        ) == Markup(dummy_file_text)
+        assert (
+            _include_raw("fake-file.txt", FileSystemLoader("."), Environment())
+            == Markup(dummy_file_text) + "---\n"
+        )
 
 
 def test_normalize_yaml_content_none():
