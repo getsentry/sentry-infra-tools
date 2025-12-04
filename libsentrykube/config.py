@@ -36,6 +36,8 @@ class K8sConfig:
     materialized_manifests: str
     # Same thing as `materialized_manifests`, but for helm values
     materialized_helm_values: str
+    # The kubernetes service class of the region (multi-tenant or single-tenant)
+    service_class: Optional[str]
 
     @classmethod
     def from_conf(cls, conf: Mapping[str, Any]) -> K8sConfig:
@@ -54,6 +56,7 @@ class K8sConfig:
                     ),
                 )
             ),
+            service_class=str(conf.get("service_class")),
         )
 
 

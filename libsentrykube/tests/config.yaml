@@ -11,6 +11,7 @@ silo_regions:
       cluster_def_root: clusters/saas
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      service_class: multi-tenant
     sentry_region: us
   my_customer:
     k8s:
@@ -18,6 +19,7 @@ silo_regions:
       cluster_def_root: clusters/my_customer
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      service_class: single-tenant
     sentry_region: st-my_customer
   my_other_customer:
     k8s:
@@ -25,4 +27,5 @@ silo_regions:
       cluster_def_root: clusters/my_other_customer
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      service_class: single-tenant
     sentry_region: st-my_other_customer
