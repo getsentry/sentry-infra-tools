@@ -1,3 +1,8 @@
+## 1.21.0
+
+- (chore): remove customer_name comparison for pod template selection by @mwarkentin in [#182](https://github.com/getsentry/sentry-infra-tools/pull/182)
+- change(audit): Redesign audit tool in sentry-kube by @dmajere in [#177](https://github.com/getsentry/sentry-infra-tools/pull/177)
+
 ## 1.20.3
 
 - fix(include_raw): add YAML file separator to end of included template by @bmckerry in [#181](https://github.com/getsentry/sentry-infra-tools/pull/181)
