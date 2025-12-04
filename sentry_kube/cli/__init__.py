@@ -35,6 +35,7 @@ class CliContext:
     cluster_name: str
     quiet_mode: bool
     service_monitors: MappingProxyType
+    service_class: Optional[str] = None
     cluster: Optional[Cluster] = None
 
 
@@ -151,6 +152,7 @@ Valid regions:
         )
 
         context_name = cluster.services_data["context"]
+        service_class = customer_config.k8s_config.service_class
 
         if ctx.invoked_subcommand == "ssh":
             ctx.obj = CliContext(
@@ -179,6 +181,7 @@ Valid regions:
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors=customer_config.service_monitors,
+                service_class=service_class,
             )
             return
 
@@ -192,6 +195,7 @@ Valid regions:
             quiet_mode=quiet,
             cluster=cluster,
             service_monitors=customer_config.service_monitors,
+            service_class=service_class,
         )
 
         os.environ["KUBECONFIG"] = kubeconfig = ensure_iap_tunnel(ctx)
