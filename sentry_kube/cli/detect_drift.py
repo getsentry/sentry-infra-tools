@@ -1,4 +1,4 @@
-from .apply import diff
+from sentry_kube.cli.diff import diff
 import click
 from jinja2.exceptions import TemplateError
 from libsentrykube.service import get_service_names

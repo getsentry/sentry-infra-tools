@@ -49,7 +49,7 @@ DEFAULT_SOAK_TIME_S = 120
     default=DEFAULT_SOAK_TIME_S,
     help=(
         "Amount of time (in seconds) to wait after applying changes to canaries "
-        "before proceeding to remaining deployments.",
+        "before proceeding to remaining deployments."
     ),
 )
 @click.option(
