@@ -44,9 +44,9 @@ class K8sConfig:
         return K8sConfig(
             root=str(conf["root"]),
             cluster_def_root=str(conf["cluster_def_root"]),
-            cluster_name=str(conf.get("cluster_name"))
-            if "cluster_name" in conf
-            else None,
+            cluster_name=(
+                str(conf.get("cluster_name")) if "cluster_name" in conf else None
+            ),
             materialized_manifests=str(conf["materialized_manifests"]),
             materialized_helm_values=str(
                 conf.get(

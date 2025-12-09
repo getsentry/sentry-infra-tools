@@ -35,9 +35,11 @@ def test_get_regions_all(mock_config):
 def test_get_regions_with_service(mock_config, mock_list_clusters):
     """Test getting regions filtered by service"""
     mock_list_clusters.side_effect = lambda config: [
-        MagicMock(service_names=["service1"])
-        if config == "config1"
-        else MagicMock(service_names=["service2"])
+        (
+            MagicMock(service_names=["service1"])
+            if config == "config1"
+            else MagicMock(service_names=["service2"])
+        )
     ]
 
     runner = CliRunner()

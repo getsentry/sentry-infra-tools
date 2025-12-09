@@ -55,15 +55,11 @@ expected_service_value_overrides = {
             "service1": {
                 "key2": {
                     "subkey2_3": ["value2_3_1_replaced"],
-                    "subkey2_4": [
-                        "value2_4_1_replaced"  # From the managed file
-                    ],
+                    "subkey2_4": ["value2_4_1_replaced"],  # From the managed file
                 },
                 "consumer_key2": {
                     "subkey2_3": ["value2_3_1_replaced"],
-                    "subkey2_4": [
-                        "value2_4_1_replaced"  # From the managed file
-                    ],
+                    "subkey2_4": ["value2_4_1_replaced"],  # From the managed file
                 },
             },
             "service2": {},

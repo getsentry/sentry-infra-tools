@@ -102,9 +102,11 @@ def _match_filters(doc: dict, filters: List[str]) -> bool:
 def _sort_important_files_first(template_files: List[Any]) -> List[Any]:
     return sorted(
         template_files,
-        key=lambda template: -1
-        if "configmap" in template.name or "serviceaccount" in template.name
-        else 0,
+        key=lambda template: (
+            -1
+            if "configmap" in template.name or "serviceaccount" in template.name
+            else 0
+        ),
     )
 
 

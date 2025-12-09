@@ -244,7 +244,7 @@ class PGBouncerInitSidecar(SimpleExtension):
         res: dict[str, Any] = {
             "image": image,
             "name": "pgbouncer",
-            "restartPolicy": "Always", # sidecar init container
+            "restartPolicy": "Always",  # sidecar init container
             "args": [
                 "/bin/sh",
                 "-ec",
@@ -306,7 +306,6 @@ pgbouncer /etc/pgbouncer/pgbouncer.ini""",
         if livenessProbe:
             res["livenessProbe"] = livenessProbe
         return json.dumps(res)
-
 
 
 class XDSConfigMapFrom(SimpleExtension):
