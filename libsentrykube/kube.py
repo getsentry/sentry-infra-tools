@@ -5,16 +5,28 @@ import json
 import yaml
 import operator
 import logging
+import re
 from dataclasses import dataclass
 import os
 from pprint import pformat
-from typing import Any, List, Optional, Sequence, Tuple, cast, Generator
+from typing import (
+    Any,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    cast,
+    Generator,
+    Set,
+    NamedTuple,
+)
 
 import click
 from functools import partial
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 from kubernetes.client.rest import ApiException
+import kubernetes.client
 from yaml import dump_all, safe_dump, safe_dump_all, safe_load, safe_load_all
 
 from libsentrykube.loader import load_macros
@@ -755,3 +767,194 @@ def apply(items: List[KubeResource]):
             else:
                 getattr(item.api, f"patch_{item.func}")(item.name, item.local_doc)
                 click.echo(f'{item.kind} "{item.name}" updated')
+
+
+CAMEL_TO_SNAKE_REGEX = re.compile(r"(?<!^)(?=[A-Z])")
+
+
+def camel_to_snake(name: str) -> str:
+    """
+    Converts CamelCase to snake_case.
+    Used to convert Kind CamelCase names to snake_case names to get
+    list function from api dynamically.
+    """
+    return CAMEL_TO_SNAKE_REGEX.sub("_", name).lower()
+
+
+class KubeCRD(NamedTuple):
+    plural: str
+    group: str
+    versions: List[str]
+    scope: str
+
+
+class KubeCRDApi:
+    def __init__(self, crd: KubeCRD, client: kubernetes.client.ApiClient) -> None:
+        self.crd = crd
+        self._inner = kubernetes.client.CustomObjectsApi(client)
+
+    def list_resources(
+        self,
+        namespaces: Optional[List[str]] = None,
+        versions: Optional[List[str]] = None,
+    ) -> List[kubernetes.client.V1APIResource]:
+        versions = versions or self.crd.versions
+        namespaces = namespaces or []
+        resources = []
+        for version in versions:
+            try:
+                if self.crd.scope == "Cluster":
+                    response = self._inner.list_cluster_custom_object(
+                        group=self.crd.group, version=version, plural=self.crd.plural
+                    )
+                    resources.extend(response["items"])
+                else:
+                    for namespace in namespaces:
+                        response = self._inner.list_namespaced_custom_object(
+                            namespace=namespace,
+                            group=self.crd.group,
+                            version=version,
+                            plural=self.crd.plural,
+                        )
+                        resources.extend(response["items"])
+            except ApiException as e:
+                if e.status == 404:
+                    logger.debug(f"CRD {self.crd.plural} {version} not found")
+                    continue
+                raise e
+        return resources
+
+
+class KubeApi:
+    def __init__(self, name: str, client: kubernetes.client.ApiClient):
+        clz = getattr(kubernetes.client, name)
+        if not clz:
+            raise ValueError(f"API class {name} not found")
+        self._inner = clz(client)
+
+    def get_available_kinds(self) -> Set[str]:
+        try:
+            resources_response = self._inner.get_api_resources()
+        except ApiException as e:
+            # kubernetes clients returns 404 through raising ApiException.
+            # This can happen if api exists (newer client version),
+            # but no resources available (older cluster version) or vice versa.
+            if e.status == 404:
+                return set()
+            raise e
+        return set([resource.kind for resource in resources_response.resources])
+
+    def list_resources(self, kind: str) -> List[kubernetes.client.V1APIResource]:
+        """
+        Returns list of resources for a given kind and api.
+        Works for most API's, CustomObjectsApi is an exception.
+
+        TODO: filtered by namespace
+        """
+        kind_snake_name = camel_to_snake(kind)
+
+        # Kind can be Cluster or Namespace scoped.
+        # For example, webhooks are cluster scoped
+        # and API doesn't have '*_for_all_namespaces' functions.
+        list_function_name = f"list_{kind_snake_name}"
+        list_for_all_namespaces_function_name = (
+            f"list_{kind_snake_name}_for_all_namespaces"
+        )
+
+        try:
+            if hasattr(self._inner, list_for_all_namespaces_function_name):
+                return getattr(
+                    self._inner, list_for_all_namespaces_function_name
+                )().items
+            elif hasattr(self._inner, list_function_name):
+                return getattr(self._inner, list_function_name)().items
+            else:
+                logger.debug(
+                    f"No list function found. {self._inner.__class__.__name__}:{kind}"
+                )
+                return []
+        except ApiException as e:
+            raise e
+
+
+class KubeClient:
+    def __init__(self):
+        # NOTE: At the end this class should be a singleton,
+        # instantiated at the beginning of the application
+        # like we do with set_cluster_context.
+        # But want to mature classes API's first and
+        # migrate more cased to it first.
+        self.client = kube_get_client()
+        self._api_classes = KubeClient.get_available_api()
+
+        self._init_kind_to_api_map()
+
+    def _init_kind_to_api_map(self) -> None:
+        self._kind_to_api_map = {}
+        self._avaiable_resources = {}
+        for clz in self._api_classes:
+            api = self.api(clz)
+            available_kinds = api.get_available_kinds()
+            self._avaiable_resources[clz] = available_kinds
+            for kind in available_kinds:
+                self._kind_to_api_map[kind] = api
+
+    @staticmethod
+    def is_api_class(name: str) -> bool:
+        """Kubernetes.client module exposes all kind of classes.
+        Api classes mostly follow pattern of <Group>(<Version>)?Api,
+        but not all of them related to resource creation (eg VersionAPI),
+        so additionally we check for get_api_resources
+        method presence (returns list of associated kinds)
+        """
+        if not name.endswith("Api"):
+            return False
+        if name in ["CustomObjectsApi", "ApiextensionsV1Api"]:
+            # CRD registration API.
+            # Its resources have to be queried separately
+            return False
+        clazz = getattr(kubernetes.client, name)
+        if not hasattr(clazz, "get_api_resources"):
+            return False
+        return True
+
+    @staticmethod
+    def get_available_api() -> List[str]:
+        return [
+            name for name in dir(kubernetes.client) if KubeClient.is_api_class(name)
+        ]
+
+    def get_available_crds(self) -> List[KubeCRD]:
+        ext = kubernetes.client.ApiextensionsV1Api(self.client)
+        crds_response = ext.list_custom_resource_definition()
+        return [
+            KubeCRD(
+                plural=crd.spec.names.plural,
+                group=crd.spec.group,
+                versions=[version.name for version in crd.spec.versions],
+                scope=crd.spec.scope,
+            )
+            for crd in crds_response.items
+        ]
+
+    def api(self, name: str) -> KubeApi:
+        return KubeApi(name, self.client)
+
+    def crd_api(self, crd: KubeCRD) -> KubeCRDApi:
+        return KubeCRDApi(crd, self.client)
+
+    def get_available_resources(self, api_class: str) -> Set[str]:
+        return self._avaiable_resources[api_class]
+
+    def __getattr__(self, name: str):
+        if name.startswith("list_"):
+            # Here is a bit of dynamic programming trick:
+            # Every attempt to make a call to list_<Kind> function will
+            # automatically extract Kind from attr name and convert call to
+            # related API list_resources call.
+            # Just for convenience of high level usage, allows not to remember
+            # which API group provides given kind.
+            kind = name.replace("list_", "")
+            return lambda: self._kind_to_api_map[kind].list_resources(kind)
+        else:
+            return None

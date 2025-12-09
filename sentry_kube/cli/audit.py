@@ -1,15 +1,12 @@
-import re
 from dataclasses import dataclass
-from typing import Any, List, Set, Union, Dict, Optional
+from typing import List, Union, Dict, Optional
 import click
 import os
 import logging
 import kubernetes.client
-from kubernetes.client.exceptions import ApiException
 from yaml import safe_load_all
 
-from libsentrykube.kube import render_templates
-from libsentrykube.utils import kube_get_client
+from libsentrykube.kube import KubeClient, render_templates
 
 from .apply import allow_for_all_services
 
@@ -30,16 +27,6 @@ class AuditRecord:
     remote: bool
 
 
-@dataclass
-class RegisteredResource:
-    plural: str
-    group: str
-    versions: List[str]
-    scope: str
-
-
-CAMEL_TO_SNAKE_REGEX = re.compile(r"(?<!^)(?=[A-Z])")
-
 # You either specify the list of API's to use
 # or to skip. I chose to go with the latter.
 # List of skipped API's is almost as long as list of used ones now,
@@ -53,7 +40,6 @@ APIS_TO_SKIP = [
     "AuthenticationV1alpha1Api",
     "AuthorizationV1Api",
     "CoordinationV1Api",
-    "CustomObjectsApi",  # special case, handled with separate set of functions
     "DiscoveryV1Api",
     "EventsV1Api",
     "FlowcontrolApiserverV1Api",
@@ -92,15 +78,6 @@ KINDS_TO_SKIP = [
 Metadata = Union[kubernetes.client.V1ObjectMeta, Dict[str, str]]
 
 
-def camel_to_snake(name: str) -> str:
-    """
-    Converts CamelCase to snake_case.
-    Used to convert Kind CamelCase names to snake_case names to get
-    list function from api dynamically.
-    """
-    return CAMEL_TO_SNAKE_REGEX.sub("_", name).lower()
-
-
 def to_api_name(name: str) -> str:
     if name == "v1":
         return "CoreV1Api"
@@ -110,152 +87,23 @@ def to_api_name(name: str) -> str:
     return f"{dns}{version.capitalize()}Api"
 
 
-def is_api_class(name: str) -> bool:
-    """Kubernetes.client module exposes all kind of classes.
-    Api classes mostly follow pattern of <Group>(<Version>)?Api,
-    but not all of them related to resource creation (eg VersionAPI),
-    so additionally we check for get_api_resources
-    method presence (returns list of associated kinds)
-    """
-    if not name.endswith("Api"):
-        return False
-    clazz = getattr(kubernetes.client, name)
-    if not hasattr(clazz, "get_api_resources"):
-        return False
-    return name not in APIS_TO_SKIP
-
-
-def get_available_api():
-    return [name for name in dir(kubernetes.client) if is_api_class(name)]
-
-
-def get_api_resources(api: kubernetes.client.ApiClient, **kwargs) -> Set[str]:
-    """
-    Returns list of associated kinds for a given api.
-    """
-    try:
-        available_resources_response = api.get_api_resources(**kwargs)
-    except ApiException as e:
-        # kubernetes clients returns 404 through raising ApiException.
-        # This can happen if api exists (newer client version) but no resources are not
-        # present (older cluster version) or vice versa.
-        if e.status == 404:
-            return set()
-        raise e
-    return set(
-        [
-            resource.kind
-            for resource in available_resources_response.resources
-            if resource.kind not in KINDS_TO_SKIP
-        ]
-    )
-
-
-def get_all_namespaces(client: kubernetes.client.ApiClient) -> List[str]:
-    core = kubernetes.client.CoreV1Api(client)
-    namespaces_response = core.list_namespace()
-    return [namespace.metadata.name for namespace in namespaces_response.items]
-
-
-def get_resource_list(api: Any, kind: str) -> List[Any]:
-    """
-    Returns list of resources for a given kind and api.
-    Works for most API's, CustomObjectsApi is an exception.
-    """
-    kind_snake_name = camel_to_snake(kind)
-
-    # Kind can be Cluster or Namespace scoped.
-    # For example, webhooks are cluster scoped
-    # and API doesn't have '*_for_all_namespaces' functions.
-    list_function_name = f"list_{kind_snake_name}"
-    list_for_all_namespaces_function_name = f"list_{kind_snake_name}_for_all_namespaces"
-
-    if hasattr(api, list_for_all_namespaces_function_name):
-        list_function = getattr(api, list_for_all_namespaces_function_name)
-    elif hasattr(api, list_function_name):
-        list_function = getattr(api, list_function_name)
-    else:
-        # This mostly happens with CoreAPI, that has resources like
-        # Eviction, Binding, PodAttachOptions and others internal resources.
-        # change to debug log
-        logger.debug(f"No list function found. {api.__class__.__name__}:{kind}")
-        return []
-
-    try:
-        resources_response = list_function()
-        return resources_response.items
-    except ApiException as e:
-        raise e
-
-
-def get_registered_crds(
-    client: kubernetes.client.ApiClient,
-) -> List[RegisteredResource]:
-    """
-    Returns list of registered Custom Resource Definitions.
-    Custom Resource Definitions versioning scheme is slightly different from regular API's
-    There is only one version of regular resource per API,
-    but CRD can have multiple versions.
-    """
-    ext = kubernetes.client.ApiextensionsV1Api(client)
-    crds_response = ext.list_custom_resource_definition()
-    return [
-        RegisteredResource(
-            plural=crd.spec.names.plural,
-            group=crd.spec.group,
-            scope=crd.spec.scope,
-            versions=[version.name for version in crd.spec.versions],
-        )
-        for crd in crds_response.items
-    ]
-
-
-def get_crds_resource_list(
-    api: kubernetes.client.CustomObjectsApi,
-    resource: RegisteredResource,
-    namespaces: List[str],
-) -> List[Any]:
-    """
-    Returns list of resources for a given Custom Resource Definition.
-    CustomResource can have multiple versions, so we need to iterate over them.
-    Also, there no '*_for_all_namespaces' functions for CRD,
-    we need to iterate over namespaces manually.
-    """
-    resources = []
-    for version in resource.versions:
-        try:
-            if resource.scope == "Cluster":
-                response = api.list_cluster_custom_object(
-                    group=resource.group, version=version, plural=resource.plural
-                )
-                resources.extend(response["items"])
-            else:
-                for namespace in namespaces:
-                    response = api.list_namespaced_custom_object(
-                        namespace=namespace,
-                        group=resource.group,
-                        version=version,
-                        plural=resource.plural,
-                    )
-                    resources.extend(response["items"])
-        except ApiException as e:
-            if e.status == 404:
-                logger.debug(f"CRD {resource.plural} {version} not found")
-                continue
-            raise e
-    return resources
+def get_all_namespaces(client: KubeClient) -> List[str]:
+    namespaces_response = client.list_Namespace()
+    return [namespace.metadata.name for namespace in namespaces_response]
 
 
 def get_general_resource_audit_records(
-    client: kubernetes.client.ApiClient,
+    client: KubeClient,
 ) -> List[AuditRecord]:
-    api_classes = get_available_api()
+    api_classes = filter(lambda x: x not in APIS_TO_SKIP, client.get_available_api())
     result = []
     for clazz in api_classes:
-        api = getattr(kubernetes.client, clazz)(client)
-        available_kinds = get_api_resources(api)
+        api = client.api(clazz)
+        available_kinds = filter(
+            lambda x: x not in KINDS_TO_SKIP, api.get_available_kinds()
+        )
         for kind in available_kinds:
-            items = get_resource_list(api, kind)
+            items = api.list_resources(kind)
             for item in items:
                 labels = getattr(item.metadata, "labels", {}) or {}
                 result.append(
@@ -273,21 +121,19 @@ def get_general_resource_audit_records(
 
 
 def get_crds_audit_records(
-    client: kubernetes.client.ApiClient, namespaces: Optional[List[str]] = None
+    client: KubeClient, namespaces: Optional[List[str]] = None
 ) -> List[AuditRecord]:
     """
     Issue with CRD's is that in many cases they maintained by operator,
     and many of them are low-level, ie you have some RabbitCluster resource to define,
     and operator creates a bunch or resources to manage.
-
-
     """
-    registered_crds = get_registered_crds(client)
-    api = kubernetes.client.CustomObjectsApi(client)
+    registered_crds = client.get_available_crds()
     namespaces = namespaces or get_all_namespaces(client)
     result = []
-    for resource in registered_crds:
-        items = get_crds_resource_list(api, resource, namespaces)
+    for crd in registered_crds:
+        api = client.crd_api(crd)
+        items = api.list_resources(namespaces=namespaces)
         for item in items:
             result.append(
                 AuditRecord(
@@ -306,7 +152,7 @@ def get_crds_audit_records(
 def get_cluster_resource_audit_records(
     services: List[str], namespaces: Optional[List[str]] = None
 ):
-    client = kube_get_client()
+    client = KubeClient()
     audit_records: List[AuditRecord] = get_general_resource_audit_records(client)
     audit_records.extend(get_crds_audit_records(client, namespaces))
     filtered_audit_records = [
