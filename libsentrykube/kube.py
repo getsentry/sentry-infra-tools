@@ -797,6 +797,7 @@ class KubeCRDApi:
         self,
         namespaces: Optional[List[str]] = None,
         versions: Optional[List[str]] = None,
+        selector: Optional[str] = None,
     ) -> List[kubernetes.client.V1APIResource]:
         versions = versions or self.crd.versions
         namespaces = namespaces or []
@@ -815,6 +816,7 @@ class KubeCRDApi:
                             group=self.crd.group,
                             version=version,
                             plural=self.crd.plural,
+                            label_selector=selector,
                         )
                         resources.extend(response["items"])
             except ApiException as e:
@@ -844,7 +846,9 @@ class KubeApi:
             raise e
         return set([resource.kind for resource in resources_response.resources])
 
-    def list_resources(self, kind: str) -> List[kubernetes.client.V1APIResource]:
+    def list_resources(
+        self, kind: str, selector: Optional[str] = None
+    ) -> List[kubernetes.client.V1APIResource]:
         """
         Returns list of resources for a given kind and api.
         Works for most API's, CustomObjectsApi is an exception.
@@ -863,11 +867,13 @@ class KubeApi:
 
         try:
             if hasattr(self._inner, list_for_all_namespaces_function_name):
-                return getattr(
-                    self._inner, list_for_all_namespaces_function_name
-                )().items
+                return getattr(self._inner, list_for_all_namespaces_function_name)(
+                    label_selector=selector
+                ).items
             elif hasattr(self._inner, list_function_name):
-                return getattr(self._inner, list_function_name)().items
+                return getattr(self._inner, list_function_name)(
+                    label_selector=selector
+                ).items
             else:
                 logger.debug(
                     f"No list function found. {self._inner.__class__.__name__}:{kind}"
@@ -955,6 +961,10 @@ class KubeClient:
             # Just for convenience of high level usage, allows not to remember
             # which API group provides given kind.
             kind = name.replace("list_", "")
-            return lambda: self._kind_to_api_map[kind].list_resources(kind)
+
+            def _list_resources(*args, **kwargs):
+                return self._kind_to_api_map[kind].list_resources(*args, **kwargs)
+
+            return _list_resources
         else:
             return None
