@@ -108,7 +108,7 @@ def _dump_yaml_docs_to_tmpdir(yaml_docs: List[str]) -> Iterator[str]:
 def _diff_kubectl(
     ctx,
     definitions,
-    server_side=None,
+    server_side: bool = False,
     important_diffs_only: bool = False,
 ) -> Tuple[bool, List[str]]:
     """
@@ -126,8 +126,8 @@ def _diff_kubectl(
         ctx.obj.context_name,
         "diff",
     ]
-    if server_side is not None:
-        cmd.append(f"--server-side={str(bool(server_side)).lower()}")
+    if server_side:
+        cmd.append(f"--server-side={str(server_side).lower()}")
 
     # kubectl diff --concurrency won't have any effect if the input is STDIN
     # (due to its internal visitor implementation).
@@ -157,13 +157,53 @@ def _diff_kubectl(
     return (has_diffs, lines)
 
 
+def _diff(
+    ctx,
+    services,
+    filters,
+    server_side: bool = False,
+    important_diffs_only: bool = False,
+    use_canary: bool = False,
+    allow_jobs: bool = False,
+    deployment_image: str | None = None,
+) -> Tuple[bool, List[str]]:
+    _set_deployment_image_env(services, deployment_image)
+
+    click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
+    definitions = "".join(
+        _render(
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
+        ),
+    ).encode("utf-8")
+
+    if use_canary:
+        click.secho(
+            "--use-canary specificed, limiting to canaries.",
+            fg="red",
+        )
+
+    return _diff_kubectl(
+        ctx=ctx,
+        definitions=definitions,
+        server_side=server_side,
+        important_diffs_only=important_diffs_only,
+    )
+
+
 @click.command()
 @click.pass_context
 @click.option("--filter", "filters", multiple=True)
+# NOTE(dfedorov): Should be flag, but not sure where
+# it is used, so keeping it this way to avoid breaking changes.
 @click.option(
     "--server-side",
     type=bool,
-    default=None,
+    default=False,
     show_default=True,
     help="Use server-side rendering",
 )
@@ -190,12 +230,11 @@ def diff(
     ctx,
     services,
     filters,
-    server_side,
+    server_side: bool,
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
     deployment_image: str | None = None,
-    exit_with_result: bool = True,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -204,33 +243,15 @@ def diff(
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
     """
-    _set_deployment_image_env(services, deployment_image)
 
-    click.echo(f"Rendering services: {', '.join(services)}")
-    skip_kinds = ("Job",) if not allow_jobs else None
-    definitions = "".join(
-        _render(
-            ctx,
-            services,
-            skip_kinds=skip_kinds,
-            filters=filters,
-            use_canary=use_canary,
-        ),
-    ).encode("utf-8")
-
-    if use_canary:
-        click.secho(
-            "--use-canary specificed, limiting to canaries.",
-            fg="red",
-        )
-
-    has_diffs, output_lines = _diff_kubectl(
+    (has_diffs, _) = _diff(
         ctx=ctx,
-        definitions=definitions,
+        services=services,
+        filters=filters,
         server_side=server_side,
         important_diffs_only=important_diffs_only,
+        use_canary=use_canary,
+        allow_jobs=allow_jobs,
+        deployment_image=deployment_image,
     )
-    if exit_with_result:
-        ctx.exit(has_diffs)
-    else:
-        return output_lines
+    ctx.exit(has_diffs)
