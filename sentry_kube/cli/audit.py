@@ -92,9 +92,15 @@ def get_all_namespaces(client: KubeClient) -> List[str]:
     return [namespace.metadata.name for namespace in namespaces_response]
 
 
+def get_service_selector(services: List[str]) -> str:
+    return f"service in ({','.join(services)})"
+
+
 def get_general_resource_audit_records(
     client: KubeClient,
+    services: List[str],
 ) -> List[AuditRecord]:
+    click.echo(f"Getting general resources for services: {services}")
     api_classes = filter(lambda x: x not in APIS_TO_SKIP, client.get_available_api())
     result = []
     for clazz in api_classes:
@@ -103,7 +109,10 @@ def get_general_resource_audit_records(
             lambda x: x not in KINDS_TO_SKIP, api.get_available_kinds()
         )
         for kind in available_kinds:
-            items = api.list_resources(kind)
+            selector = get_service_selector(services)
+            if kind == "HorizontalPodAutoscaler":
+                selector += ",!scaledobject.keda.sh/name"
+            items = api.list_resources(kind, selector=selector)
             for item in items:
                 labels = getattr(item.metadata, "labels", {}) or {}
                 result.append(
@@ -121,19 +130,21 @@ def get_general_resource_audit_records(
 
 
 def get_crds_audit_records(
-    client: KubeClient, namespaces: Optional[List[str]] = None
+    client: KubeClient, services: List[str], namespaces: Optional[List[str]] = None
 ) -> List[AuditRecord]:
     """
     Issue with CRD's is that in many cases they maintained by operator,
     and many of them are low-level, ie you have some RabbitCluster resource to define,
     and operator creates a bunch or resources to manage.
     """
+    click.echo(f"Getting CRDs for services: {services}")
     registered_crds = client.get_available_crds()
     namespaces = namespaces or get_all_namespaces(client)
     result = []
     for crd in registered_crds:
         api = client.crd_api(crd)
-        items = api.list_resources(namespaces=namespaces)
+        selector = get_service_selector(services)
+        items = api.list_resources(namespaces=namespaces, selector=selector)
         for item in items:
             result.append(
                 AuditRecord(
@@ -153,8 +164,10 @@ def get_cluster_resource_audit_records(
     services: List[str], namespaces: Optional[List[str]] = None
 ):
     client = KubeClient()
-    audit_records: List[AuditRecord] = get_general_resource_audit_records(client)
-    audit_records.extend(get_crds_audit_records(client, namespaces))
+    audit_records: List[AuditRecord] = get_general_resource_audit_records(
+        client, services
+    )
+    audit_records.extend(get_crds_audit_records(client, services, namespaces))
     filtered_audit_records = [
         record for record in audit_records if record.service in services
     ]
@@ -296,7 +309,6 @@ def audit(ctx, services):
     """
     if not ctx.obj.quiet_mode:
         click.echo("Loading local files for services")
-
     local_resources = list(
         safe_load_all(
             "".join(
@@ -313,6 +325,7 @@ def audit(ctx, services):
         f"{record.kind}-{record.namespace}-{record.name}": record
         for record in audit_records
     }
+    click.echo(f"Running resource comparison for services: {services}")
     for resource in local_resources:
         if not resource:
             # Due to --- usage in some documents and conditional rendering,
