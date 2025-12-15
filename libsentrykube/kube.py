@@ -963,7 +963,7 @@ class KubeClient:
             kind = name.replace("list_", "")
 
             def _list_resources(*args, **kwargs):
-                return self._kind_to_api_map[kind].list_resources(*args, **kwargs)
+                return self._kind_to_api_map[kind].list_resources(kind, *args, **kwargs)
 
             return _list_resources
         else:
