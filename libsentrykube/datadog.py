@@ -40,7 +40,7 @@ def check_monitors(
     dd_app_key: str | None = None,
     failure_states: Sequence[str] | None = None,
 ) -> bool:
-    if failure_states is not None:
+    if failure_states is None:
         failure_states = ["Alert", "Warn"]
 
     for mid in monitor_ids:
