@@ -1,4 +1,4 @@
-from sentry_kube.cli.diff import diff
+from sentry_kube.cli.diff import _diff
 import click
 from jinja2.exceptions import TemplateError
 from libsentrykube.service import get_service_names
@@ -32,11 +32,11 @@ def detect_drift(ctx, issue):
     for service in services:
         output = None
         try:
-            output = ctx.invoke(
-                diff,
+            (_, output) = _diff(
+                ctx=ctx,
                 services=[service],
+                filters=(),
                 important_diffs_only=True,
-                exit_with_result=False,
             )
         except TemplateError as e:
             click.secho(e, fg="red")

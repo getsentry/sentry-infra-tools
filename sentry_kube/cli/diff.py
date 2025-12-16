@@ -3,17 +3,13 @@ import os
 import yaml
 import contextlib
 import tempfile
-import functools
-import concurrent.futures
 import copy
 import shutil
 import subprocess
-from typing import Iterator, List
+from typing import Iterator, List, Tuple
 from sentry_kube.cli.util import allow_for_all_services, _set_deployment_image_env
 from sentry_kube.cli.render import _render
 from libsentrykube.utils import (
-    KUBECTL_VERSION,
-    chunked,
     ensure_kubectl,
     macos_notify,
 )
@@ -67,22 +63,61 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
     return child_process_output
 
 
+def should_skip_line(line: str) -> bool:
+    return any(
+        [keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]
+    ) or any(
+        [
+            "kubectl.kubernetes.io/last-applied-configuration" in line,
+            "diff -u -N" in line,
+        ]
+    )
+
+
+def print_diff_string(line: str) -> None:
+    if "---" in line:
+        click.echo("\n")
+
+    if line.startswith("+"):
+        click.secho(line, fg="green")
+    elif line.startswith("-"):
+        click.secho(line, fg="red")
+    else:
+        click.echo(line)
+
+
+def print_diff(output: List[str]) -> None:
+    for line in output:
+        if should_skip_line(line):
+            continue
+        print_diff_string(line)
+
+
+@contextlib.contextmanager
+def _dump_yaml_docs_to_tmpdir(yaml_docs: List[str]) -> Iterator[str]:
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        for yaml_doc in yaml_docs:
+            with tempfile.NamedTemporaryFile(
+                delete=False, prefix=f"{tmpdirname}/", suffix=".yaml"
+            ) as f:
+                f.write(yaml_doc.encode("utf-8"))
+
+        yield tmpdirname
+
+
 def _diff_kubectl(
     ctx,
     definitions,
-    server_side=None,
+    server_side: bool = False,
     important_diffs_only: bool = False,
-    return_output: bool = False,
-):
+) -> Tuple[bool, List[str]]:
     """
     Run kubectl-based diff concurrently and print out the results in color.
     """
     # Handle scenarios where an empty definitions is passed in, like when filters
     # don't have any matches
     if not definitions:
-        if return_output:
-            return (False, None)
-        return False
+        return (False, [])
 
     click.echo("Waiting on kubectl diff.")
     cmd = [
@@ -90,9 +125,8 @@ def _diff_kubectl(
         "--context",
         ctx.obj.context_name,
         "diff",
+        f"--server-side={str(bool(server_side)).lower()}",
     ]
-    if server_side is not None:
-        cmd.append(f"--server-side={str(bool(server_side)).lower()}")
 
     # kubectl diff --concurrency won't have any effect if the input is STDIN
     # (due to its internal visitor implementation).
@@ -104,101 +138,71 @@ def _diff_kubectl(
         )
     ]
 
-    @contextlib.contextmanager
-    def _dump_yaml_docs_to_tmpdir(yaml_docs: List[str]) -> Iterator[str]:
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            for yaml_doc in yaml_docs:
-                with tempfile.NamedTemporaryFile(
-                    delete=False, prefix=f"{tmpdirname}/", suffix=".yaml"
-                ) as f:
-                    f.write(yaml_doc.encode("utf-8"))
+    cmd.append(f"--concurrency={KUBECTL_DIFF_CONCURRENCY}")
+    with _dump_yaml_docs_to_tmpdir(yaml_docs) as tmpdirname:
+        output = _run_kubectl_diff(
+            cmd + ["-f", tmpdirname],
+            important_diffs_only=important_diffs_only,
+        )
 
-            yield tmpdirname
-
-    # --concurrency was introduced since kubectl 1.28
-    # TODO(hubertchan): Once we're on kubectl 1.28 everywhere, we can probably
-    # remove my manual concurrency hack
-    if KUBECTL_VERSION >= "1.28":
-        cmd.append(f"--concurrency={KUBECTL_DIFF_CONCURRENCY}")
-        with _dump_yaml_docs_to_tmpdir(yaml_docs) as tmpdirname:
-            output = _run_kubectl_diff(
-                cmd + ["-f", tmpdirname],
-                important_diffs_only=important_diffs_only,
-            )
-    else:
-        # For older kubectl version, using threading to increase concurrency
-        #
-        # NOTE: our dummy threading implementation might change the order of diff output.
-        # If you really need sorted diff like native kubectl diff, then you would need
-        # to set concurrency to 1
-        with (
-            contextlib.ExitStack() as stack,
-            concurrent.futures.ThreadPoolExecutor(
-                max_workers=KUBECTL_DIFF_CONCURRENCY
-            ) as executor,
-        ):
-            chunk_size = max(len(yaml_docs) // KUBECTL_DIFF_CONCURRENCY, 1)
-            kubectl_diff_cmds = [
-                cmd
-                + [
-                    "-f",
-                    stack.enter_context(_dump_yaml_docs_to_tmpdir(chunked_yaml_docs)),
-                ]
-                for chunked_yaml_docs in chunked(yaml_docs, chunk_size)
-            ]
-            output = "".join(
-                executor.map(
-                    functools.partial(
-                        _run_kubectl_diff,
-                        important_diffs_only=important_diffs_only,
-                    ),
-                    kubectl_diff_cmds,
-                )
-            )
-
-    # Output is empty or just whitespaces/newlines
     if not output or output.isspace():
-        if return_output:
-            return (False, None)
-        return False
+        return (False, [])
 
-    # Print the colored diff
     lines = output.split("\n")
-    for line in lines:
-        # blocking garbage output
-        if all(
-            [keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]
-        ) or any(
-            [
-                "kubectl.kubernetes.io/last-applied-configuration" in line,
-                "diff -u -N" in line,
-            ]
-        ):
-            continue
-        # start of new block, leave a newline
-        if "---" in line:
-            click.echo("\n")
-        if line.startswith("+"):
-            click.secho(line, fg="green")
-        elif line.startswith("-"):
-            click.secho(line, fg="red")
-        else:
-            click.echo(line)
-
+    print_diff(lines)
     macos_notify("sentry-kube diff", "Diff complete.")
+
     has_diffs = len(lines) > 0
-    if return_output:
-        return (has_diffs, lines if has_diffs else None)
-    return has_diffs
+    return (has_diffs, lines)
+
+
+def _diff(
+    ctx,
+    services,
+    filters,
+    server_side: bool = False,
+    important_diffs_only: bool = False,
+    use_canary: bool = False,
+    allow_jobs: bool = False,
+    deployment_image: str | None = None,
+) -> Tuple[bool, List[str]]:
+    _set_deployment_image_env(services, deployment_image)
+
+    click.echo(f"Rendering services: {', '.join(services)}")
+    skip_kinds = ("Job",) if not allow_jobs else None
+    definitions = "".join(
+        _render(
+            ctx,
+            services,
+            skip_kinds=skip_kinds,
+            filters=filters,
+            use_canary=use_canary,
+        ),
+    ).encode("utf-8")
+
+    if use_canary:
+        click.secho(
+            "--use-canary specificed, limiting to canaries.",
+            fg="red",
+        )
+
+    return _diff_kubectl(
+        ctx=ctx,
+        definitions=definitions,
+        server_side=server_side,
+        important_diffs_only=important_diffs_only,
+    )
 
 
 @click.command()
 @click.pass_context
 @click.option("--filter", "filters", multiple=True)
+# NOTE(dfedorov): Should be flag, but not sure where
+# it is used, so keeping it this way to avoid breaking changes.
 @click.option(
     "--server-side",
     type=bool,
-    default=None,
+    default=False,
     show_default=True,
     help="Use server-side rendering",
 )
@@ -225,12 +229,11 @@ def diff(
     ctx,
     services,
     filters,
-    server_side,
+    server_side: bool,
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
     deployment_image: str | None = None,
-    exit_with_result: bool = True,
 ):
     """
     Render a diff between production and local configs, using a wrapper around
@@ -239,40 +242,15 @@ def diff(
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
     """
-    _set_deployment_image_env(services, deployment_image)
 
-    click.echo(f"Rendering services: {', '.join(services)}")
-    skip_kinds = ("Job",) if not allow_jobs else None
-    definitions = "".join(
-        _render(
-            ctx,
-            services,
-            skip_kinds=skip_kinds,
-            filters=filters,
-            use_canary=use_canary,
-        ),
-    ).encode("utf-8")
-
-    if use_canary:
-        click.secho(
-            "--use-canary specificed, limiting to canaries.",
-            fg="red",
-        )
-
-    if exit_with_result:
-        diff_result = _diff_kubectl(
-            ctx=ctx,
-            definitions=definitions,
-            server_side=server_side,
-            important_diffs_only=important_diffs_only,
-        )
-        ctx.exit(diff_result)
-    else:
-        diff_result, output_lines = _diff_kubectl(
-            ctx=ctx,
-            definitions=definitions,
-            server_side=server_side,
-            important_diffs_only=important_diffs_only,
-            return_output=True,
-        )
-        return output_lines
+    (has_diffs, _) = _diff(
+        ctx=ctx,
+        services=services,
+        filters=filters,
+        server_side=server_side,
+        important_diffs_only=important_diffs_only,
+        use_canary=use_canary,
+        allow_jobs=allow_jobs,
+        deployment_image=deployment_image,
+    )
+    ctx.exit(has_diffs)

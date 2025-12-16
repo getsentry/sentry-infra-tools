@@ -105,10 +105,11 @@ def quickpatch(
                 filters=[f"metadata.name={resource}"],
             )
         ).encode("utf-8")
-        return _diff_kubectl(
+        has_diffs, _ = _diff_kubectl(
             ctx=ctx,
             definitions=definitions,
         )
+        return has_diffs
     elif action == "apply":
         raise NotImplementedError("Apply is not implemented yet")
     else:
