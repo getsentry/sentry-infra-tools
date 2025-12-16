@@ -25,6 +25,16 @@ class MissingOverallStateException(Exception):
         super().__init__(message)
 
 
+class MissingDataDogAppKeyException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
+class MissingDataDogApiKeyException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
+
+
 def check_monitors(
     monitor_ids: Sequence[int],
     dd_app_key: str | None = None,
