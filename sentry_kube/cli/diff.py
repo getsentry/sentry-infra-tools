@@ -64,7 +64,7 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
 
 
 def should_skip_line(line: str) -> bool:
-    return all(
+    return any(
         [keyword in line for keyword in ['"apiVersion"', '"kind"', '"metadata"']]
     ) or any(
         [
@@ -125,9 +125,8 @@ def _diff_kubectl(
         "--context",
         ctx.obj.context_name,
         "diff",
+        f"--server-side={str(server_side).lower()}",
     ]
-    if server_side:
-        cmd.append(f"--server-side={str(server_side).lower()}")
 
     # kubectl diff --concurrency won't have any effect if the input is STDIN
     # (due to its internal visitor implementation).
