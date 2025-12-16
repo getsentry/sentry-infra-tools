@@ -125,7 +125,7 @@ def _diff_kubectl(
         "--context",
         ctx.obj.context_name,
         "diff",
-        f"--server-side={str(server_side).lower()}",
+        f"--server-side={str(bool(server_side)).lower()}",
     ]
 
     # kubectl diff --concurrency won't have any effect if the input is STDIN
