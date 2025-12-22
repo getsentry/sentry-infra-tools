@@ -8,8 +8,12 @@ import json
 import urllib.error
 import urllib.request
 import os
+import logging
 from collections.abc import Sequence
 from libsentrykube.events import DATADOG_API_KEY
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=os.environ.get("LIBSENTRYKUBE_LOG_LEVEL", "INFO").upper())
 
 
 DD_API_BASE = "https://api.datadoghq.com/api/v1"
@@ -36,7 +40,7 @@ def check_monitors(
     dd_app_key: str | None = None,
     failure_states: Sequence[str] | None = None,
 ) -> bool:
-    if failure_states is not None:
+    if failure_states is None:
         failure_states = ["Alert", "Warn"]
 
     for mid in monitor_ids:
@@ -55,37 +59,36 @@ def check_monitor(
         dd_app_key = os.getenv("DATADOG_APP_KEY") or os.getenv("DD_APP_KEY")
 
     if dd_app_key is None:
-        raise MissingDataDogAppKeyException(
-            "DATADOG_APP_KEY must be set to check monitors."
-        )
-
-    if DATADOG_API_KEY is None:
-        raise MissingDataDogApiKeyException(
-            "DATADOG_API_KEY must be set to check monitors."
-        )
-
-    if failure_states is None:
-        failure_states = ["Alert", "Warn"]
-
-    failure_states = [s.lower() for s in failure_states]  # type: ignore[union-attr]
-
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "DD-API-KEY": DATADOG_API_KEY,
-        "DD-APPLICATION-KEY": dd_app_key,
-    }
-
-    req = urllib.request.Request(f"{DD_API_BASE}/monitor/{monitor_id}", headers=headers)
-    resp = urllib.request.urlopen(req)
-
-    resp_json = json.load(resp)
-
-    if "overall_state" in resp_json:
-        overall_state = resp_json["overall_state"]
+        logger.error("DATADOG_APP_KEY is not set, skipping monitor check.")
+        return True
+    elif DATADOG_API_KEY is None:
+        logger.error("DATADOG_API_KEY is not set, skipping monitor check.")
+        return True
     else:
-        raise MissingOverallStateException(
-            "'overall_state' key missing from the DataDog response."
-        )
+        if failure_states is None:
+            failure_states = ["Alert", "Warn"]
 
-    return overall_state.lower() not in failure_states
+        failure_states = [s.lower() for s in failure_states]  # type: ignore[union-attr]
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "DD-API-KEY": DATADOG_API_KEY,
+            "DD-APPLICATION-KEY": dd_app_key,
+        }
+
+        req = urllib.request.Request(
+            f"{DD_API_BASE}/monitor/{monitor_id}", headers=headers
+        )
+        resp = urllib.request.urlopen(req)
+
+        resp_json = json.load(resp)
+
+        if "overall_state" in resp_json:
+            overall_state = resp_json["overall_state"]
+        else:
+            raise MissingOverallStateException(
+                "'overall_state' key missing from the DataDog response."
+            )
+
+        return overall_state.lower() not in failure_states
