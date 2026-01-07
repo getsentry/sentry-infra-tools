@@ -1,3 +1,21 @@
+## 1.22.0
+
+### Build / dependencies / internal 🔧
+
+#### Audit
+
+- Return list_resources label selector by @dmajere in [#185](https://github.com/getsentry/sentry-infra-tools/pull/185)
+- Move audit kube functions to libsentrykube by @dmajere in [#184](https://github.com/getsentry/sentry-infra-tools/pull/184)
+
+#### Other
+
+- (cli) Minor code movement around sentry_kube/cli by @dmajere in [#183](https://github.com/getsentry/sentry-infra-tools/pull/183)
+- (diff) Some attempt to refactor diff command code. by @dmajere in [#186](https://github.com/getsentry/sentry-infra-tools/pull/186)
+
+### Other
+
+- Update IAP service macro to remove useless loadbalancer by @BojanOro in [#188](https://github.com/getsentry/sentry-infra-tools/pull/188)
+
 ## 1.21.0
 
 - (chore): remove customer_name comparison for pod template selection by @mwarkentin in [#182](https://github.com/getsentry/sentry-infra-tools/pull/182)
