@@ -38,16 +38,14 @@ class IAPService(SimpleExtension):
                 "namespace": namespace,
                 "labels": {"service": service_name},
                 "annotations": {
-                    "cloud.google.com/load-balancer-type": "Internal",
-                    # TODO: Remove beta from annotation
-                    # https://cloud.google.com/kubernetes-engine/docs/how-to/ingress-configuration#associating_backendconfig_with_your_ingress
-                    "beta.cloud.google.com/backend-config": json.dumps(
+                    "cloud.google.com/backend-config": json.dumps(
                         {"default": service_name}, separators=(",", ":")
                     ),
+                    "cloud.google.com/neg": '{"ingress": true}'
                 },
             },
             "spec": {
-                "type": "LoadBalancer",
+                "type": "ClusterIP",
                 "selector": selector,
                 "ports": [{"port": 80, "targetPort": port}],
             },
