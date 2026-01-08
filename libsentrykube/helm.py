@@ -508,6 +508,7 @@ def helm_release_ctx(
     namespace=None,
     app_version=None,
     kctx=None,
+    bg_swap=True,
 ):
     rendered_data = _render_values(
         region_name, service_name, cluster_name, release=release, namespace=namespace
@@ -542,7 +543,7 @@ def helm_release_ctx(
                 get_remote_app_version(
                     rendered_release, tmpdirname, release_targets, kctx
                 )
-            if bgdata is not None:
+            if bgdata is not None and bg_swap:
                 set_bg_active(bgdata, tmpdirname, release_targets)
             yield rendered_release, release_targets
 
@@ -555,6 +556,7 @@ def render(
     namespace=None,
     raw=True,
     kctx=None,
+    bg_swap=True,
 ):
     from libsentrykube.service import get_service_path
 
@@ -568,6 +570,7 @@ def render(
         release=release,
         namespace=namespace,
         kctx=kctx,
+        bg_swap=bg_swap,
     ):
         helm_params = [
             "template",
@@ -598,6 +601,7 @@ def diff(
     namespace=None,
     app_version=None,
     kctx=None,
+    bg_swap=True,
 ):
     from libsentrykube.service import get_service_path
 
@@ -612,6 +616,7 @@ def diff(
         namespace=namespace,
         app_version=app_version,
         kctx=kctx,
+        bg_swap=bg_swap,
     ):
         helm_params = [
             "diff",
@@ -651,6 +656,8 @@ def apply(
     kctx=None,
     atomic=True,
     timeout=300,
+    hooks=True,
+    bg_swap=True,
 ):
     from libsentrykube.service import get_service_path
 
@@ -665,6 +672,7 @@ def apply(
         namespace=namespace,
         app_version=app_version,
         kctx=kctx,
+        bg_swap=bg_swap,
     ):
         helm_params = [
             "upgrade",
@@ -684,6 +692,8 @@ def apply(
             helm_params.extend(["--version", helm_release.chart.version])
         if atomic:
             helm_params.extend(["--atomic"])
+        if not hooks:
+            helm_params.extend(["--no-hooks"])
         for target in targets:
             helm_params.extend(["-f", target])
         set_app_version(helm_release, helm_params, app_version=app_version)
@@ -715,6 +725,7 @@ def rollback(
     namespace=None,
     kctx=None,
     timeout=None,
+    bg_swap=True,
 ):
     errors = []
 
@@ -725,6 +736,7 @@ def rollback(
         release=release,
         namespace=namespace,
         kctx=kctx,
+        bg_swap=bg_swap,
     ):
         helm_params = [
             "rollback",
@@ -751,6 +763,52 @@ def rollback(
             if helm_release.strategy.kind == "bluegreen":
                 yield "blue-green release strategy detected, aborting"
                 raise e
+
+    if errors:
+        raise HelmException
+
+
+def delete(
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    kctx=None,
+    timeout=None,
+):
+    errors = []
+
+    for helm_release, targets in helm_release_ctx(
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
+        kctx=kctx,
+        bg_swap=False,
+    ):
+        helm_params = [
+            "uninstall",
+            helm_release.name,
+            "--namespace",
+            helm_release.namespace,
+        ]
+        if timeout:
+            helm_params.extend(["--timeout", f"{timeout}s"])
+        if kctx:
+            helm_params.extend(["--kube-context", kctx])
+
+        yield f"Uninstalling release {helm_release.name} in namespace {helm_release.namespace}.."
+
+        try:
+            output = _run_helm(helm_params, raise_on_err=True)
+            yield output
+        except HelmException as e:
+            yield f"Release {helm_release.name} failed."
+            if e.args[0]:
+                yield e.args[0]
+            errors.append((helm_release.name, helm_release.namespace))
 
     if errors:
         raise HelmException
