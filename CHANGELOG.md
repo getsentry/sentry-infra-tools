@@ -1,3 +1,9 @@
+## 1.23.0
+
+### New Features ✨
+
+- (helm) Add hooks and blue-green swap options, add delete cmd by @gi0baro in [#189](https://github.com/getsentry/sentry-infra-tools/pull/189)
+
 ## 1.22.0
 
 ### Build / dependencies / internal 🔧
