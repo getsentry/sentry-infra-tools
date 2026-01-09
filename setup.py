@@ -32,6 +32,7 @@ macros = [
     "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
     "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
     "get_var=libsentrykube.ext:GetVar",
+    "render_external=libsentrykube.ext:RenderExternal",
 ]
 
 

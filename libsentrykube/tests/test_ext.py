@@ -1,14 +1,19 @@
+from typing import Any
 from unittest.mock import patch
+
+import pytest
 
 from libsentrykube.ext import (
     build_annotation_data,
     build_label_data,
+    ExternalMacro,
     format_docs,
     format_people,
     format_slack_channels,
     format_slos,
     format_teams,
     get_var_from_dicts,
+    RenderExternal,
 )
 
 
@@ -361,3 +366,71 @@ def test_get_var_from_dicts_converts_non_strings():
 
     # Test that None is preserved
     assert get_var_from_dicts("empty", {"empty": None}) is None
+
+
+# Test ExternalMacro implementations for RenderExternal tests
+class TestExternalMacroValid(ExternalMacro):
+    """A valid test implementation of ExternalMacro"""
+
+    @staticmethod
+    def validate_context(context: dict[str, Any]) -> None:
+        if "required_field" not in context:
+            raise ValueError("Context must contain 'required_field'")
+        if not isinstance(context["required_field"], str):
+            raise ValueError("'required_field' must be a string")
+
+    def run(self, context: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "result": f"processed_{context['required_field']}",
+            "metadata": context.get("metadata", {}),
+        }
+
+
+class NotAnExternalMacro:
+    """A class that is not a subclass of ExternalMacro"""
+
+    def run(self, context: dict[str, Any]) -> dict[str, Any]:
+        return {}
+
+
+def test_render_external_valid_macro():
+    """Test RenderExternal with a valid ExternalMacro"""
+    RenderExternal.install("render_external")
+    render_external = RenderExternal()
+    context = {"required_field": "test_value", "metadata": {"version": "1.0"}}
+
+    result = render_external.run(
+        "libsentrykube.tests.test_ext.TestExternalMacroValid", context
+    )
+
+    assert result == {
+        "result": "processed_test_value",
+        "metadata": {"version": "1.0"},
+    }
+
+
+def test_render_external_validation_error():
+    """Test RenderExternal with invalid context that fails validation"""
+    RenderExternal.install("render_external")
+    render_external = RenderExternal()
+    render_external.install("render_external")
+
+    # Missing required_field
+    context = {"other_field": "value"}
+
+    with pytest.raises(ValueError, match="Context must contain 'required_field'"):
+        render_external.run(
+            "libsentrykube.tests.test_ext.TestExternalMacroValid", context
+        )
+
+
+def test_render_external_class_not_found():
+    """Test RenderExternal with a non-existent class in a valid module"""
+    RenderExternal.install("render_external")
+    render_external = RenderExternal()
+    render_external.install("render_external")
+
+    context = {"foo": "bar"}
+
+    with pytest.raises(AttributeError):
+        render_external.run("libsentrykube.tests.test_ext.NonExistentClass", context)
