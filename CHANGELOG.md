@@ -1,3 +1,7 @@
+## 1.24.0
+
+- Introduce sentry-kube external rendering macro by @fpacifici in [#192](https://github.com/getsentry/sentry-infra-tools/pull/192)
+
 ## 1.23.0
 
 ### New Features ✨
