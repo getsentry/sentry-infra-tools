@@ -824,9 +824,9 @@ class GetVar(SimpleExtension):
 
 class ExternalMacro(abc.ABC):
     """
-    A base calss to be implemented by a macro defined in an external package.
+    A base class to be implemented by a macro defined in an external package.
 
-    This is provided the context in the form of a dictionary. the content is
+    This is provided the context in the form of a dictionary. The content is
     defined by the implementation itself.
     This class is not generic with respect to the context type because it is
     going to be loaded dynamically anyway.

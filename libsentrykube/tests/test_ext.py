@@ -413,7 +413,6 @@ def test_render_external_validation_error():
     """Test RenderExternal with invalid context that fails validation"""
     RenderExternal.install("render_external")
     render_external = RenderExternal()
-    render_external.install("render_external")
 
     # Missing required_field
     context = {"other_field": "value"}
@@ -428,9 +427,11 @@ def test_render_external_class_not_found():
     """Test RenderExternal with a non-existent class in a valid module"""
     RenderExternal.install("render_external")
     render_external = RenderExternal()
-    render_external.install("render_external")
 
     context = {"foo": "bar"}
 
     with pytest.raises(AttributeError):
         render_external.run("libsentrykube.tests.test_ext.NonExistentClass", context)
+
+    with pytest.raises(ValueError):
+        render_external.run("libsentrykube.tests.test_ext.NotAnExternalMacro", context)
