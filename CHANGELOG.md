@@ -1,3 +1,7 @@
+## 1.25.0
+
+- Add --update-existing flag to secrets command by @oioki in [#194](https://github.com/getsentry/sentry-infra-tools/pull/194)
+
 ## 1.24.0
 
 - Introduce sentry-kube external rendering macro by @fpacifici in [#192](https://github.com/getsentry/sentry-infra-tools/pull/192)
