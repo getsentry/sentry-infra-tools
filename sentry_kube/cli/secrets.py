@@ -448,7 +448,6 @@ def secrets(
         users = {}
         for user in key_tuple:
             _key = sm_key if sm_key else user
-            password = standard_b64decode(secret_data[user]).decode("utf-8")
-            users[_key] = password
+            users[_key] = secret_data[user]
 
         upload_plaintext_to_google_secret(project_id, users, plaintext_sm_secret_id, update_existing)
