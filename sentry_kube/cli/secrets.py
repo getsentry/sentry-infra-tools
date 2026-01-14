@@ -128,7 +128,7 @@ def decode_userlist(userlist: str):
 
 
 def upload_plaintext_to_k8s_secret(
-    api: CoreV1Api, users: dict[str, dict[str, str]], namespace: str, secret_name: str
+    api: CoreV1Api, users: dict[str, dict[str, str]], namespace: str, secret_name: str, update_existing: bool = False
 ) -> None:
     try:
         secret = api.read_namespaced_secret(namespace=namespace, name=secret_name)
@@ -151,8 +151,12 @@ def upload_plaintext_to_k8s_secret(
 
     is_modified = False
     for user in users:
+        new_value = b64enc(users[user]["password"].encode("utf-8"))
         if user not in secret_data:
-            secret_data[user] = b64enc(users[user]["password"].encode("utf-8"))
+            secret_data[user] = new_value
+            is_modified = True
+        elif update_existing and secret_data[user] != new_value:
+            secret_data[user] = new_value
             is_modified = True
 
     if not is_modified:
@@ -177,7 +181,7 @@ def upload_plaintext_to_k8s_secret(
 
 
 def upload_plaintext_to_google_secret(
-    project_id: str, users: dict[str, str], secret_id: str
+    project_id: str, users: dict[str, str], secret_id: str, update_existing: bool = False
 ):
     # Create the Secret Manager client.
     client = secretmanager.SecretManagerServiceClient()
@@ -197,7 +201,7 @@ def upload_plaintext_to_google_secret(
         )
         return
 
-    merged_data = merge_secrets(data, users, f"Secret Manager secret `{secret_id}`")
+    merged_data = merge_secrets(data, users, f"Secret Manager secret `{secret_id}`", update_existing)
 
     if merged_data:
         data = merged_data
@@ -209,7 +213,7 @@ def upload_plaintext_to_google_secret(
         print("Updated successfully.")
 
 
-def merge_secrets(data: dict[str, str], users: dict[str, str], label: str):
+def merge_secrets(data: dict[str, str], users: dict[str, str], label: str, update_existing: bool = False):
     print(f"### {label}, BEFORE")
     for k in data:
         print(k, data[k])
@@ -218,6 +222,9 @@ def merge_secrets(data: dict[str, str], users: dict[str, str], label: str):
     is_modified = False
     for user in users:
         if user not in data:
+            data[user] = users[user]
+            is_modified = True
+        elif update_existing and data[user] != users[user]:
             data[user] = users[user]
             is_modified = True
 
@@ -239,7 +246,7 @@ def merge_secrets(data: dict[str, str], users: dict[str, str], label: str):
 
 
 def merge_userlists(
-    encoded_userlist: str, users: dict[str, dict[str, str]], label: str
+    encoded_userlist: str, users: dict[str, dict[str, str]], label: str, update_existing: bool = False
 ):
     userlist = standard_b64decode(encoded_userlist).decode("utf-8")
 
@@ -252,6 +259,9 @@ def merge_userlists(
     is_modified = False
     for user in users:
         if user not in hashes:
+            hashes[user] = users[user]["scram"]
+            is_modified = True
+        elif update_existing and hashes[user] != users[user]["scram"]:
             hashes[user] = users[user]["scram"]
             is_modified = True
 
@@ -277,7 +287,7 @@ def merge_userlists(
 
 
 def upload_userlist_to_k8s_secret(
-    api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str
+    api: CoreV1Api, users: dict[str, dict[str, str]], secret_name: str, update_existing: bool = False
 ) -> None:
     try:
         secret = api.read_namespaced_secret(namespace="default", name=secret_name)
@@ -295,7 +305,7 @@ def upload_userlist_to_k8s_secret(
     secret = api.read_namespaced_secret(namespace="default", name=secret_name)
     encoded_userlist = secret.data["userlist"]
     merged_userlist = merge_userlists(
-        encoded_userlist, users, f"Kubernetes secret `default/{secret_name}`"
+        encoded_userlist, users, f"Kubernetes secret `default/{secret_name}`", update_existing
     )
     if merged_userlist:
         api.patch_namespaced_secret(
@@ -307,7 +317,7 @@ def upload_userlist_to_k8s_secret(
 
 
 def upload_userlist_to_google_secret(
-    project_id: str, users: dict[str, dict[str, str]], secret_id: str
+    project_id: str, users: dict[str, dict[str, str]], secret_id: str, update_existing: bool = False
 ) -> None:
     # run gcloud auth application-default login for the gcloud python lib
 
@@ -332,7 +342,7 @@ def upload_userlist_to_google_secret(
     # decode the userlist
     encoded_userlist = data["userlist"]
     merged_userlist = merge_userlists(
-        encoded_userlist, users, f"Secret Manager secret `{secret_id}`"
+        encoded_userlist, users, f"Secret Manager secret `{secret_id}`", update_existing
     )
     if merged_userlist:
         data["userlist"] = merged_userlist
@@ -355,6 +365,7 @@ def upload_userlist_to_google_secret(
 @click.option("--userlist-sm-secret-id", default="postgres", type=str)
 @click.option("--value", default=None, type=str)
 @click.option("--sm-key", default=None, type=str)
+@click.option("--update-existing", type=bool, default=False, is_flag=True)
 @click.pass_context
 def secrets(
     ctx,
@@ -368,6 +379,7 @@ def secrets(
     userlist_sm_secret_id,
     value,
     sm_key,
+    update_existing,
 ):
     project_id = ctx.obj.cluster.services_data["project"]
     client = kube_get_client()
@@ -415,15 +427,15 @@ def secrets(
                 "scram": pg_scram_sha256(new_value),
             }
 
-        upload_plaintext_to_k8s_secret(api, users, namespace, plaintext_k8s_secret)
+        upload_plaintext_to_k8s_secret(api, users, namespace, plaintext_k8s_secret, update_existing)
 
     # Step 2: generate userlists from plaintext secrets
     if generate_userlist:
         # removing plaintext passwords just to be more secure :muscle:
         users = {k: {"scram": users[k]["scram"]} for k in users}
 
-        upload_userlist_to_k8s_secret(api, users, userlist_k8s_secret)
-        upload_userlist_to_google_secret(project_id, users, userlist_sm_secret_id)
+        upload_userlist_to_k8s_secret(api, users, userlist_k8s_secret, update_existing)
+        upload_userlist_to_google_secret(project_id, users, userlist_sm_secret_id, update_existing)
 
     # Other mode: copying entries from K8s secrets to Secret Manager
     if copy_entry:
@@ -436,6 +448,7 @@ def secrets(
         users = {}
         for user in key_tuple:
             _key = sm_key if sm_key else user
-            users[_key] = secret_data[user]
+            password = standard_b64decode(secret_data[user]).decode("utf-8")
+            users[_key] = password
 
-        upload_plaintext_to_google_secret(project_id, users, plaintext_sm_secret_id)
+        upload_plaintext_to_google_secret(project_id, users, plaintext_sm_secret_id, update_existing)
