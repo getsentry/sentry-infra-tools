@@ -50,6 +50,7 @@ from libsentrykube.utils import (
     kube_convert_kind_to_func,
     kube_get_client,
     pretty,
+    remove_none_values,
     workspace_root,
 )
 
@@ -237,6 +238,9 @@ def _consolidate_variables(
         cluster_name,
     )
     deep_merge_dict(service_values, customer_values)
+
+    # Remove keys marked for deletion (those set to None during merges)
+    remove_none_values(service_values)
 
     return service_values
 
