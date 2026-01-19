@@ -15,7 +15,7 @@ from jinja2 import TemplateNotFound
 from libsentrykube.config import Config
 from libsentrykube.config import K8sConfig
 from libsentrykube.helm import HelmData
-from libsentrykube.utils import deep_merge_dict
+from libsentrykube.utils import deep_merge_dict, remove_none_values
 from libsentrykube.utils import die
 from libsentrykube.utils import workspace_root
 from yaml import safe_load
@@ -91,6 +91,8 @@ def load_cluster_configuration(config: K8sConfig, cluster_name: str) -> Cluster:
     helm_spec = data.pop("helm", {})
     helm_data = copy.deepcopy(data)
     deep_merge_dict(helm_data, helm_spec.get("values", {}))
+    # Remove keys marked for deletion (those set to None during merges)
+    remove_none_values(helm_data)
     helm_svclist = []
     helm_svcdata: dict[str, dict[str, Any]] = {}
     for svc in helm_spec.get("services", []):
