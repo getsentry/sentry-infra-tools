@@ -361,12 +361,16 @@ def deep_merge_dict(
 
     overwrite: By default, if a key exists in both dicts, the value from `other` will overwrite the value in `into`.
     You can set `overwrite=False` if you want to retain the existing value in `into`.
+
+    None values in `other` mark keys for deletion. The key is set to None in the result,
+    allowing the deletion intent to propagate through multiple merge layers.
+    Use `remove_none_values()` on the final result to actually remove these keys.
     """
 
     for k, v in other.items():
         if v is None:
-            if k in into:
-                into.pop(k)
+            # Mark key for deletion by setting to None (preserves deletion intent through merges)
+            into[k] = None
         elif k in into and isinstance(v, dict) and isinstance(into[k], dict):
             deep_merge_dict(into=into[k], other=v, overwrite=overwrite)
         elif k in into:
@@ -374,6 +378,20 @@ def deep_merge_dict(
                 into[k] = copy.deepcopy(v)
         else:
             into[k] = copy.deepcopy(v)
+
+
+def remove_none_values(d: dict[Any, Any]) -> None:
+    """
+    Recursively removes all keys with None values from a dict.
+    This should be called after all merges are complete to finalize deletions.
+    """
+    keys_to_remove = [k for k, v in d.items() if v is None]
+    for k in keys_to_remove:
+        del d[k]
+
+    for v in d.values():
+        if isinstance(v, dict):
+            remove_none_values(v)
 
 
 def macos_notify(title: str, text: str) -> None:

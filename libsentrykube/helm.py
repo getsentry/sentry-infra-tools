@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from yaml import safe_dump, safe_load_all
 
 from libsentrykube.loader import load_macros
-from libsentrykube.utils import deep_merge_dict, pretty
+from libsentrykube.utils import deep_merge_dict, pretty, remove_none_values
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,8 @@ class HelmData:
     def service_data(self, service_name) -> dict[str, Any]:
         rv = copy.deepcopy(self.global_data)
         deep_merge_dict(rv, self.svc_data.get(service_name, {}))
+        # Remove keys marked for deletion (those set to None during merges)
+        remove_none_values(rv)
         return rv
 
 
@@ -204,6 +206,9 @@ def _consolidate_ctx(
     if src_files_prefix == "_values":
         ctx_region, _ = get_helm_service_data(region_name, service_name, cluster_name)
         deep_merge_dict(ctx, ctx_region)
+
+    # Remove keys marked for deletion (those set to None during merges)
+    remove_none_values(ctx)
     return ctx
 
 
