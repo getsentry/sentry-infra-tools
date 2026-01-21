@@ -241,16 +241,39 @@ def diff(
 
     This is non-destructive and tells you what would be applied, if
     anything, with your current changes.
-    """
 
-    (has_diffs, _) = _diff(
-        ctx=ctx,
-        services=services,
-        filters=filters,
-        server_side=server_side,
-        important_diffs_only=important_diffs_only,
-        use_canary=use_canary,
-        allow_jobs=allow_jobs,
-        deployment_image=deployment_image,
-    )
-    ctx.exit(has_diffs)
+    When using -c '*', diffs will be shown for all clusters in the region.
+    """
+    from sentry_kube.cli import iterate_clusters
+
+    any_has_diffs = False
+
+    for cluster_ctx in iterate_clusters(ctx):
+        if not ctx.obj.quiet_mode and ctx.obj.all_cluster_names:
+            click.secho(
+                f"\n{'=' * 60}\nCluster: {cluster_ctx.cluster_name}\n{'=' * 60}",
+                fg="cyan",
+                bold=True,
+            )
+
+        # Temporarily update ctx.obj for this iteration
+        original_obj = ctx.obj
+        ctx.obj = cluster_ctx
+
+        try:
+            (has_diffs, _) = _diff(
+                ctx=ctx,
+                services=services,
+                filters=filters,
+                server_side=server_side,
+                important_diffs_only=important_diffs_only,
+                use_canary=use_canary,
+                allow_jobs=allow_jobs,
+                deployment_image=deployment_image,
+            )
+            if has_diffs:
+                any_has_diffs = True
+        finally:
+            ctx.obj = original_obj
+
+    ctx.exit(any_has_diffs)

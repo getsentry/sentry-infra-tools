@@ -32,7 +32,7 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
             raise ValueError(
                 f"Can't find k8s cluster for {context} context. You might need to run:\n"
                 f"gcloud container clusters get-credentials {cluster} "
-                f"--region {region} --project {project}"
+                f"--region {region} --project {project} --dns-endpoint"
             )
 
         tmp_kubeconfig_path = os.path.join(

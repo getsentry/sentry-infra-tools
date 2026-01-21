@@ -91,8 +91,61 @@ def apply(
     allow_jobs: bool,
     deployment_image: str | None = None,
 ):
+    """
+    Apply services to production.
+
+    When using -c '*', applies to all clusters in the region sequentially.
+    Each cluster completes its full deployment (including canary) before
+    moving to the next cluster.
+    """
+    from sentry_kube.cli import iterate_clusters
+
     _set_deployment_image_env(services, deployment_image)
 
+    for cluster_ctx in iterate_clusters(ctx):
+        if not ctx.obj.quiet_mode and ctx.obj.all_cluster_names:
+            click.secho(
+                f"\n{'=' * 60}\nCluster: {cluster_ctx.cluster_name}\n{'=' * 60}",
+                fg="cyan",
+                bold=True,
+            )
+
+        # Temporarily update ctx.obj for this iteration
+        original_obj = ctx.obj
+        ctx.obj = cluster_ctx
+
+        try:
+            _apply_to_cluster(
+                ctx=ctx,
+                services=services,
+                yes=yes,
+                filters=filters,
+                server_side=server_side,
+                important_diffs_only=important_diffs_only,
+                use_canary=use_canary,
+                soak_time=soak_time,
+                skip_monitor_checks=skip_monitor_checks,
+                soak_only=soak_only,
+                allow_jobs=allow_jobs,
+            )
+        finally:
+            ctx.obj = original_obj
+
+
+def _apply_to_cluster(
+    ctx,
+    services,
+    yes,
+    filters,
+    server_side,
+    important_diffs_only: bool,
+    use_canary: bool,
+    soak_time: int,
+    skip_monitor_checks: bool,
+    soak_only: bool,
+    allow_jobs: bool,
+):
+    """Apply services to a single cluster."""
     customer_name = ctx.obj.customer_name
     service_monitors = ctx.obj.service_monitors
 
