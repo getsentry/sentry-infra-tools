@@ -1,3 +1,14 @@
+## 1.25.1
+
+### Bug Fixes 🐛
+
+- `--no-bg-swap` option breaking blue-green flag in values by @gi0baro in [#198](https://github.com/getsentry/sentry-infra-tools/pull/198)
+
+### Internal Changes 🔧
+
+- (release) Switch from action-prepare-release to Craft by @BYK in [#191](https://github.com/getsentry/sentry-infra-tools/pull/191)
+- Use `pull_request_target` for changelog preview by @BYK in [#196](https://github.com/getsentry/sentry-infra-tools/pull/196)
+
 ## 1.25.0
 
 - Add --update-existing flag to secrets command by @oioki in [#194](https://github.com/getsentry/sentry-infra-tools/pull/194)
