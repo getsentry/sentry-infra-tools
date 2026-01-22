@@ -449,7 +449,7 @@ def get_remote_app_version(release: HelmRelease, tmpdir, targets, kctx=None):
 
 
 def get_remote_bg_active(
-    release: HelmRelease, kctx=None
+    release: HelmRelease, kctx=None, swap: bool = True
 ) -> tuple[bool, dict[str, Any]] | None:
     if release.strategy.kind != "bluegreen":
         return None
@@ -481,7 +481,7 @@ def get_remote_bg_active(
     except Exception:
         previous_flag = release.strategy.flavor == "green"
 
-    data_w[flag_path[-1]] = not previous_flag
+    data_w[flag_path[-1]] = (not previous_flag) if swap else previous_flag
     return (previous_flag, values)
 
 
@@ -516,7 +516,7 @@ def helm_release_ctx(
 
     rendered_data_wstrategy = []
     for rendered_release, rendered_contents in rendered_data:
-        bgdata = get_remote_bg_active(rendered_release, kctx=kctx)
+        bgdata = get_remote_bg_active(rendered_release, kctx=kctx, swap=bg_swap)
         if bgdata is None:
             rendered_data_wstrategy.append(
                 (rendered_release, rendered_contents, 0, None)
@@ -543,7 +543,7 @@ def helm_release_ctx(
                 get_remote_app_version(
                     rendered_release, tmpdirname, release_targets, kctx
                 )
-            if bgdata is not None and bg_swap:
+            if bgdata is not None:
                 set_bg_active(bgdata, tmpdirname, release_targets)
             yield rendered_release, release_targets
 
