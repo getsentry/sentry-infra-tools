@@ -1,3 +1,9 @@
+## 1.25.2
+
+### New Features ✨
+
+- Break YAML anchor shared references when loading service values by @shashjar in [#200](https://github.com/getsentry/sentry-infra-tools/pull/200)
+
 ## 1.25.1
 
 ### Bug Fixes 🐛
