@@ -1,4 +1,5 @@
 import pytest
+import tempfile
 from libsentrykube.context import init_cluster_context
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ from unittest.mock import patch, Mock, mock_open
 from libsentrykube.service import (
     MergeConfig,
     get_hierarchical_value_overrides,
+    get_service_ctx,
     get_service_ctx_overrides,
     get_service_data,
     get_service_values,
@@ -612,3 +614,83 @@ def test_merge_config_invalid():
 
     with pytest.raises(Exception, match="is not a valid"):
         _config = MergeConfig(MergeConfig.load(document))
+
+
+def test_get_service_ctx_breaks_anchor_references():
+    yaml_content = """
+primary_config: &primary_config
+  replicas: 2
+  settings:
+    memory: "4Gi"
+    cpu: "1"
+
+consumer_groups:
+  consumer-a: *primary_config
+  consumer-b: *primary_config
+  consumer-c: *primary_config
+"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        values_file = tmp_path / "_values.yaml"
+        values_file.write_text(yaml_content)
+
+        with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
+            ctx = get_service_ctx("test-service", MergeConfig.defaults())
+
+        # Resources do not reference the same underlying object
+        assert ctx["consumer_groups"]["consumer-a"] is not ctx["consumer_groups"]["consumer-b"]
+        assert ctx["consumer_groups"]["consumer-a"] is not ctx["consumer_groups"]["consumer-c"]
+        assert ctx["consumer_groups"]["consumer-b"] is not ctx["consumer_groups"]["consumer-c"]
+
+        # Modifying one consumer object should not affect the others
+        ctx["consumer_groups"]["consumer-a"]["replicas"] = 10
+        ctx["consumer_groups"]["consumer-a"]["settings"]["memory"] = "8Gi"
+        assert ctx["consumer_groups"]["consumer-b"]["replicas"] == 2
+        assert ctx["consumer_groups"]["consumer-b"]["settings"]["memory"] == "4Gi"
+        assert ctx["consumer_groups"]["consumer-c"]["replicas"] == 2
+        assert ctx["consumer_groups"]["consumer-c"]["settings"]["memory"] == "4Gi"
+
+
+def test_get_service_ctx_nested_anchor_references_are_independent():
+    yaml_content = """
+base_worker: &base_worker
+  replicas: 3
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "1"
+  env_vars:
+    - name: LOG_LEVEL
+      value: INFO
+    - name: WORKERS
+      value: "4"
+
+workers:
+  worker-primary: *base_worker
+  worker-secondary: *base_worker
+"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        values_file = tmp_path / "_values.yaml"
+        values_file.write_text(yaml_content)
+
+        with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
+            ctx = get_service_ctx("test-service", MergeConfig.defaults())
+
+        # Nested dicts are independent
+        assert ctx["workers"]["worker-primary"]["resources"] is not ctx["workers"]["worker-secondary"]["resources"]
+        assert ctx["workers"]["worker-primary"]["resources"]["requests"] is not ctx["workers"]["worker-secondary"]["resources"]["requests"]
+
+        # Nested lists are independent
+        assert ctx["workers"]["worker-primary"]["env_vars"] is not ctx["workers"]["worker-secondary"]["env_vars"]
+
+        # Modify nested structures in worker-primary
+        ctx["workers"]["worker-primary"]["resources"]["requests"]["memory"] = "8Gi"
+        ctx["workers"]["worker-primary"]["env_vars"].append({"name": "NEW_VAR", "value": "test"})
+
+        # worker-secondary should be unaffected
+        assert ctx["workers"]["worker-secondary"]["resources"]["requests"]["memory"] == "2Gi"
+        assert len(ctx["workers"]["worker-secondary"]["env_vars"]) == 2
