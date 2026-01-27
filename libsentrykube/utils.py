@@ -376,6 +376,21 @@ def deep_merge_dict(
             into[k] = copy.deepcopy(v)
 
 
+def deep_copy_without_refs(obj: Any) -> Any:
+    """
+    Recursively copy dict/list structures without preserving shared references.
+
+    Unlike copy.deepcopy(), this breaks YAML anchor aliases by creating
+    independent copies of all nested dict/list objects.
+    """
+    if isinstance(obj, dict):
+        return {k: deep_copy_without_refs(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [deep_copy_without_refs(item) for item in obj]
+    else:
+        return obj
+
+
 def macos_notify(title: str, text: str) -> None:
     if ENABLE_NOTIFICATIONS and platform.system() == "Darwin":
         cmd = """
