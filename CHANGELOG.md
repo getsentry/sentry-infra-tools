@@ -1,3 +1,7 @@
+## 1.25.3
+
+- Removes deprecated pkg_resources, replacing with builtin importlib. by @ellisonmarks in [#201](https://github.com/getsentry/sentry-infra-tools/pull/201)
+
 ## 1.25.2
 
 ### New Features ✨
