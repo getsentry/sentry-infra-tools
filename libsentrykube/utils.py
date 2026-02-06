@@ -128,7 +128,7 @@ def kube_set_context(context_name: str, kubeconfig: str) -> None:
             die(
                 f"{e}\n\n"
                 "Failed to create k8s client from config. You might need to run:\n"
-                f"gcloud container clusters get-credentials {cluster} --region {region} --project {project}"  # noqa: E501
+                f"gcloud container clusters get-credentials {cluster} --region {region} --project {project} --dns-endpoint"  # noqa: E501
             )
     _kube_client_context = context_name
 
