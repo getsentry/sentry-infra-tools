@@ -95,9 +95,9 @@ def should_run_with_empty_context() -> bool:
     return bool(os.environ.get("SENTRY_KUBE_NO_CONTEXT"))
 
 
-# This creates and globally sets a kubernetes client tied to a context name,
-# and can only be done once because it is expected that one invocation
-# (of, say, sentry-kube) uses the same context throughout.
+# This creates and globally sets a kubernetes client tied to a context name.
+# When called with a different context, it will recreate the client to support
+# multi-cluster operations (e.g., --cluster "*").
 def kube_set_context(context_name: str, kubeconfig: str) -> None:
     if should_run_with_empty_context():
         return
@@ -106,7 +106,10 @@ def kube_set_context(context_name: str, kubeconfig: str) -> None:
     if _kube_client is not None:
         if context_name == _kube_client_context:
             return  # noop
-        raise RuntimeError("Changing the kubernetes context is not allowed.")
+        # Allow context change by recreating the client
+        # This is needed for multi-cluster operations (e.g., --cluster "*")
+        _kube_client = None
+        _kube_client_context = None
 
     # Needed, otherwise new_client_from_config stalls without any output
     # if gcloud needs to be yubikey reauthed,
