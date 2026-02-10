@@ -20,6 +20,7 @@ def test_config_load() -> None:
             ),
             sentry_region="us",
             service_monitors=MappingProxyType({}),
+            stage="production",
         ),
         "my_customer": SiloRegion(
             aliases=[],
@@ -33,6 +34,7 @@ def test_config_load() -> None:
             ),
             sentry_region="st-my_customer",
             service_monitors=MappingProxyType({}),
+            stage="staging",
         ),
         "my_other_customer": SiloRegion(
             aliases=[],
@@ -46,5 +48,26 @@ def test_config_load() -> None:
             ),
             sentry_region="st-my_other_customer",
             service_monitors=MappingProxyType({}),
+            stage="production",
         ),
     }
+
+
+def test_get_regions_by_stage() -> None:
+    conf = Config()
+
+    # Test filtering by production stage
+    production_regions = conf.get_regions(stage="production")
+    assert set(production_regions) == {"saas", "my_other_customer"}
+
+    # Test filtering by staging stage
+    staging_regions = conf.get_regions(stage="staging")
+    assert staging_regions == ["my_customer"]
+
+    # Test get_regions_by_stage method
+    staging_regions_dict = conf.get_regions_by_stage("staging")
+    assert set(staging_regions_dict.keys()) == {"my_customer"}
+
+    # Test getting all regions without stage filter
+    all_regions = conf.get_regions()
+    assert set(all_regions) == {"saas", "my_customer", "my_other_customer"}

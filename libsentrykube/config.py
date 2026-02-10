@@ -66,6 +66,7 @@ class SiloRegion:
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
+    stage: str = "production"
 
     @classmethod
     def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
@@ -75,6 +76,7 @@ class SiloRegion:
             k8s_config=K8sConfig.from_conf(k8s_config),
             sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
             service_monitors=silo_regions_conf.get("service_monitors", {}),
+            stage=silo_regions_conf.get("stage", "production"),
         )
 
 
@@ -102,8 +104,22 @@ class Config:
         ]
 
     @cache
-    def get_regions(self) -> Sequence[str]:
+    def get_regions(self, stage: Optional[str] = None) -> Sequence[str]:
         """
-        Returns list of regions
+        Returns list of regions, optionally filtered by stage.
         """
-        return list(self.silo_regions.keys())
+        if stage is None:
+            return list(self.silo_regions.keys())
+        return [
+            name for name, region in self.silo_regions.items() if region.stage == stage
+        ]
+
+    def get_regions_by_stage(self, stage: str) -> Mapping[str, SiloRegion]:
+        """
+        Returns mapping of regions filtered by stage.
+        """
+        return {
+            name: region
+            for name, region in self.silo_regions.items()
+            if region.stage == stage
+        }

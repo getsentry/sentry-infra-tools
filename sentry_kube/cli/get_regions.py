@@ -9,13 +9,26 @@ __all__ = ("get_regions",)
 @click.option(
     "--service", "-s", type=str, default=None, help="Get regions for a specific service"
 )
-def get_regions(service: str | None = None) -> None:
+@click.option(
+    "--stage",
+    type=str,
+    default=None,
+    help="Filter regions by stage. If not specified, uses the global --stage option.",
+    envvar="SENTRY_KUBE_STAGE",
+)
+def get_regions(service: str | None = None, stage: str | None = None) -> None:
     """
-    Gets the list of all avaliable regions, if service is provided it will
-    filter regions with just that service enabled.
+    Gets the list of all available regions, optionally filtered by service and/or stage.
     """
-    regions = Config().silo_regions
-    # Default to all regions
+    config = Config()
+
+    # Get regions, filtered by stage if specified
+    if stage:
+        regions = config.get_regions_by_stage(stage)
+    else:
+        regions = config.silo_regions
+
+    # Default to all regions (filtered by stage if applicable)
     ret = set(regions.keys())
 
     if service:

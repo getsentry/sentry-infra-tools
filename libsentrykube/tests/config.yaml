@@ -13,6 +13,7 @@ silo_regions:
       materialized_helm_values: rendered_helm_values
       service_class: multi-tenant
     sentry_region: us
+    stage: production
   my_customer:
     k8s:
       root: k8s_root
@@ -21,6 +22,7 @@ silo_regions:
       materialized_helm_values: rendered_helm_values
       service_class: single-tenant
     sentry_region: st-my_customer
+    stage: staging
   my_other_customer:
     k8s:
       root: k8s_root
@@ -29,3 +31,4 @@ silo_regions:
       materialized_helm_values: rendered_helm_values
       service_class: single-tenant
     sentry_region: st-my_other_customer
+    stage: production
