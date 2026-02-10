@@ -96,6 +96,13 @@ def _render_multithreaded(
     default=os.cpu_count() or 1,
     help="Number of parallel workers",
 )
+@click.option(
+    "--stage",
+    type=str,
+    default=None,
+    help="Stage to operate on. Only regions with matching stage will be rendered.",
+    envvar="SENTRY_KUBE_STAGE",
+)
 @click.argument("filename", nargs=-1)
 def render_services(
     fast: bool,
@@ -103,6 +110,7 @@ def render_services(
     split_by_kind: bool,
     multithreaded: bool,
     workers: int,
+    stage: str | None,
     filename: Sequence[str],
 ) -> None:
     """
@@ -117,7 +125,7 @@ def render_services(
     if debug:
         logger.setLevel(logging.DEBUG)
 
-    index = build_index()
+    index = build_index(stage=stage)
     resources_to_render = set()
 
     for file in filename:

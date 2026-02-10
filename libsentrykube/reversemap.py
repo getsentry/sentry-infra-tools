@@ -165,20 +165,27 @@ class ResourceIndex:
             return self.index[index_path]
 
 
-def build_index() -> ResourceIndex:
+def build_index(stage: Optional[str] = None) -> ResourceIndex:
     """
     Scans the entire k8s configuration and generates the reverse index `ResourceIndex`.
 
     For each customer we add both the service paths and the cluster definition path.
     The cluster definition path are needed because a change to a cluster definition
     causes re-rendering all services in such cluster.
+
+    Args:
+        stage: If provided, only include regions with the matching stage.
     """
 
     partial_index: MutableMapping[Path, Set[ResourceReference]] = defaultdict(set)
     trie = TrieNode(None, {})
 
-    config = Config().silo_regions
-    for customer_name, conf in config.items():
+    config = Config()
+    if stage is not None:
+        regions = config.get_regions_by_stage(stage)
+    else:
+        regions = config.silo_regions
+    for customer_name, conf in regions.items():
         clusters = list_clusters_for_customer(conf.k8s_config)
         clusters_root = Path(conf.k8s_config.root) / conf.k8s_config.cluster_def_root
         for c in clusters:
@@ -201,16 +208,23 @@ def build_index() -> ResourceIndex:
     return ResourceIndex(trie, partial_index)
 
 
-def build_helm_index() -> ResourceIndex:
+def build_helm_index(stage: Optional[str] = None) -> ResourceIndex:
     """
     Same as `build_index` but for helm services.
+
+    Args:
+        stage: If provided, only include regions with the matching stage.
     """
 
     partial_index: MutableMapping[Path, Set[ResourceReference]] = defaultdict(set)
     trie = TrieNode(None, {})
 
-    config = Config().silo_regions
-    for customer_name, conf in config.items():
+    config = Config()
+    if stage is not None:
+        regions = config.get_regions_by_stage(stage)
+    else:
+        regions = config.silo_regions
+    for customer_name, conf in regions.items():
         clusters = list_clusters_for_customer(conf.k8s_config)
         clusters_root = Path(conf.k8s_config.root) / conf.k8s_config.cluster_def_root
         for c in clusters:

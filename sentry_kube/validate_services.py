@@ -15,7 +15,16 @@ import click
 @click.command()
 @click.argument("filename", nargs=-1)
 @click.option("--skip-region", multiple=True)
-def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
+@click.option(
+    "--stage",
+    type=str,
+    default=None,
+    help="Stage to operate on. Only regions with matching stage will be validated.",
+    envvar="SENTRY_KUBE_STAGE",
+)
+def test_services(
+    filename: Sequence[str], skip_region: Sequence[str], stage: str | None
+) -> None:
     """
     Identifies the sentry-kube k8s services that may have been modified
     by the PR based on the changeset and lints/tests each of them.
@@ -28,7 +37,7 @@ def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
     # keeps a reverse mapping between files on disk and services
     # impacted by changes to those files.
     # We use it to identify services from the changeset.
-    index = build_index()
+    index = build_index(stage=stage)
     resources_to_render = set()
 
     for file in filename:
