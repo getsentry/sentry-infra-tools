@@ -113,13 +113,3 @@ class Config:
         return [
             name for name, region in self.silo_regions.items() if region.stage == stage
         ]
-
-    def get_regions_by_stage(self, stage: str) -> Mapping[str, SiloRegion]:
-        """
-        Returns mapping of regions filtered by stage.
-        """
-        return {
-            name: region
-            for name, region in self.silo_regions.items()
-            if region.stage == stage
-        }
