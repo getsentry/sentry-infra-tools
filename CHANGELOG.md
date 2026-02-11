@@ -1,3 +1,19 @@
+## 1.25.4
+
+### New Features ✨
+
+- (validate) Add --include-region by @rgibert in [#205](https://github.com/getsentry/sentry-infra-tools/pull/205)
+- Add support for cli_config to set stage by @rgibert in [#206](https://github.com/getsentry/sentry-infra-tools/pull/206)
+
+### Internal Changes 🔧
+
+- (release) Fix changelog-preview permissions by @BYK in [#199](https://github.com/getsentry/sentry-infra-tools/pull/199)
+- Better handling of missing clusters by @rgibert in [#202](https://github.com/getsentry/sentry-infra-tools/pull/202)
+
+### Other
+
+- Remove OAuth credentials option from IAP macro by @BojanOro in [#190](https://github.com/getsentry/sentry-infra-tools/pull/190)
+
 ## 1.25.3
 
 - Removes deprecated pkg_resources, replacing with builtin importlib. by @ellisonmarks in [#201](https://github.com/getsentry/sentry-infra-tools/pull/201)
