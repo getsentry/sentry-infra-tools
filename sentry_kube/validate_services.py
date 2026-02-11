@@ -15,7 +15,10 @@ import click
 @click.command()
 @click.argument("filename", nargs=-1)
 @click.option("--skip-region", multiple=True)
-def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
+@click.option("--include-region", multiple=True)
+def test_services(
+    filename: Sequence[str], skip_region: Sequence[str], include_region: Sequence[str]
+) -> None:
     """
     Identifies the sentry-kube k8s services that may have been modified
     by the PR based on the changeset and lints/tests each of them.
@@ -24,6 +27,12 @@ def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
     every single service for all clusters as that would take several
     minutes.
     """
+    # Ensure --skip-region and --include-region are mutually exclusive
+    if skip_region and include_region:
+        raise click.ClickException(
+            "--skip-region and --include-region are mutually exclusive"
+        )
+
     # reversemap.build_index builds a Trie like data structure that
     # keeps a reverse mapping between files on disk and services
     # impacted by changes to those files.
@@ -39,7 +48,12 @@ def test_services(filename: Sequence[str], skip_region: Sequence[str]) -> None:
 
     for resource in resources_to_render:
         # Skip specified regions
-        if resource.customer_name in skip_region:
+        if skip_region and resource.customer_name in skip_region:
+            click.echo(f"Skipping {resource.customer_name} {resource.cluster_name}")
+            continue
+
+        # Only include specified regions if --include-region is used
+        if include_region and resource.customer_name not in include_region:
             click.echo(f"Skipping {resource.customer_name} {resource.cluster_name}")
             continue
 
