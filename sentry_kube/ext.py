@@ -58,7 +58,6 @@ class IAPService(SimpleExtension):
             "spec": {
                 "iap": {
                     "enabled": True,
-                    "oauthclientCredentials": {"secretName": f"oauth-{service_name}"},
                 },
                 "healthCheck": {
                     "type": "HTTP",
