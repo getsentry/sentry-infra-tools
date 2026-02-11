@@ -8,4 +8,5 @@ silo_regions:
       cluster_def_root: clusters/us
       materialized_manifests: materialized_manifests/us
     sentry_region: us
+    stage: production  # defaults to "production" if not specified
     service_monitors: { getsentry: [123456789] }

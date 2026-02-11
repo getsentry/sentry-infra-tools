@@ -35,6 +35,7 @@ class CliContext:
     cluster_name: str
     quiet_mode: bool
     service_monitors: MappingProxyType
+    stage: str = "production"
     service_class: Optional[str] = None
     cluster: Optional[Cluster] = None
 
@@ -85,8 +86,15 @@ def _configure_colors(ctx):
     envvar="SENTRY_KUBE_NO_SENTRY",
     help="Disables sending errors/transactions to Sentry when running",
 )
+@click.option(
+    "--stage",
+    type=str,
+    help="Stage to operate on. Only regions with matching stage will be used.",
+    envvar="SENTRY_KUBE_STAGE",
+    default="production",
+)
 @click.pass_context
-def main(ctx, *, cluster_name, root, customer, quiet, no_sentry):
+def main(ctx, *, cluster_name, root, customer, quiet, no_sentry, stage):
     """\b
  __                  __
 /  |                /  |
@@ -121,14 +129,17 @@ Get kubed.
             or ctx.invoked_subcommand == "datadog-log"
             or ctx.invoked_subcommand == "get-regions"
         ):
+            # Store stage in context for subcommands that need it
+            ctx.obj = {"stage": stage}
             return
 
-        newline_customers = "\n".join(config.get_regions())
+        stage_regions = config.get_regions(stage)
+        newline_customers = "\n".join(stage_regions)
         if not customer:
             die(
                 f"""Region was not specified, please use `-C` to specify a region.
 
-Valid regions:
+Valid regions for stage '{stage}':
 {newline_customers}
 """
             )
@@ -138,6 +149,15 @@ Valid regions:
         except ValueError:
             die(
                 f"""Invalid region specified, must be one of:
+{newline_customers}
+"""
+            )
+
+        if customer_config.stage != stage:
+            die(
+                f"""Region '{customer_name}' has stage '{customer_config.stage}', not '{stage}'.
+
+Valid regions for stage '{stage}':
 {newline_customers}
 """
             )
@@ -161,6 +181,7 @@ Valid regions:
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors={},  # type: ignore
+                stage=stage,
             )
             return
 
@@ -181,6 +202,7 @@ Valid regions:
                 cluster_name=cluster.name,
                 quiet_mode=quiet,
                 service_monitors=customer_config.service_monitors,
+                stage=stage,
                 service_class=service_class,
             )
             return
@@ -195,6 +217,7 @@ Valid regions:
             quiet_mode=quiet,
             cluster=cluster,
             service_monitors=customer_config.service_monitors,
+            stage=stage,
             service_class=service_class,
         )
 
