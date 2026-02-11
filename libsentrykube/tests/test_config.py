@@ -64,10 +64,6 @@ def test_get_regions_by_stage() -> None:
     staging_regions = conf.get_regions(stage="staging")
     assert staging_regions == ["my_customer"]
 
-    # Test get_regions_by_stage method
-    staging_regions_dict = conf.get_regions_by_stage("staging")
-    assert set(staging_regions_dict.keys()) == {"my_customer"}
-
     # Test getting all regions without stage filter
     all_regions = conf.get_regions()
     assert set(all_regions) == {"saas", "my_customer", "my_other_customer"}

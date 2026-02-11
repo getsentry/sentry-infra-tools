@@ -24,7 +24,10 @@ import click
     envvar="SENTRY_KUBE_STAGE",
 )
 def test_services(
-    filename: Sequence[str], skip_region: Sequence[str], include_region: Sequence[str], stage: str | None
+    filename: Sequence[str],
+    skip_region: Sequence[str],
+    include_region: Sequence[str],
+    stage: str | None,
 ) -> None:
     """
     Identifies the sentry-kube k8s services that may have been modified

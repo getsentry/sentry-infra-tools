@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Mapping, MutableMapping, NamedTuple, Optional, Sequence, Set, Tuple
 
 from libsentrykube.cluster import list_clusters_for_customer
-from libsentrykube.config import Config
+from libsentrykube.config import Config, SiloRegion
 from libsentrykube.service import (
     clear_service_paths,
     get_service_names,
@@ -181,8 +181,10 @@ def build_index(stage: Optional[str] = None) -> ResourceIndex:
     trie = TrieNode(None, {})
 
     config = Config()
+    regions: Mapping[str, SiloRegion]
     if stage is not None:
-        regions = config.get_regions_by_stage(stage)
+        region_names = config.get_regions(stage)
+        regions = {name: config.silo_regions[name] for name in region_names}
     else:
         regions = config.silo_regions
     for customer_name, conf in regions.items():
@@ -220,8 +222,10 @@ def build_helm_index(stage: Optional[str] = None) -> ResourceIndex:
     trie = TrieNode(None, {})
 
     config = Config()
+    regions: Mapping[str, SiloRegion]
     if stage is not None:
-        regions = config.get_regions_by_stage(stage)
+        region_names = config.get_regions(stage)
+        regions = {name: config.silo_regions[name] for name in region_names}
     else:
         regions = config.silo_regions
     for customer_name, conf in regions.items():
