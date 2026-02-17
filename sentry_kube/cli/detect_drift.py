@@ -39,19 +39,17 @@ def detect_drift(ctx, issue):
                 important_diffs_only=True,
             )
         except TemplateError as e:
-            click.secho(e, fg="red")
+            error_msg = f"Template error for service {service}: {e}"
+            click.secho(error_msg, fg="red")
             if issue:
-                error_report = (
-                    "```bash\n" + f"Jinja2 error for service {service}: {e}" + "\n```"
-                )
+                error_report = "```Template error:\n" + error_msg + "\n```"
                 drift_issue(ctx.obj.customer_name, service, error_report)
         # _run_kubectl_diff raises kubectl errors as ClickExceptions
         except click.ClickException as e:
-            click.secho(e, fg="red")
+            error_msg = f"kubectl error for service {service}:\n{str(e)}"
+            click.secho(error_msg, fg="red")
             if issue:
-                error_report = (
-                    "```bash\n" + f"kubectl error for service {service}: {e}" + "```"
-                )
+                error_report = "```kubectl error:\n" + error_msg + "\n```"
                 drift_issue(ctx.obj.customer_name, service, error_report)
 
         if output:
