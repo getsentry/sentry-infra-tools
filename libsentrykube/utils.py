@@ -255,7 +255,7 @@ def workspace_root() -> Path:
     workspace_root, root = _cwd, Path("/")
     while (
         ".terragrunt-cache" in workspace_root.parts
-        or not (workspace_root / ".git").is_dir()
+        or not (workspace_root / ".git").exists()
     ):
         workspace_root = (workspace_root / "..").resolve()
         if workspace_root == root:
