@@ -1,3 +1,13 @@
+## 1.25.5
+
+### Bug Fixes 🐛
+
+- Update workspace_root() to support git worktrees by @rgibert in [#209](https://github.com/getsentry/sentry-infra-tools/pull/209)
+
+### Other
+
+- updated methods to surface errors messages to make issues more useful by @ghengiskhanh in [#204](https://github.com/getsentry/sentry-infra-tools/pull/204)
+
 ## 1.25.4
 
 ### New Features ✨
