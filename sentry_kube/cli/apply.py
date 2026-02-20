@@ -28,9 +28,16 @@ DEFAULT_SOAK_TIME_S = 120
 @click.option(
     "--server-side",
     type=bool,
-    default=None,
+    default=True,
     show_default=True,
     help="Use server-side apply",
+)
+@click.option(
+    "--force-conflicts",
+    type=bool,
+    default=True,
+    show_default=True,
+    help="Force conflicts resolution during server-side apply",
 )
 @click.option(
     "--important-diffs-only",
@@ -83,6 +90,7 @@ def apply(
     yes,
     filters,
     server_side,
+    force_conflicts,
     important_diffs_only: bool,
     use_canary: bool,
     soak_time: int,
@@ -108,6 +116,7 @@ def apply(
                 yes,
                 filters,
                 server_side,
+                force_conflicts,
                 important_diffs_only,
                 allow_jobs,
                 True,
@@ -169,6 +178,7 @@ def apply(
         yes,
         filters,
         server_side,
+        force_conflicts,
         important_diffs_only,
         allow_jobs,
         False,
@@ -182,6 +192,7 @@ def _apply(
     yes,
     filters,
     server_side,
+    force_conflicts,
     important_diffs_only: bool,
     allow_jobs: bool,
     use_canary: bool,
@@ -236,6 +247,8 @@ def _apply(
     ]
     if server_side is not None:
         apply_cmd.append(f"--server-side={str(bool(server_side)).lower()}")
+    if force_conflicts:
+        apply_cmd.append("--force-conflicts")
 
     child_process = subprocess.Popen(apply_cmd, stdin=subprocess.PIPE)
     child_process.communicate(definitions)

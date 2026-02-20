@@ -69,6 +69,7 @@ def should_skip_line(line: str) -> bool:
     ) or any(
         [
             "kubectl.kubernetes.io/last-applied-configuration" in line,
+            "managedFields" in line,
             "diff -u -N" in line,
         ]
     )
@@ -202,7 +203,7 @@ def _diff(
 @click.option(
     "--server-side",
     type=bool,
-    default=False,
+    default=True,
     show_default=True,
     help="Use server-side rendering",
 )
