@@ -26,15 +26,15 @@ DEFAULT_SOAK_TIME_S = 120
 @click.option("--yes", "-y", is_flag=True)
 @click.option("--filter", "filters", multiple=True)
 @click.option(
-    "--server-side",
-    type=bool,
+    "--server-side/--no-server-side",
+    is_flag=True,
     default=True,
     show_default=True,
     help="Use server-side apply",
 )
 @click.option(
-    "--force-conflicts",
-    type=bool,
+    "--force-conflicts/--no-force-conflicts",
+    is_flag=True,
     default=True,
     show_default=True,
     help="Force conflicts resolution during server-side apply",
@@ -245,8 +245,8 @@ def _apply(
         "-f",
         "/dev/stdin",
     ]
-    if server_side is not None:
-        apply_cmd.append(f"--server-side={str(bool(server_side)).lower()}")
+    if server_side:
+        apply_cmd.append("--server-side")
     if server_side and force_conflicts:
         apply_cmd.append("--force-conflicts")
 
