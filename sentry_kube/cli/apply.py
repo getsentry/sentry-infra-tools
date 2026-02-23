@@ -247,7 +247,7 @@ def _apply(
     ]
     if server_side is not None:
         apply_cmd.append(f"--server-side={str(bool(server_side)).lower()}")
-    if force_conflicts:
+    if server_side and force_conflicts:
         apply_cmd.append("--force-conflicts")
 
     child_process = subprocess.Popen(apply_cmd, stdin=subprocess.PIPE)
