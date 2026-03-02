@@ -17,8 +17,12 @@ dummy_kube_config = json.dumps(
 
 @mock.patch("builtins.open", new_callable=mock.mock_open, read_data=dummy_kube_config)
 @mock.patch("yaml.dump")
+@mock.patch("os.path.isfile", return_value=True)
+@mock.patch("os.path.isdir", return_value=True)
 @mock.patch("os.getenv", return_value="/tmp/kubeconfig")
-def test_ensure_iap_tunnel(mock_getenv, mock_yaml_dump, mock_open) -> None:
+def test_ensure_iap_tunnel(
+    mock_getenv, mock_isdir, mock_isfile, mock_yaml_dump, mock_open
+) -> None:
     mock_ctx = mock.Mock()
     mock_ctx.obj.cluster.services_data.__getitem__ = mock.Mock(return_value=8080)
     mock_ctx.obj.context_name = "gke_test-proj_test-region_test-cluster"
