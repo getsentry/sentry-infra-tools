@@ -102,3 +102,21 @@ def test_ensure_iap_tunnel_no_clusters_key(
         ensure_iap_tunnel(mock_ctx)
     assert "Failed to add context" in str(exc_info.value)
     mock_get_creds.assert_called_once()
+
+
+@mock.patch("builtins.open", new_callable=mock.mock_open, read_data="clusters: null")
+@mock.patch("os.path.isfile", return_value=True)
+@mock.patch("os.path.isdir", return_value=True)
+@mock.patch("libsentrykube.iap.KUBE_CONFIG_PATH", "/tmp/kubeconfig")
+@mock.patch("libsentrykube.iap._get_cluster_credentials")
+def test_ensure_iap_tunnel_null_clusters_value(
+    mock_get_creds, mock_isdir, mock_isfile, mock_open
+) -> None:
+    """Kubeconfig with null clusters value should trigger credential fetch."""
+    mock_ctx = mock.Mock()
+    mock_ctx.obj.context_name = "gke_test-proj_test-region_test-cluster"
+
+    with pytest.raises(click.ClickException) as exc_info:
+        ensure_iap_tunnel(mock_ctx)
+    assert "Failed to add context" in str(exc_info.value)
+    mock_get_creds.assert_called_once()

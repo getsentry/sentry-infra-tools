@@ -67,7 +67,7 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
             return False
         with open(KUBE_CONFIG_PATH) as f:
             kubeconfig = yaml.safe_load(f) or {}
-        clusters = kubeconfig.get("clusters", [])
+        clusters = kubeconfig.get("clusters") or []
         return any(c.get("name") == context for c in clusters)
 
     if not _context_exists():
