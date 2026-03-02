@@ -14,9 +14,18 @@ KUBE_CONFIG_PATH = os.getenv(
 def _get_cluster_credentials(context: str) -> None:
     """
     Run gcloud to fetch cluster credentials and populate kubeconfig.
+
+    Raises click.ClickException on failure with a user-friendly message.
     """
     # example context: gke_internal-sentry_us-central1-b_zdpwkxst
-    _, project, region, cluster = context.split("_")
+    parts = context.split("_")
+    if len(parts) != 4 or parts[0] != "gke":
+        raise click.ClickException(
+            f"Invalid GKE context format: {context}\n"
+            "Expected format: gke_PROJECT_REGION_CLUSTER"
+        )
+
+    _, project, region, cluster = parts
     cmd = [
         "gcloud",
         "container",
@@ -30,41 +39,40 @@ def _get_cluster_credentials(context: str) -> None:
         project,
     ]
     click.echo(f"Running: {' '.join(cmd)}")
-    subprocess.run(cmd, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"Failed to get cluster credentials:\n{result.stderr or result.stdout}"
+        )
 
 
 def ensure_iap_tunnel(ctx: click.core.Context) -> str:
     """
-    Create an IAP tunnel and generate a temporary kubeconfig that uses it.
+    Ensure kubeconfig exists with the required cluster context.
 
-    If the tunnel already exists, it will be reused.
-    Returns a file object of the temporary kubeconfig file.
+    Creates ~/.kube directory and fetches cluster credentials via gcloud
+    if needed. Returns the path to the kubeconfig file.
     """
-    port: int = ctx.obj.cluster.services_data["iap_local_port"]
     context = ctx.obj.context_name
 
     kube_dir = os.path.dirname(KUBE_CONFIG_PATH)
     if not os.path.isdir(kube_dir):
         os.makedirs(kube_dir, mode=0o700)
 
-    if not os.path.isfile(KUBE_CONFIG_PATH):
-        _get_cluster_credentials(context)
-
-    def load_kubeconfig() -> dict:
+    def _context_exists() -> bool:
+        if not os.path.isfile(KUBE_CONFIG_PATH):
+            return False
         with open(KUBE_CONFIG_PATH) as f:
-            return yaml.safe_load(f)
+            kubeconfig = yaml.safe_load(f) or {}
+        clusters = kubeconfig.get("clusters", [])
+        return any(c.get("name") == context for c in clusters)
 
-    kubeconfig = load_kubeconfig()
-
-    context_found = any(c["name"] == context for c in kubeconfig["clusters"])
-    if not context_found:
+    if not _context_exists():
         _get_cluster_credentials(context)
-        kubeconfig = load_kubeconfig()
+        # Verify credentials were added successfully
+        if not _context_exists():
+            raise click.ClickException(
+                f"Failed to add context {context} to kubeconfig after credential fetch"
+            )
 
-    tmp_kubeconfig_path = os.path.join(
-        os.path.dirname(KUBE_CONFIG_PATH), f"sentry-kube.config.{port}.yaml"
-    )
-    with open(tmp_kubeconfig_path, "w") as tmp_cf:
-        yaml.dump(kubeconfig, tmp_cf)
-
-    return tmp_kubeconfig_path
+    return KUBE_CONFIG_PATH
