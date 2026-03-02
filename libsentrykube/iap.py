@@ -39,7 +39,10 @@ def _get_cluster_credentials(context: str) -> None:
         project,
     ]
     click.echo(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    # Set KUBECONFIG to ensure gcloud writes to the same path we read from
+    env = os.environ.copy()
+    env["KUBECONFIG"] = KUBE_CONFIG_PATH
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if result.returncode != 0:
         raise click.ClickException(
             f"Failed to get cluster credentials:\n{result.stderr or result.stdout}"

@@ -51,6 +51,7 @@ def test_get_cluster_credentials_gcloud_failure(mock_echo, mock_run) -> None:
     assert "auth error" in str(exc_info.value)
 
 
+@mock.patch("libsentrykube.iap.KUBE_CONFIG_PATH", "/tmp/test-kubeconfig")
 @mock.patch("libsentrykube.iap.subprocess.run")
 @mock.patch("libsentrykube.iap.click.echo")
 def test_get_cluster_credentials_success(mock_echo, mock_run) -> None:
@@ -61,6 +62,9 @@ def test_get_cluster_credentials_success(mock_echo, mock_run) -> None:
     assert cmd[0] == "gcloud"
     assert "test-cluster" in cmd
     assert "--dns-endpoint" in cmd
+    # Verify KUBECONFIG is passed to subprocess
+    env = mock_run.call_args[1]["env"]
+    assert env["KUBECONFIG"] == "/tmp/test-kubeconfig"
 
 
 @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="")
