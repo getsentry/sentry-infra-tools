@@ -8,9 +8,25 @@ dummy_kube_config = json.dumps(
     {
         "clusters": [
             {
-                "certificate-authority-data": "secure-data",
-                "server": "server-url",
                 "name": "gke_test-proj_test-region_test-cluster",
+                "cluster": {
+                    "certificate-authority-data": "secure-data",
+                    "server": "https://abc123.gke.goog",
+                },
+            }
+        ]
+    }
+)
+
+dummy_kube_config_non_dns = json.dumps(
+    {
+        "clusters": [
+            {
+                "name": "gke_test-proj_test-region_test-cluster",
+                "cluster": {
+                    "certificate-authority-data": "secure-data",
+                    "server": "https://1.2.3.4",
+                },
             }
         ]
     }
@@ -119,4 +135,24 @@ def test_ensure_iap_tunnel_null_clusters_value(
     with pytest.raises(click.ClickException) as exc_info:
         ensure_iap_tunnel(mock_ctx)
     assert "Failed to add context" in str(exc_info.value)
+    mock_get_creds.assert_called_once()
+
+
+@mock.patch(
+    "builtins.open", new_callable=mock.mock_open, read_data=dummy_kube_config_non_dns
+)
+@mock.patch("os.path.isfile", return_value=True)
+@mock.patch("os.path.isdir", return_value=True)
+@mock.patch("libsentrykube.iap.KUBE_CONFIG_PATH", "/tmp/kubeconfig")
+@mock.patch("libsentrykube.iap._get_cluster_credentials")
+def test_ensure_iap_tunnel_non_dns_endpoint_triggers_refetch(
+    mock_get_creds, mock_isdir, mock_isfile, mock_open
+) -> None:
+    """Server not ending in gke.goog should trigger credential re-fetch."""
+    mock_ctx = mock.Mock()
+    mock_ctx.obj.context_name = "gke_test-proj_test-region_test-cluster"
+
+    with pytest.raises(click.ClickException) as exc_info:
+        ensure_iap_tunnel(mock_ctx)
+    assert "Failed to configure DNS endpoint" in str(exc_info.value)
     mock_get_creds.assert_called_once()

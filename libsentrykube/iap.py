@@ -89,10 +89,11 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
         logger.debug("Creating kube directory: %s", kube_dir)
         os.makedirs(kube_dir, mode=0o700)
 
-    def _context_exists() -> bool:
+    def _get_cluster_server() -> str | None:
+        """Return the server URL for the context, or None if not found."""
         if not os.path.isfile(KUBE_CONFIG_PATH):
             logger.debug("Kubeconfig file does not exist: %s", KUBE_CONFIG_PATH)
-            return False
+            return None
         with open(KUBE_CONFIG_PATH) as f:
             kubeconfig = yaml.safe_load(f) or {}
         clusters = kubeconfig.get("clusters") or []
@@ -100,19 +101,46 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
         logger.debug(
             "Found %d clusters in kubeconfig: %s", len(clusters), cluster_names
         )
-        found = any(c.get("name") == context for c in clusters)
-        logger.debug("Context %s found: %s", context, found)
-        return found
+        for c in clusters:
+            if c.get("name") == context:
+                server = c.get("cluster", {}).get("server", "")
+                logger.debug("Context %s server: %s", context, server)
+                return server
+        logger.debug("Context %s not found", context)
+        return None
 
-    if not _context_exists():
-        logger.debug("Context not found, fetching credentials")
-        _get_cluster_credentials(context)
-        # Verify credentials were added successfully
-        if not _context_exists():
-            logger.debug("Context still not found after credential fetch")
-            raise click.ClickException(
-                f"Failed to add context {context} to kubeconfig after credential fetch"
+    def _needs_credential_fetch() -> bool:
+        """Check if credentials need to be fetched or re-fetched."""
+        server = _get_cluster_server()
+        if server is None:
+            logger.debug("Context not found, need to fetch credentials")
+            return True
+        if not server.endswith("gke.goog"):
+            logger.debug(
+                "Server %s does not end with gke.goog, need to re-fetch with --dns-endpoint",
+                server,
             )
+            return True
+        return False
+
+    if _needs_credential_fetch():
+        logger.debug("Fetching credentials")
+        _get_cluster_credentials(context)
+        # Verify credentials were added successfully with DNS endpoint
+        if _needs_credential_fetch():
+            server = _get_cluster_server()
+            if server is None:
+                logger.debug("Context still not found after credential fetch")
+                raise click.ClickException(
+                    f"Failed to add context {context} to kubeconfig after credential fetch"
+                )
+            else:
+                logger.debug(
+                    "Server still not using DNS endpoint after fetch: %s", server
+                )
+                raise click.ClickException(
+                    f"Failed to configure DNS endpoint for {context}. Server: {server}"
+                )
 
     logger.debug("Returning kubeconfig path: %s", KUBE_CONFIG_PATH)
     return KUBE_CONFIG_PATH
