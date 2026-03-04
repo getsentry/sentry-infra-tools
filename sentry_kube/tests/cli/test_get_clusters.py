@@ -98,6 +98,24 @@ def test_get_clusters_with_stage_filter(mock_config, mock_list_clusters):
     assert "region1: cluster-a" in lines
 
 
+def test_get_clusters_no_stage_includes_all(mock_config, mock_list_clusters):
+    """Without --stage, all regions are included regardless of their stage."""
+    mock_config.silo_regions["region2"].stage = "staging"
+    mock_list_clusters.side_effect = lambda config: {
+        "config1": [FakeCluster("cluster-a")],
+        "config2": [FakeCluster("cluster-b")],
+    }[config]
+
+    runner = CliRunner()
+    result = runner.invoke(get_clusters, obj={"stage": "production", "customer": None})
+
+    assert result.exit_code == 0
+    lines = result.output.strip().splitlines()
+    assert len(lines) == 2
+    assert "region1: cluster-a" in lines
+    assert "region2: cluster-b" in lines
+
+
 def test_get_clusters_single_region_invalid(mock_config, mock_get_region_config):
     """With -C set to an invalid region, exits with error."""
     mock_get_region_config.side_effect = ValueError("Region 'bogus' not found")

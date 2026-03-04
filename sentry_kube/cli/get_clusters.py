@@ -14,7 +14,7 @@ __all__ = ("get_clusters",)
     "--stage",
     type=str,
     default=None,
-    help="Filter regions by stage. If not specified, uses the global --stage option.",
+    help="Filter to regions matching this stage. If not specified, all regions are included.",
     envvar="SENTRY_KUBE_STAGE",
 )
 @click.option(
@@ -42,7 +42,6 @@ def get_clusters(ctx, stage: str | None = None, output: str = "text") -> None:
         clusters = list_clusters_for_customer(region_config.k8s_config)
         data = [c.name for c in clusters]
     else:
-        stage = stage or (ctx.obj.get("stage") if ctx.obj else None)
         if stage:
             region_names = config.get_regions(stage)
         else:
