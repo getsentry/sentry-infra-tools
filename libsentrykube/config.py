@@ -99,9 +99,9 @@ class Config:
 
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
         # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
-        self.service_container_map: Mapping[str, Dict[str, str]] = configuration[
-            "service_container_map"
-        ]
+        self.service_container_map: Mapping[str, Dict[str, str]] = configuration.get(
+            "service_container_map", {}
+        )
 
     @cache
     def get_regions(self, stage: Optional[str] = None) -> Sequence[str]:
