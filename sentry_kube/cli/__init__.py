@@ -124,13 +124,13 @@ Get kubed.
     ) as transaction:
         transaction.set_tag(key="subcommand", value=ctx.invoked_subcommand)
 
-        if (
-            ctx.invoked_subcommand == "datadog-log-terragrunt"
-            or ctx.invoked_subcommand == "datadog-log"
-            or ctx.invoked_subcommand == "get-regions"
+        if ctx.invoked_subcommand in (
+            "datadog-log-terragrunt",
+            "datadog-log",
+            "get-regions",
+            "get-clusters",
         ):
-            # Store stage in context for subcommands that need it
-            ctx.obj = {"stage": stage}
+            ctx.obj = {"stage": stage, "customer": customer}
             return
 
         stage_regions = config.get_regions(stage)
