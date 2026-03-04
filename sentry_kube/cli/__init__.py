@@ -111,6 +111,15 @@ Get kubed.
     if root is not None:
         set_workspace_root_start(root)
 
+    if ctx.invoked_subcommand in (
+        "datadog-log-terragrunt",
+        "datadog-log",
+        "get-regions",
+        "get-clusters",
+    ):
+        ctx.obj = {"stage": stage, "customer": customer}
+        return
+
     config = Config()
     ensure_datadog_api_key_set()
 
@@ -123,15 +132,6 @@ Get kubed.
         name="main()",
     ) as transaction:
         transaction.set_tag(key="subcommand", value=ctx.invoked_subcommand)
-
-        if ctx.invoked_subcommand in (
-            "datadog-log-terragrunt",
-            "datadog-log",
-            "get-regions",
-            "get-clusters",
-        ):
-            ctx.obj = {"stage": stage, "customer": customer}
-            return
 
         stage_regions = config.get_regions(stage)
         newline_customers = "\n".join(stage_regions)
