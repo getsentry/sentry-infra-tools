@@ -1,7 +1,9 @@
+import json
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
+import yaml
 from click.testing import CliRunner
 
 from sentry_kube.cli.get_clusters import get_clusters
@@ -106,3 +108,70 @@ def test_get_clusters_single_region_invalid(mock_config, mock_get_region_config)
     )
 
     assert result.exit_code != 0
+
+
+def test_get_clusters_all_regions_json(mock_config, mock_list_clusters):
+    """--output json: returns dict of region -> cluster list."""
+    mock_list_clusters.side_effect = lambda config: {
+        "config1": [FakeCluster("cluster-a"), FakeCluster("cluster-b")],
+        "config2": [FakeCluster("cluster-c")],
+    }[config]
+
+    runner = CliRunner()
+    result = runner.invoke(
+        get_clusters, ["-o", "json"], obj={"stage": "production", "customer": None}
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data == {
+        "region1": ["cluster-a", "cluster-b"],
+        "region2": ["cluster-c"],
+    }
+
+
+def test_get_clusters_single_region_json(
+    mock_config, mock_list_clusters, mock_get_region_config
+):
+    """--output json with -C: returns list of cluster names."""
+    mock_get_region_config.return_value = (
+        "region1",
+        mock_config.silo_regions["region1"],
+    )
+    mock_list_clusters.return_value = [
+        FakeCluster("cluster-a"),
+        FakeCluster("cluster-b"),
+    ]
+
+    runner = CliRunner()
+    result = runner.invoke(
+        get_clusters,
+        ["--output", "json"],
+        obj={"stage": "production", "customer": "region1"},
+    )
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data == ["cluster-a", "cluster-b"]
+
+
+def test_get_clusters_all_regions_yaml(mock_config, mock_list_clusters):
+    """--output yaml: returns dict of region -> cluster list."""
+    mock_list_clusters.side_effect = lambda config: {
+        "config1": [FakeCluster("cluster-a"), FakeCluster("cluster-b")],
+        "config2": [FakeCluster("cluster-c")],
+    }[config]
+
+    runner = CliRunner()
+    result = runner.invoke(
+        get_clusters,
+        ["--output", "yaml"],
+        obj={"stage": "production", "customer": None},
+    )
+
+    assert result.exit_code == 0
+    data = yaml.safe_load(result.output)
+    assert data == {
+        "region1": ["cluster-a", "cluster-b"],
+        "region2": ["cluster-c"],
+    }
