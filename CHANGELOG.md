@@ -1,3 +1,13 @@
+## 1.26.0
+
+### New Features ✨
+
+- Add `get-clusters` command to list clusters by region by @mwarkentin in [#213](https://github.com/getsentry/sentry-infra-tools/pull/213)
+
+### Bug Fixes 🐛
+
+- Add `--dns-endpoint` param to the auth suggestion message by @oioki in [#211](https://github.com/getsentry/sentry-infra-tools/pull/211)
+
 ## 1.25.5
 
 ### Bug Fixes 🐛
