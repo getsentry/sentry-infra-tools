@@ -541,6 +541,129 @@ class EnvoySidecar(SimpleExtension):
         return json.dumps(res)
 
 
+class EnvoyNativeSidecar(SimpleExtension):
+    """
+    Creates a native sidecar container using Envoy, defined as an init container
+    with restartPolicy: Always (Kubernetes native sidecar pattern).
+
+    Unlike EnvoySidecar which is placed in pod.spec.containers, this container
+    should be placed in pod.spec.initContainers. Kubernetes will start it before
+    main containers and keep it running for the lifetime of the Pod. On
+    termination, Kubernetes stops sidecar containers after all main containers
+    have exited, removing the need for sleep-based shutdown coordination.
+
+    When admin is configured, a startupProbe is added by default so that
+    Kubernetes waits for Envoy to be ready before starting main containers.
+
+    See https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/
+    """
+
+    def run(
+        self,
+        cluster: str,
+        concurrency: int = 1,
+        preStopWait: int = 0,
+        xds_address: str = XDS_DEFAULT_ADDRESS,
+        admin: Optional[dict] = None,
+        datadog: Optional[dict] = None,
+        draining: Optional[dict] = None,
+        resources: Optional[dict] = None,
+        version: str = "1.16.0",
+        custom_config: Optional[dict] = None,
+        custom_pre_stop_command: Optional[str] = None,
+        livenessProbe: Optional[dict] = None,
+        readinessProbe: Optional[dict] = None,
+        startupProbe: Optional[dict] = None,
+        cds_refresh_delay: int = 3600,
+        lds_refresh_delay: int = 3600,
+    ):
+        if draining:
+            draining = {
+                "strategy": "immediate",
+                "time": 300,
+                "drain_listeners": False,
+                **draining,
+            }
+        else:
+            draining = {}
+
+        pre_stop_parts = []
+        if draining.get("drain_listeners"):
+            if admin:
+                pre_stop_parts.append(
+                    "wget -q -O- --post-data '' "
+                    f"http://127.0.0.1:{admin['port']}/drain_listeners?graceful"
+                )
+            else:
+                raise ValueError(
+                    "'admin' configuration is required for draining to work"
+                )
+        if preStopWait > 0:
+            pre_stop_parts.append(f"/bin/sleep {preStopWait}")
+
+        pre_stop_command = " ; ".join(pre_stop_parts) if pre_stop_parts else None
+        if custom_pre_stop_command:
+            pre_stop_command = custom_pre_stop_command
+
+        custom_config_str = yaml.dump(custom_config) if custom_config else None
+        res = {
+            "image": f"envoyproxy/envoy-alpine:v{version}",
+            "name": "envoy",
+            "restartPolicy": "Always",
+            "args": [
+                "/bin/sh",
+                "-ec",
+                jinja2.Template(ENVOY_ENTRYPOINT)
+                .render(
+                    concurrency=concurrency,
+                    cluster=cluster,
+                    xds_address=xds_address,
+                    admin=admin,
+                    datadog=datadog,
+                    draining=draining,
+                    custom_config=custom_config_str,
+                    cds_refresh_delay=cds_refresh_delay,
+                    lds_refresh_delay=lds_refresh_delay,
+                )
+                .strip(),
+            ],
+            "env": [{"name": "ENVOY_UID", "value": "0"}],
+            "resources": {
+                "requests": {"cpu": "15m", "memory": "20Mi"},
+                "limits": {"memory": "50Mi"},
+            },
+        }
+
+        if pre_stop_command:
+            res["lifecycle"] = {
+                "preStop": {"exec": {"command": ["/bin/sh", "-c", pre_stop_command]}}
+            }
+
+        if resources:
+            res["resources"] = resources
+
+        if livenessProbe:
+            res["livenessProbe"] = livenessProbe
+
+        if readinessProbe:
+            res["readinessProbe"] = readinessProbe
+
+        if startupProbe:
+            res["startupProbe"] = startupProbe
+        elif admin:
+            res["startupProbe"] = {
+                "httpGet": {
+                    "path": "/ready",
+                    "port": admin["port"],
+                },
+                "initialDelaySeconds": 1,
+                "periodSeconds": 2,
+                "failureThreshold": 30,
+            }
+
+        return json.dumps(res)
+
+
 class GeoIPVolume(SimpleExtension):
     """
     Provide the GeoIP volume to the Pod for containers to use. Not required,

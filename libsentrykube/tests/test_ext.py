@@ -6,6 +6,7 @@ import pytest
 from libsentrykube.ext import (
     build_annotation_data,
     build_label_data,
+    EnvoyNativeSidecar,
     ExternalMacro,
     format_docs,
     format_people,
@@ -347,6 +348,119 @@ def test_get_var_from_multilevel_dicts():
         )
         == "value"
     )
+
+
+class TestEnvoyNativeSidecar:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        EnvoyNativeSidecar.install("envoy_native_sidecar")
+        self.ext = EnvoyNativeSidecar()
+
+    def _parse(self, result):
+        import json
+
+        return json.loads(result)
+
+    def test_basic_output_has_restart_policy(self):
+        res = self._parse(self.ext.run(cluster="test-cluster"))
+        assert res["restartPolicy"] == "Always"
+        assert res["name"] == "envoy"
+        assert res["image"] == "envoyproxy/envoy-alpine:v1.16.0"
+
+    def test_no_lifecycle_by_default(self):
+        res = self._parse(self.ext.run(cluster="test-cluster"))
+        assert "lifecycle" not in res
+
+    def test_pre_stop_wait_adds_lifecycle(self):
+        res = self._parse(self.ext.run(cluster="test-cluster", preStopWait=5))
+        assert res["lifecycle"]["preStop"]["exec"]["command"] == [
+            "/bin/sh",
+            "-c",
+            "/bin/sleep 5",
+        ]
+
+    def test_admin_adds_default_startup_probe(self):
+        admin = {"address": "127.0.0.1", "port": 9901}
+        res = self._parse(self.ext.run(cluster="test-cluster", admin=admin))
+        assert res["startupProbe"] == {
+            "httpGet": {"path": "/ready", "port": 9901},
+            "initialDelaySeconds": 1,
+            "periodSeconds": 2,
+            "failureThreshold": 30,
+        }
+
+    def test_explicit_startup_probe_overrides_default(self):
+        admin = {"address": "127.0.0.1", "port": 9901}
+        custom_probe = {
+            "tcpSocket": {"port": 9901},
+            "periodSeconds": 5,
+            "failureThreshold": 10,
+        }
+        res = self._parse(
+            self.ext.run(cluster="test-cluster", admin=admin, startupProbe=custom_probe)
+        )
+        assert res["startupProbe"] == custom_probe
+
+    def test_no_startup_probe_without_admin(self):
+        res = self._parse(self.ext.run(cluster="test-cluster"))
+        assert "startupProbe" not in res
+
+    def test_draining_with_admin(self):
+        admin = {"address": "127.0.0.1", "port": 9901}
+        draining = {"drain_listeners": True}
+        res = self._parse(
+            self.ext.run(cluster="test-cluster", admin=admin, draining=draining)
+        )
+        pre_stop = res["lifecycle"]["preStop"]["exec"]["command"][2]
+        assert "drain_listeners?graceful" in pre_stop
+        assert "/bin/sleep" not in pre_stop
+
+    def test_draining_without_admin_raises(self):
+        draining = {"drain_listeners": True}
+        with pytest.raises(ValueError, match="'admin' configuration is required"):
+            self.ext.run(cluster="test-cluster", draining=draining)
+
+    def test_custom_pre_stop_command(self):
+        custom_cmd = "/usr/bin/custom-shutdown"
+        res = self._parse(
+            self.ext.run(cluster="test-cluster", custom_pre_stop_command=custom_cmd)
+        )
+        assert res["lifecycle"]["preStop"]["exec"]["command"] == [
+            "/bin/sh",
+            "-c",
+            custom_cmd,
+        ]
+
+    def test_custom_resources(self):
+        custom_resources = {
+            "requests": {"cpu": "100m", "memory": "128Mi"},
+            "limits": {"memory": "256Mi"},
+        }
+        res = self._parse(
+            self.ext.run(cluster="test-cluster", resources=custom_resources)
+        )
+        assert res["resources"] == custom_resources
+
+    def test_probes(self):
+        liveness = {"httpGet": {"path": "/healthz", "port": 8080}}
+        readiness = {"httpGet": {"path": "/ready", "port": 8080}}
+        res = self._parse(
+            self.ext.run(
+                cluster="test-cluster",
+                livenessProbe=liveness,
+                readinessProbe=readiness,
+            )
+        )
+        assert res["livenessProbe"] == liveness
+        assert res["readinessProbe"] == readiness
+
+    def test_custom_version(self):
+        res = self._parse(self.ext.run(cluster="test-cluster", version="1.28.0"))
+        assert res["image"] == "envoyproxy/envoy-alpine:v1.28.0"
+
+    def test_envoy_uid_env(self):
+        res = self._parse(self.ext.run(cluster="test-cluster"))
+        assert {"name": "ENVOY_UID", "value": "0"} in res["env"]
 
 
 def test_get_var_from_dicts_converts_non_strings():
