@@ -28,14 +28,14 @@ DEFAULT_SOAK_TIME_S = 120
 @click.option(
     "--server-side/--no-server-side",
     is_flag=True,
-    default=True,
+    default=False,
     show_default=True,
     help="Use server-side apply",
 )
 @click.option(
     "--force-conflicts/--no-force-conflicts",
     is_flag=True,
-    default=True,
+    default=False,
     show_default=True,
     help="Force conflicts resolution during server-side apply",
 )
