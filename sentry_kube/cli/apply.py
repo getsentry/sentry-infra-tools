@@ -218,7 +218,9 @@ def _apply(
         ),
     ).encode("utf-8")
 
-    has_diffs, _ = _diff_kubectl(ctx, definitions, server_side, important_diffs_only)
+    has_diffs, _ = _diff_kubectl(
+        ctx, definitions, server_side, force_conflicts, important_diffs_only
+    )
     if not has_diffs:
         click.echo("Nothing to apply.")
         macos_notify("sentry-kube apply", "Nothing to apply.")
