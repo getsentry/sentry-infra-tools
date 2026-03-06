@@ -116,6 +116,7 @@ def _diff_kubectl(
     ctx,
     definitions,
     server_side: bool = False,
+    force_conflicts: bool = False,
     important_diffs_only: bool = False,
 ) -> Tuple[bool, List[str]]:
     """
@@ -134,6 +135,8 @@ def _diff_kubectl(
         "diff",
         f"--server-side={str(bool(server_side)).lower()}",
     ]
+    if server_side and force_conflicts:
+        cmd.append("--force-conflicts")
 
     # kubectl diff --concurrency won't have any effect if the input is STDIN
     # (due to its internal visitor implementation).
@@ -168,6 +171,7 @@ def _diff(
     services,
     filters,
     server_side: bool = False,
+    force_conflicts: bool = False,
     important_diffs_only: bool = False,
     use_canary: bool = False,
     allow_jobs: bool = False,
@@ -197,6 +201,7 @@ def _diff(
         ctx=ctx,
         definitions=definitions,
         server_side=server_side,
+        force_conflicts=force_conflicts,
         important_diffs_only=important_diffs_only,
     )
 
@@ -207,11 +212,18 @@ def _diff(
 # NOTE(dfedorov): Should be flag, but not sure where
 # it is used, so keeping it this way to avoid breaking changes.
 @click.option(
-    "--server-side",
-    type=bool,
+    "--server-side/--no-server-side",
+    is_flag=True,
     default=False,
     show_default=True,
-    help="Use server-side rendering",
+    help="Use server-side diff",
+)
+@click.option(
+    "--force-conflicts/--no-force-conflicts",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Force conflicts resolution during server-side diff",
 )
 @click.option(
     "--important-diffs-only",
@@ -237,6 +249,7 @@ def diff(
     services,
     filters,
     server_side: bool,
+    force_conflicts: bool,
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
@@ -255,6 +268,7 @@ def diff(
         services=services,
         filters=filters,
         server_side=server_side,
+        force_conflicts=force_conflicts,
         important_diffs_only=important_diffs_only,
         use_canary=use_canary,
         allow_jobs=allow_jobs,

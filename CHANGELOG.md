@@ -1,3 +1,13 @@
+## 1.27.0
+
+### New Features ✨
+
+- (iap) Auto-create kubeconfig when missing by @rgibert in [#212](https://github.com/getsentry/sentry-infra-tools/pull/212)
+
+### Bug Fixes 🐛
+
+- (k8s) Improve server-side apply support in sentry-kube apply/diff by @BojanOro in [#210](https://github.com/getsentry/sentry-infra-tools/pull/210)
+
 ## 1.26.0
 
 ### New Features ✨
