@@ -17,8 +17,17 @@ logging.basicConfig(level=logging.INFO)
 @click.command()
 @click.option("--fast", is_flag=True, help="Only render the specified services")
 @click.option("--debug", is_flag=True, help="Print debug information")
+@click.option(
+    "--stage",
+    type=str,
+    default=None,
+    help="Stage to operate on. Only regions with matching stage will be rendered.",
+    envvar="SENTRY_KUBE_STAGE",
+)
 @click.argument("filename", nargs=-1)
-def render_helm_services(fast: bool, debug: bool, filename: Sequence[str]) -> None:
+def render_helm_services(
+    fast: bool, debug: bool, stage: str | None, filename: Sequence[str]
+) -> None:
     """
     Identifies which services and clusters need to be re-rendered
     depending on the file names passed as arguments.
@@ -31,7 +40,7 @@ def render_helm_services(fast: bool, debug: bool, filename: Sequence[str]) -> No
     if debug:
         logger.setLevel(logging.DEBUG)
 
-    index = build_helm_index()
+    index = build_helm_index(stage=stage)
     resources_to_render = set()
 
     for file in filename:

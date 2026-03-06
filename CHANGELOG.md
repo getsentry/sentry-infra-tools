@@ -1,3 +1,92 @@
+## 1.26.0
+
+### New Features ✨
+
+- Add `get-clusters` command to list clusters by region by @mwarkentin in [#213](https://github.com/getsentry/sentry-infra-tools/pull/213)
+
+### Bug Fixes 🐛
+
+- Add `--dns-endpoint` param to the auth suggestion message by @oioki in [#211](https://github.com/getsentry/sentry-infra-tools/pull/211)
+
+## 1.25.5
+
+### Bug Fixes 🐛
+
+- Update workspace_root() to support git worktrees by @rgibert in [#209](https://github.com/getsentry/sentry-infra-tools/pull/209)
+
+### Other
+
+- updated methods to surface errors messages to make issues more useful by @ghengiskhanh in [#204](https://github.com/getsentry/sentry-infra-tools/pull/204)
+
+## 1.25.4
+
+### New Features ✨
+
+- (validate) Add --include-region by @rgibert in [#205](https://github.com/getsentry/sentry-infra-tools/pull/205)
+- Add support for cli_config to set stage by @rgibert in [#206](https://github.com/getsentry/sentry-infra-tools/pull/206)
+
+### Internal Changes 🔧
+
+- (release) Fix changelog-preview permissions by @BYK in [#199](https://github.com/getsentry/sentry-infra-tools/pull/199)
+- Better handling of missing clusters by @rgibert in [#202](https://github.com/getsentry/sentry-infra-tools/pull/202)
+
+### Other
+
+- Remove OAuth credentials option from IAP macro by @BojanOro in [#190](https://github.com/getsentry/sentry-infra-tools/pull/190)
+
+## 1.25.3
+
+- Removes deprecated pkg_resources, replacing with builtin importlib. by @ellisonmarks in [#201](https://github.com/getsentry/sentry-infra-tools/pull/201)
+
+## 1.25.2
+
+### New Features ✨
+
+- Break YAML anchor shared references when loading service values by @shashjar in [#200](https://github.com/getsentry/sentry-infra-tools/pull/200)
+
+## 1.25.1
+
+### Bug Fixes 🐛
+
+- `--no-bg-swap` option breaking blue-green flag in values by @gi0baro in [#198](https://github.com/getsentry/sentry-infra-tools/pull/198)
+
+### Internal Changes 🔧
+
+- (release) Switch from action-prepare-release to Craft by @BYK in [#191](https://github.com/getsentry/sentry-infra-tools/pull/191)
+- Use `pull_request_target` for changelog preview by @BYK in [#196](https://github.com/getsentry/sentry-infra-tools/pull/196)
+
+## 1.25.0
+
+- Add --update-existing flag to secrets command by @oioki in [#194](https://github.com/getsentry/sentry-infra-tools/pull/194)
+
+## 1.24.0
+
+- Introduce sentry-kube external rendering macro by @fpacifici in [#192](https://github.com/getsentry/sentry-infra-tools/pull/192)
+
+## 1.23.0
+
+### New Features ✨
+
+- (helm) Add hooks and blue-green swap options, add delete cmd by @gi0baro in [#189](https://github.com/getsentry/sentry-infra-tools/pull/189)
+
+## 1.22.0
+
+### Build / dependencies / internal 🔧
+
+#### Audit
+
+- Return list_resources label selector by @dmajere in [#185](https://github.com/getsentry/sentry-infra-tools/pull/185)
+- Move audit kube functions to libsentrykube by @dmajere in [#184](https://github.com/getsentry/sentry-infra-tools/pull/184)
+
+#### Other
+
+- (cli) Minor code movement around sentry_kube/cli by @dmajere in [#183](https://github.com/getsentry/sentry-infra-tools/pull/183)
+- (diff) Some attempt to refactor diff command code. by @dmajere in [#186](https://github.com/getsentry/sentry-infra-tools/pull/186)
+
+### Other
+
+- Update IAP service macro to remove useless loadbalancer by @BojanOro in [#188](https://github.com/getsentry/sentry-infra-tools/pull/188)
+
 ## 1.21.0
 
 - (chore): remove customer_name comparison for pod template selection by @mwarkentin in [#182](https://github.com/getsentry/sentry-infra-tools/pull/182)

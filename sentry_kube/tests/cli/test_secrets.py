@@ -104,3 +104,62 @@ def test_secret_add_user(mock_stdout):
         "alice": "bGV0bWVpbg=="
     }
     assert "Updated successfully." in output
+
+
+@mock.patch("sys.stdout", new_callable=StringIO)
+def test_secret_existing_user_no_update(mock_stdout):
+    """Test that existing user is not updated without --update-existing flag."""
+    secret_mock = mock.create_autospec(V1Secret)
+    secret_mock.name = "example"
+    # User "alice" already exists with password "oldpassword"
+    secret_mock.data = {"alice": base64.b64encode("oldpassword".encode("utf-8")).decode("utf-8")}
+
+    core_api_mock = mock.create_autospec(CoreV1Api)
+    core_api_mock.read_namespaced_secret.return_value = secret_mock
+
+    # Try to upload same user with different password (without update_existing)
+    users = {
+        "alice": {
+            "password": "newpassword",
+            "scram": "SCRAM-SHA-256$4096:salt$stored_key:server_key",
+        }
+    }
+
+    upload_plaintext_to_k8s_secret(core_api_mock, users, "default", "example", update_existing=False)
+    output = mock_stdout.getvalue()
+
+    # Should not update the secret
+    assert core_api_mock.patch_namespaced_secret.call_count == 0
+    assert "Kubernetes secret `default/example` is up to date. No new users." in output
+
+
+@mock.patch("sys.stdin", StringIO("yes"))
+@mock.patch("sys.stdout", new_callable=StringIO)
+def test_secret_existing_user_with_update(mock_stdout):
+    """Test that existing user is updated with --update-existing flag."""
+    secret_mock = mock.create_autospec(V1Secret)
+    secret_mock.name = "example"
+    # User "alice" already exists with password "oldpassword"
+    secret_mock.data = {"alice": base64.b64encode("oldpassword".encode("utf-8")).decode("utf-8")}
+
+    core_api_mock = mock.create_autospec(CoreV1Api)
+    core_api_mock.read_namespaced_secret.return_value = secret_mock
+
+    # Try to upload same user with different password (with update_existing)
+    users = {
+        "alice": {
+            "password": "newpassword",
+            "scram": "SCRAM-SHA-256$4096:salt$stored_key:server_key",
+        }
+    }
+
+    upload_plaintext_to_k8s_secret(core_api_mock, users, "default", "example", update_existing=True)
+    output = mock_stdout.getvalue()
+
+    # Should update the secret with new password
+    assert core_api_mock.patch_namespaced_secret.call_count == 1
+    assert core_api_mock.patch_namespaced_secret.call_args[1]["name"] == "example"
+    assert core_api_mock.patch_namespaced_secret.call_args[1]["body"]["data"] == {
+        "alice": base64.b64encode("newpassword".encode("utf-8")).decode("utf-8")
+    }
+    assert "Updated successfully." in output

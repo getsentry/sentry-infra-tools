@@ -53,12 +53,19 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
         new_env["KUBECTL_EXTERNAL_DIFF"] = kubectl_external_diff_cmd
 
     child_process = subprocess.Popen(
-        kubectl_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=new_env
+        kubectl_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=new_env
     )
-    child_process_output = child_process.communicate()[0].decode("utf-8")
+    stdout, stderr = child_process.communicate()
+    child_process_output = stdout.decode("utf-8")
+    child_process_error = stderr.decode("utf-8") if stderr else ""
 
-    if not child_process_output and child_process.returncode != 0:
-        raise click.ClickException("'kubectl diff' aborted")
+    # Check for errors regardless of stdout content
+    # if child_process.returncode != 0:
+    if child_process_error and child_process.returncode != 0:
+        error_msg = "'kubectl diff' return non-zero code with an error message"
+        if child_process_error:
+            error_msg += f"\n{child_process_error}"
+        raise click.ClickException(error_msg)
 
     return child_process_output
 
@@ -268,3 +275,4 @@ def diff(
         deployment_image=deployment_image,
     )
     ctx.exit(has_diffs)
+

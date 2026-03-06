@@ -32,6 +32,7 @@ macros = [
     "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
     "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
     "get_var=libsentrykube.ext:GetVar",
+    "render_external=libsentrykube.ext:RenderExternal",
 ]
 
 
@@ -44,7 +45,7 @@ def get_requirements() -> Sequence[str]:
 
 setup(
     name="sentry-infra-tools",
-    version="1.21.0",
+    version="1.26.0",
     author="Sentry",
     author_email="oss@sentry.io",
     packages=find_packages(where=".", exclude="tests"),

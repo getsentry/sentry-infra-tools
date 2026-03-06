@@ -1,3 +1,5 @@
+import abc
+import importlib
 import io
 import json
 import os
@@ -818,3 +820,50 @@ class GetVar(SimpleExtension):
 
     def run(self, key: str, *dicts: Dict[str, Any], default: str | None = None):
         return get_var_from_dicts(key, *dicts, default=default)
+
+
+class ExternalMacro(abc.ABC):
+    """
+    A base class to be implemented by a macro defined in an external package.
+
+    This is provided the context in the form of a dictionary. The content is
+    defined by the implementation itself.
+    This class is not generic with respect to the context type because it is
+    going to be loaded dynamically anyway.
+    """
+
+    @staticmethod
+    @abc.abstractmethod
+    def validate_context(context: dict[str, Any]) -> None:
+        """
+        Validates that the structure of the context variable is valid.
+
+        Raaise a ValueError if the context is not valid.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def run(self, context: dict[str, Any]) -> dict[str, Any]:
+        """
+        Renders the macro given the context and returns it as a dictionary.
+        """
+        raise NotImplementedError
+
+
+class RenderExternal(SimpleExtension):
+    """
+    Renders a portion of yaml through a macro not defined in this package but
+    imported by the environment that uses this library and loaded dynamically.
+    """
+
+    def run(self, fully_qualified_name: str, context: dict[str, Any]) -> dict[str, Any]:
+        """
+        Renders the macro given the context and returns it as a dictionary.
+        """
+        module_path, class_name = fully_qualified_name.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        cls = getattr(module, class_name)
+        if not issubclass(cls, ExternalMacro):
+            raise ValueError(f"Class {class_name} is not a valid ExternalMacro")
+        cls.validate_context(context)
+        return cls().run(context)

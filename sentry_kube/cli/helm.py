@@ -6,6 +6,7 @@ from libsentrykube.helm import (
     HelmException,
     apply as _helm_apply,
     check_helm_bin,
+    delete as _helm_delete,
     diff as _helm_diff,
     render as _helm_render,
     render_values as _helm_render_values,
@@ -99,7 +100,7 @@ def _materialize(ctx, services, release, namespace):
 
 
 @check_helm_bin
-def _diff(ctx, services, release, namespace, app_version):
+def _diff(ctx, services, release, namespace, app_version, bg_swap):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -113,11 +114,14 @@ def _diff(ctx, services, release, namespace, app_version):
             namespace=namespace,
             app_version=app_version,
             kctx=context_name,
+            bg_swap=bg_swap,
         )
 
 
 @check_helm_bin
-def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
+def _apply(
+    ctx, services, release, namespace, app_version, atomic, timeout, hooks, bg_swap
+):
     customer_name = ctx.obj.customer_name
     cluster_name = ctx.obj.cluster_name
     context_name = ctx.obj.context_name
@@ -136,6 +140,8 @@ def _apply(ctx, services, release, namespace, app_version, atomic, timeout):
                 kctx=context_name,
                 atomic=atomic,
                 timeout=timeout,
+                hooks=hooks,
+                bg_swap=bg_swap,
             ):
                 yield item
         except HelmException:
@@ -156,6 +162,33 @@ def _rollback(ctx, services, release, namespace, timeout):
     for service_name in services:
         try:
             for item in _helm_rollback(
+                customer_name,
+                service_name,
+                cluster_name,
+                release=release,
+                namespace=namespace,
+                kctx=context_name,
+                timeout=timeout,
+            ):
+                yield item
+        except HelmException:
+            errored = True
+
+    if errored:
+        raise click.Abort()
+
+
+@check_helm_bin
+def _delete(ctx, services, release, namespace, timeout):
+    customer_name = ctx.obj.customer_name
+    cluster_name = ctx.obj.cluster_name
+    context_name = ctx.obj.context_name
+
+    errored = False
+
+    for service_name in services:
+        try:
+            for item in _helm_delete(
                 customer_name,
                 service_name,
                 cluster_name,
@@ -207,10 +240,13 @@ def render(ctx, services, release, namespace, raw, pager, values_only, materiali
 @click.option("--release", help="Target a specific release")
 @click.option("--namespace", help="Targets a specific namespace")
 @click.option("--app-version", help="Use a specific app version")
-@click.option("--pager/--no-pager", default=True)
+@click.option("--pager/--no-pager", default=False)
+@click.option(
+    "--bg-swap/--no-bg-swap", default=True, help="Enable/disable blue-green swap"
+)
 @click.pass_context
 @allow_for_all_services
-def diff(ctx, services, release, namespace, app_version, pager):
+def diff(ctx, services, release, namespace, app_version, pager, bg_swap):
     """
     Render a diff between production and local configs, using a wrapper around
     "helm diff".
@@ -220,7 +256,7 @@ def diff(ctx, services, release, namespace, app_version, pager):
     """
 
     click.echo(f"Rendering services: {', '.join(services)}")
-    rendered = _diff(ctx, services, release, namespace, app_version)
+    rendered = _diff(ctx, services, release, namespace, app_version, bg_swap)
     if pager:
         click.echo_via_pager(rendered)
     else:
@@ -238,9 +274,15 @@ def diff(ctx, services, release, namespace, app_version, pager):
     help="Atomic apply (auto-rollback if goes wrong)",
 )
 @click.option("--timeout", default=300)
+@click.option("--hooks/--no-hooks", default=True, help="Enable/disable hooks")
+@click.option(
+    "--bg-swap/--no-bg-swap", default=True, help="Enable/disable blue-green swap"
+)
 @click.pass_context
 @allow_for_all_services
-def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
+def apply(
+    ctx, services, release, namespace, app_version, yes, atomic, timeout, hooks, bg_swap
+):
     """
     Apply helm service(s) to production
     """
@@ -248,7 +290,7 @@ def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
     if not yes:
         click.echo(f"Rendering services: {', '.join(services)}")
 
-        rendered = _diff(ctx, services, release, namespace, app_version)
+        rendered = _diff(ctx, services, release, namespace, app_version, bg_swap)
         click.echo("".join(rendered))
 
         if not click.confirm(
@@ -260,7 +302,9 @@ def apply(ctx, services, release, namespace, app_version, yes, atomic, timeout):
         ):
             raise click.Abort()
 
-    for res in _apply(ctx, services, release, namespace, app_version, atomic, timeout):
+    for res in _apply(
+        ctx, services, release, namespace, app_version, atomic, timeout, hooks, bg_swap
+    ):
         click.echo(res)
 
 
@@ -276,4 +320,19 @@ def rollback(ctx, services, release, namespace, timeout):
     """
 
     for res in _rollback(ctx, services, release, namespace, timeout):
+        click.echo(res)
+
+
+@helm.command()
+@click.option("--release", help="Target a specific release")
+@click.option("--namespace", help="Targets a specific namespace")
+@click.option("--timeout", default=None)
+@click.pass_context
+@allow_for_all_services
+def delete(ctx, services, release, namespace, timeout):
+    """
+    Delete helm service(s)
+    """
+
+    for res in _delete(ctx, services, release, namespace, timeout):
         click.echo(res)

@@ -12,6 +12,7 @@ from collections import OrderedDict
 from libsentrykube.config import Config
 from libsentrykube.customer import load_customer_data, load_region_helm_data
 from libsentrykube.utils import (
+    deep_copy_without_refs,
     deep_merge_dict,
     kube_extract_namespace,
     kube_get_client,
@@ -214,7 +215,7 @@ def get_service_ctx(
     for file in service_path_root.glob(f"{src_files_prefix}*.yaml"):
         try:
             with open(file, "rb") as f:
-                values = yaml.safe_load(f) or {}
+                values = deep_copy_without_refs(yaml.safe_load(f) or {})
                 ctx = merge_values_files_no_conflict(
                     ctx, values, file.name, merge_config
                 )
@@ -283,7 +284,7 @@ def get_service_ctx_overrides(
             if file.name.endswith("managed.yaml"):
                 continue
             with open(file, "rb") as f:
-                values = yaml.safe_load(f) or {}
+                values = deep_copy_without_refs(yaml.safe_load(f) or {})
                 ctx = merge_values_files_no_conflict(
                     ctx, values, file.name, merge_config
                 )
@@ -329,7 +330,7 @@ def get_common_regional_override(
     for file in common_service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
         try:
             with open(file, "rb") as f:
-                values = yaml.safe_load(f) or {}
+                values = deep_copy_without_refs(yaml.safe_load(f) or {})
                 ctx = merge_values_files_no_conflict(
                     ctx, values, file.name, merge_config
                 )
@@ -387,7 +388,7 @@ def get_hierarchical_value_overrides(
         try:
             for file in service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
                 with open(file, "rb") as f:
-                    values = yaml.safe_load(f) or {}
+                    values = deep_copy_without_refs(yaml.safe_load(f) or {})
                 base_values = merge_values_files_no_conflict(
                     base_values, values, file.name, merge_config
                 )
@@ -459,7 +460,7 @@ def get_tools_managed_service_value_overrides(
 
     if service_override_file.exists() and service_override_file.is_file():
         with open(service_override_file, "rb") as f:
-            return yaml.safe_load(f) or {}
+            return deep_copy_without_refs(yaml.safe_load(f) or {})
 
     return {}
 

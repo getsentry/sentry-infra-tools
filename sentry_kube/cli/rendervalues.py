@@ -11,7 +11,7 @@ __all__ = ("rendervalues",)
 
 @click.command()
 @click.pass_context
-@click.option("--output", default="yaml")
+@click.option("--output", "-o", default="yaml")
 @allow_for_all_services
 def rendervalues(ctx, services, output):
     """

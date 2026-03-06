@@ -66,6 +66,7 @@ class SiloRegion:
     k8s_config: K8sConfig
     sentry_region: str
     service_monitors: MappingProxyType[str, list[int]]
+    stage: str = "production"
 
     @classmethod
     def from_conf(cls, silo_regions_conf: Mapping[str, Any]) -> SiloRegion:
@@ -75,6 +76,7 @@ class SiloRegion:
             k8s_config=K8sConfig.from_conf(k8s_config),
             sentry_region=silo_regions_conf.get("sentry_region", "unknown"),
             service_monitors=silo_regions_conf.get("service_monitors", {}),
+            stage=silo_regions_conf.get("stage", "production"),
         )
 
 
@@ -97,13 +99,17 @@ class Config:
 
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
         # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
-        self.service_container_map: Mapping[str, Dict[str, str]] = configuration[
-            "service_container_map"
-        ]
+        self.service_container_map: Mapping[str, Dict[str, str]] = configuration.get(
+            "service_container_map", {}
+        )
 
     @cache
-    def get_regions(self) -> Sequence[str]:
+    def get_regions(self, stage: Optional[str] = None) -> Sequence[str]:
         """
-        Returns list of regions
+        Returns list of regions, optionally filtered by stage.
         """
-        return list(self.silo_regions.keys())
+        if stage is None:
+            return list(self.silo_regions.keys())
+        return [
+            name for name, region in self.silo_regions.items() if region.stage == stage
+        ]

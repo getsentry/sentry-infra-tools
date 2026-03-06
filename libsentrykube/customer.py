@@ -33,16 +33,15 @@ def get_region_config(config: Config, region_name: str) -> tuple[str, SiloRegion
     return region_name, region_config
 
 
-@cache
 def load_customer_data(
-    config: Config, customer_name: str, cluster_name: str
+    config: Config, customer_name: str, cluster_name: str, stage: Optional[str] = None
 ) -> Dict[str, Any]:
     try:
         _, region_config = get_region_config(config, customer_name)
     except ValueError:
         die(
             f"Region '{customer_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_regions()}"
+            f"{config.get_regions(stage)}"
         )
 
     k8s_config = region_config.k8s_config
@@ -54,16 +53,15 @@ def load_customer_data(
     return cluster.services_data
 
 
-@cache
 def load_region_helm_data(
-    config: Config, region_name: str, cluster_name: str
+    config: Config, region_name: str, cluster_name: str, stage: Optional[str] = None
 ) -> HelmData:
     try:
         _, region_config = get_region_config(config, region_name)
     except ValueError:
         die(
             f"Region '{region_name}' not found. Did you mean one of: \n\n"
-            f"{config.get_regions()}"
+            f"{config.get_regions(stage)}"
         )
 
     k8s_config = region_config.k8s_config

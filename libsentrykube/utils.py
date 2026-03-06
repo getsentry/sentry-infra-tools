@@ -116,20 +116,61 @@ def kube_set_context(context_name: str, kubeconfig: str) -> None:
     from kubernetes.config import new_client_from_config
     from kubernetes.config.config_exception import ConfigException
 
+    def _load_client() -> None:
+        global _kube_client
+        _kube_client = new_client_from_config(
+            config_file=kubeconfig, context=context_name
+        )
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         try:
-            _kube_client = new_client_from_config(
-                config_file=kubeconfig, context=context_name
-            )
+            _load_client()
         except ConfigException as e:
             # example: gke_internal-sentry_us-central1-b_zdpwkxst
-            _, project, region, cluster = context_name.split("_")
-            die(
-                f"{e}\n\n"
-                "Failed to create k8s client from config. You might need to run:\n"
-                f"gcloud container clusters get-credentials {cluster} --region {region} --project {project}"  # noqa: E501
-            )
+            parts = context_name.split("_")
+            if len(parts) == 4 and parts[0] == "gke":
+                _, project, region, cluster = parts
+                gcloud_cmd = [
+                    "gcloud",
+                    "container",
+                    "clusters",
+                    "get-credentials",
+                    cluster,
+                    "--region",
+                    region,
+                    "--project",
+                    project,
+                    "--dns-endpoint",
+                ]
+                click.echo(
+                    f"Context not in kubeconfig. Adding cluster credentials with:\n  {' '.join(gcloud_cmd)}",
+                    err=True,
+                )
+                result = subprocess.run(
+                    gcloud_cmd,
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode == 0:
+                    try:
+                        _load_client()
+                    except ConfigException:
+                        pass  # fall through to die() with original message
+                else:
+                    click.echo(result.stderr or result.stdout, err=True)
+
+            if _kube_client is None:
+                project, region, cluster = (
+                    (parts[1], parts[2], parts[3])
+                    if len(parts) == 4 and parts[0] == "gke"
+                    else ("PROJECT", "REGION", "CLUSTER")
+                )
+                die(
+                    f"{e}\n\n"
+                    "Failed to create k8s client from config. You might need to run:\n"
+                    f"gcloud container clusters get-credentials {cluster} --region {region} --project {project} --dns-endpoint"  # noqa: E501
+                )
     _kube_client_context = context_name
 
 
@@ -214,7 +255,7 @@ def workspace_root() -> Path:
     workspace_root, root = _cwd, Path("/")
     while (
         ".terragrunt-cache" in workspace_root.parts
-        or not (workspace_root / ".git").is_dir()
+        or not (workspace_root / ".git").exists()
     ):
         workspace_root = (workspace_root / "..").resolve()
         if workspace_root == root:
@@ -374,6 +415,21 @@ def deep_merge_dict(
                 into[k] = copy.deepcopy(v)
         else:
             into[k] = copy.deepcopy(v)
+
+
+def deep_copy_without_refs(obj: Any) -> Any:
+    """
+    Recursively copy dict/list structures without preserving shared references.
+
+    Unlike copy.deepcopy(), this breaks YAML anchor aliases by creating
+    independent copies of all nested dict/list objects.
+    """
+    if isinstance(obj, dict):
+        return {k: deep_copy_without_refs(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [deep_copy_without_refs(item) for item in obj]
+    else:
+        return obj
 
 
 def macos_notify(title: str, text: str) -> None:
