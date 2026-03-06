@@ -1,3 +1,13 @@
+## 1.28.0
+
+### New Features ✨
+
+- Add EnvoyNativeSidecar extension for Kubernetes native sidecar support by @mwarkentin in [#215](https://github.com/getsentry/sentry-infra-tools/pull/215)
+
+### Documentation 📚
+
+- Add ExternalMacro usage guide to libsentrykube README by @mwarkentin in [#216](https://github.com/getsentry/sentry-infra-tools/pull/216)
+
 ## 1.27.0
 
 ### New Features ✨
