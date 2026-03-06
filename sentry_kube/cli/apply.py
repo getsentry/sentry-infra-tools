@@ -26,11 +26,18 @@ DEFAULT_SOAK_TIME_S = 120
 @click.option("--yes", "-y", is_flag=True)
 @click.option("--filter", "filters", multiple=True)
 @click.option(
-    "--server-side",
-    type=bool,
-    default=None,
+    "--server-side/--no-server-side",
+    is_flag=True,
+    default=False,
     show_default=True,
     help="Use server-side apply",
+)
+@click.option(
+    "--force-conflicts/--no-force-conflicts",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Force conflicts resolution during server-side apply",
 )
 @click.option(
     "--important-diffs-only",
@@ -82,7 +89,8 @@ def apply(
     services,
     yes,
     filters,
-    server_side,
+    server_side: bool,
+    force_conflicts: bool,
     important_diffs_only: bool,
     use_canary: bool,
     soak_time: int,
@@ -108,6 +116,7 @@ def apply(
                 yes,
                 filters,
                 server_side,
+                force_conflicts,
                 important_diffs_only,
                 allow_jobs,
                 True,
@@ -169,6 +178,7 @@ def apply(
         yes,
         filters,
         server_side,
+        force_conflicts,
         important_diffs_only,
         allow_jobs,
         False,
@@ -182,6 +192,7 @@ def _apply(
     yes,
     filters,
     server_side,
+    force_conflicts,
     important_diffs_only: bool,
     allow_jobs: bool,
     use_canary: bool,
@@ -207,7 +218,9 @@ def _apply(
         ),
     ).encode("utf-8")
 
-    has_diffs, _ = _diff_kubectl(ctx, definitions, server_side, important_diffs_only)
+    has_diffs, _ = _diff_kubectl(
+        ctx, definitions, server_side, force_conflicts, important_diffs_only
+    )
     if not has_diffs:
         click.echo("Nothing to apply.")
         macos_notify("sentry-kube apply", "Nothing to apply.")
@@ -234,8 +247,10 @@ def _apply(
         "-f",
         "/dev/stdin",
     ]
-    if server_side is not None:
-        apply_cmd.append(f"--server-side={str(bool(server_side)).lower()}")
+    if server_side:
+        apply_cmd.append("--server-side")
+    if server_side and force_conflicts:
+        apply_cmd.append("--force-conflicts")
 
     child_process = subprocess.Popen(apply_cmd, stdin=subprocess.PIPE)
     child_process.communicate(definitions)
