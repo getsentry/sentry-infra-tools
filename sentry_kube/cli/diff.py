@@ -69,7 +69,6 @@ def should_skip_line(line: str) -> bool:
     ) or any(
         [
             "kubectl.kubernetes.io/last-applied-configuration" in line,
-            "managedFields" in line,
             "diff -u -N" in line,
         ]
     )
