@@ -19,6 +19,7 @@ macros = [
     "ha_pod_affinity=libsentrykube.ext:HAPodAffinity",
     "internal_service=libsentrykube.ext:InternalService",
     "envoy_sidecar=libsentrykube.ext:EnvoySidecar",
+    "envoy_native_sidecar=libsentrykube.ext:EnvoyNativeSidecar",
     "geoip_volume=libsentrykube.ext:GeoIPVolume",
     "geoip_volumemount=libsentrykube.ext:GeoIPVolumeMount",
     "geoip_initcontainer=libsentrykube.ext:GeoIPInitContainer",
