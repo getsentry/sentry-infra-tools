@@ -73,6 +73,43 @@ metadata:
 | Return type | Typically a JSON string | `dict` |
 | Package | Must live in `libsentrykube` | Can live in any installed package |
 
+## Service Flags (`_sk_flags.yaml`)
+
+Service flags let you configure per-service behavior for rendering and
+applying Kubernetes manifests. Flags are defined in a `_sk_flags.yaml` file
+placed in the service directory (alongside templates and `_values.yaml`).
+
+### File format
+
+```yaml
+# k8s/services/my-service/_sk_flags.yaml
+jinja_whitespace_easymode: false
+server_side_apply: true
+force_conflicts: true
+```
+
+If the file is absent or a flag is omitted, the default value is used.
+
+### Available flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `jinja_whitespace_easymode` | bool | `true` | Enables `trim_blocks` and `lstrip_blocks` in the Jinja environment, making whitespace handling more forgiving. Set to `false` if you need precise control over whitespace in templates. |
+| `server_side_apply` | bool | `false` | Use server-side apply (SSA) for `sentry-kube diff` and `sentry-kube apply`. SSA tracks field ownership on the server and avoids the `last-applied-configuration` annotation, which can exceed the 256 KB annotation size limit for large manifests. |
+| `force_conflicts` | bool | `false` | When `server_side_apply` is enabled, also pass `--force-conflicts` to override field ownership conflicts. |
+
+### How flags are resolved
+
+1. Defaults are defined in `libsentrykube/kube.py` as `DEFAULT_FLAGS`.
+2. Per-service overrides from `_sk_flags.yaml` are merged on top (service
+   values win).
+3. For `server_side_apply` and `force_conflicts`, CLI flags
+   (`--server-side` / `--no-server-side`, `--force-conflicts` /
+   `--no-force-conflicts`) take precedence when explicitly provided.
+4. If multiple services are diffed or applied together and they have
+   conflicting SSA settings (without a CLI override), an error is raised
+   asking you to process them one at a time.
+
 ## Running tests
 
 From root of repo:

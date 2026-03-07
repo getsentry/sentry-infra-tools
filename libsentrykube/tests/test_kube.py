@@ -1,6 +1,7 @@
 import os
 import pytest
 
+import click
 from jinja2 import Environment, FileSystemLoader
 from markupsafe import Markup
 from unittest.mock import patch
@@ -10,6 +11,8 @@ from libsentrykube.kube import (
     _consolidate_variables,
     _include_raw,
     _normalize_yaml_content,
+    get_service_apply_flags,
+    resolve_ssa_flags,
 )
 from libsentrykube.service import CustomerTooOftenDefinedException
 from libsentrykube.utils import set_workspace_root_start, workspace_root
@@ -641,3 +644,141 @@ spec:
         assert (output_dir / "default-deployment-test-deployment.yaml").exists()
         # Service file should be removed
         assert not (output_dir / "default-service-test-service.yaml").exists()
+
+
+# --- get_service_apply_flags tests ---
+
+
+def test_get_service_apply_flags_defaults():
+    """When no flags file exists, returns defaults (both False)."""
+    with patch("libsentrykube.kube.get_service_flags", return_value={}):
+        result = get_service_apply_flags("my-service")
+    assert result == {"server_side_apply": False, "force_conflicts": False}
+
+
+def test_get_service_apply_flags_ssa_enabled():
+    """Service flag file enables server_side_apply."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={"server_side_apply": True},
+    ):
+        result = get_service_apply_flags("my-service")
+    assert result == {"server_side_apply": True, "force_conflicts": False}
+
+
+def test_get_service_apply_flags_both_enabled():
+    """Service flag file enables both server_side_apply and force_conflicts."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={"server_side_apply": True, "force_conflicts": True},
+    ):
+        result = get_service_apply_flags("my-service")
+    assert result == {"server_side_apply": True, "force_conflicts": True}
+
+
+def test_get_service_apply_flags_ignores_unrelated_flags():
+    """Unrelated flags in the file don't leak into the result."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={
+            "jinja_whitespace_easymode": False,
+            "server_side_apply": True,
+            "some_other_flag": 42,
+        },
+    ):
+        result = get_service_apply_flags("my-service")
+    assert result == {"server_side_apply": True, "force_conflicts": False}
+
+
+# --- resolve_ssa_flags tests ---
+
+
+def test_resolve_ssa_flags_cli_overrides_service():
+    """CLI --server-side overrides service-level flag."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={"server_side_apply": False},
+    ):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["my-service"], cli_server_side=True, cli_force_conflicts=True
+        )
+    assert server_side is True
+    assert force_conflicts is True
+
+
+def test_resolve_ssa_flags_cli_no_server_side_overrides():
+    """CLI --no-server-side overrides service-level flag."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={"server_side_apply": True, "force_conflicts": True},
+    ):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["my-service"], cli_server_side=False, cli_force_conflicts=False
+        )
+    assert server_side is False
+    assert force_conflicts is False
+
+
+def test_resolve_ssa_flags_uses_service_flag_when_cli_is_none():
+    """When CLI flags are None, uses service-level flags."""
+    with patch(
+        "libsentrykube.kube.get_service_flags",
+        return_value={"server_side_apply": True, "force_conflicts": True},
+    ):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["my-service"], cli_server_side=None, cli_force_conflicts=None
+        )
+    assert server_side is True
+    assert force_conflicts is True
+
+
+def test_resolve_ssa_flags_defaults_when_no_flag_file():
+    """When no flag file and no CLI flags, both are False."""
+    with patch("libsentrykube.kube.get_service_flags", return_value={}):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["my-service"], cli_server_side=None, cli_force_conflicts=None
+        )
+    assert server_side is False
+    assert force_conflicts is False
+
+
+def test_resolve_ssa_flags_multiple_services_consistent():
+    """Multiple services with the same flags resolve cleanly."""
+    flags = {"server_side_apply": True, "force_conflicts": True}
+    with patch("libsentrykube.kube.get_service_flags", return_value=flags):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["svc-a", "svc-b"], cli_server_side=None, cli_force_conflicts=None
+        )
+    assert server_side is True
+    assert force_conflicts is True
+
+
+def test_resolve_ssa_flags_multiple_services_conflict_errors():
+    """Multiple services with conflicting flags raise ClickException."""
+
+    def fake_flags(service_name):
+        if service_name == "svc-a":
+            return {"server_side_apply": True}
+        return {}
+
+    with patch("libsentrykube.kube.get_service_flags", side_effect=fake_flags):
+        with pytest.raises(click.ClickException, match="conflicting"):
+            resolve_ssa_flags(
+                ["svc-a", "svc-b"], cli_server_side=None, cli_force_conflicts=None
+            )
+
+
+def test_resolve_ssa_flags_cli_overrides_conflict():
+    """CLI flag resolves what would otherwise be a conflict."""
+
+    def fake_flags(service_name):
+        if service_name == "svc-a":
+            return {"server_side_apply": True}
+        return {}
+
+    with patch("libsentrykube.kube.get_service_flags", side_effect=fake_flags):
+        server_side, force_conflicts = resolve_ssa_flags(
+            ["svc-a", "svc-b"], cli_server_side=True, cli_force_conflicts=False
+        )
+    assert server_side is True
+    assert force_conflicts is False
