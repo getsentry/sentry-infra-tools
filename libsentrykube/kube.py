@@ -59,7 +59,46 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_FLAGS = {
     "jinja_whitespace_easymode": True,
+    "server_side_apply": False,
+    "force_conflicts": False,
 }
+
+
+def get_service_apply_flags(service_name: str) -> dict:
+    """Return the effective server-side apply flags for a service."""
+    flags = DEFAULT_FLAGS | get_service_flags(service_name)
+    return {
+        "server_side_apply": flags["server_side_apply"],
+        "force_conflicts": flags["force_conflicts"],
+    }
+
+
+def resolve_ssa_flags(
+    services: Sequence[str],
+    cli_server_side: bool | None,
+    cli_force_conflicts: bool | None,
+) -> tuple[bool, bool]:
+    """
+    Resolve effective server-side apply settings.
+
+    CLI flags take precedence when explicitly provided (not None).
+    Otherwise, per-service flags are used. If services disagree, raises
+    ClickException asking the user to apply one at a time.
+    """
+    if cli_server_side is not None:
+        return (cli_server_side, bool(cli_force_conflicts))
+
+    flags_per_service = {s: get_service_apply_flags(s) for s in services}
+    ssa_values = {f["server_side_apply"] for f in flags_per_service.values()}
+    fc_values = {f["force_conflicts"] for f in flags_per_service.values()}
+
+    if len(ssa_values) > 1 or len(fc_values) > 1:
+        raise click.ClickException(
+            "Services have conflicting server-side apply settings. "
+            "Apply them one at a time, or use --server-side / --no-server-side to override."
+        )
+
+    return (ssa_values.pop(), fc_values.pop())
 
 
 @dataclass

@@ -9,6 +9,7 @@ import subprocess
 from typing import Iterator, List, Tuple
 from sentry_kube.cli.util import allow_for_all_services, _set_deployment_image_env
 from sentry_kube.cli.render import _render
+from libsentrykube.kube import resolve_ssa_flags
 from libsentrykube.utils import (
     ensure_kubectl,
     macos_notify,
@@ -53,7 +54,11 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
         new_env["KUBECTL_EXTERNAL_DIFF"] = kubectl_external_diff_cmd
 
     child_process = subprocess.Popen(
-        kubectl_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=new_env
+        kubectl_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=new_env,
     )
     stdout, stderr = child_process.communicate()
     child_process_output = stdout.decode("utf-8")
@@ -170,13 +175,17 @@ def _diff(
     ctx,
     services,
     filters,
-    server_side: bool = False,
-    force_conflicts: bool = False,
+    server_side: bool | None = None,
+    force_conflicts: bool | None = None,
     important_diffs_only: bool = False,
     use_canary: bool = False,
     allow_jobs: bool = False,
     deployment_image: str | None = None,
 ) -> Tuple[bool, List[str]]:
+    effective_server_side, effective_force_conflicts = resolve_ssa_flags(
+        services, server_side, force_conflicts
+    )
+
     _set_deployment_image_env(services, deployment_image)
 
     click.echo(f"Rendering services: {', '.join(services)}")
@@ -200,8 +209,8 @@ def _diff(
     return _diff_kubectl(
         ctx=ctx,
         definitions=definitions,
-        server_side=server_side,
-        force_conflicts=force_conflicts,
+        server_side=effective_server_side,
+        force_conflicts=effective_force_conflicts,
         important_diffs_only=important_diffs_only,
     )
 
@@ -214,16 +223,14 @@ def _diff(
 @click.option(
     "--server-side/--no-server-side",
     is_flag=True,
-    default=False,
-    show_default=True,
-    help="Use server-side diff",
+    default=None,
+    help="Use server-side diff (overrides service-level flag)",
 )
 @click.option(
     "--force-conflicts/--no-force-conflicts",
     is_flag=True,
-    default=False,
-    show_default=True,
-    help="Force conflicts resolution during server-side diff",
+    default=None,
+    help="Force conflicts resolution during server-side diff (overrides service-level flag)",
 )
 @click.option(
     "--important-diffs-only",
@@ -248,8 +255,8 @@ def diff(
     ctx,
     services,
     filters,
-    server_side: bool,
-    force_conflicts: bool,
+    server_side: bool | None,
+    force_conflicts: bool | None,
     important_diffs_only: bool,
     use_canary: bool,
     allow_jobs: bool,
@@ -275,4 +282,3 @@ def diff(
         deployment_image=deployment_image,
     )
     ctx.exit(has_diffs)
-
