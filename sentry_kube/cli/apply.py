@@ -71,6 +71,12 @@ DEFAULT_SOAK_TIME_S = 120
     help="Skip canary deploy and wait for soak before applying to everything.",
 )
 @click.option(
+    "--only-canary",
+    is_flag=True,
+    default=False,
+    help="Stop after applying canary, do not proceed to full rollout.",
+)
+@click.option(
     "--allow-jobs",
     "-j",
     is_flag=True,
@@ -95,6 +101,7 @@ def apply(
     soak_time: int,
     skip_monitor_checks: bool,
     soak_only: bool,
+    only_canary: bool,
     allow_jobs: bool,
     deployment_image: str | None = None,
 ):
@@ -169,6 +176,10 @@ def apply(
                         f"are not in error state for customer: {click.style(customer_name, fg='green')}, "
                         f"service: {click.style(service, fg='green')}, proceeding."
                     )
+
+    if only_canary:
+        click.echo("--only-canary set, stopping after canary apply.")
+        return
 
     # Deploy to all if we confirm to proceed
     _apply(
