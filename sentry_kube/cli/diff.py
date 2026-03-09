@@ -64,13 +64,19 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
     child_process_output = stdout.decode("utf-8")
     child_process_error = stderr.decode("utf-8") if stderr else ""
 
-    # Check for errors regardless of stdout content
-    # if child_process.returncode != 0:
-    if child_process_error and child_process.returncode != 0:
-        error_msg = "'kubectl diff' return non-zero code with an error message"
+    # kubectl diff exit codes:
+    #   0 = no differences
+    #   1 = differences found (normal)
+    #   >1 = actual error
+    #   <0 = killed by signal (POSIX)
+    if child_process.returncode not in (0, 1):
+        error_msg = "'kubectl diff' returned an error"
         if child_process_error:
             error_msg += f"\n{child_process_error}"
         raise click.ClickException(error_msg)
+
+    if child_process_error:
+        click.echo(child_process_error, err=True)
 
     return child_process_output
 
