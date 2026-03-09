@@ -67,7 +67,8 @@ def _run_kubectl_diff(kubectl_cmd: List[str], important_diffs_only: bool) -> str
     #   0 = no differences
     #   1 = differences found (normal)
     #   >1 = actual error
-    if child_process.returncode > 1:
+    #   <0 = killed by signal (POSIX)
+    if child_process.returncode not in (0, 1):
         error_msg = "'kubectl diff' returned an error"
         if child_process_error:
             error_msg += f"\n{child_process_error}"
