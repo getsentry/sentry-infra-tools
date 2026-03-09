@@ -12,6 +12,7 @@ from libsentrykube.datadog import check_monitors
 from libsentrykube.datadog import MissingOverallStateException
 from libsentrykube.datadog import MissingDataDogAppKeyException
 from libsentrykube.events import report_event_for_service_list
+from libsentrykube.kube import resolve_ssa_flags
 from libsentrykube.utils import ensure_kubectl, macos_notify
 
 __all__ = ("apply",)
@@ -28,16 +29,14 @@ DEFAULT_SOAK_TIME_S = 120
 @click.option(
     "--server-side/--no-server-side",
     is_flag=True,
-    default=False,
-    show_default=True,
-    help="Use server-side apply",
+    default=None,
+    help="Use server-side apply (overrides service-level flag)",
 )
 @click.option(
     "--force-conflicts/--no-force-conflicts",
     is_flag=True,
-    default=False,
-    show_default=True,
-    help="Force conflicts resolution during server-side apply",
+    default=None,
+    help="Force conflicts resolution during server-side apply (overrides service-level flag)",
 )
 @click.option(
     "--important-diffs-only",
@@ -89,8 +88,8 @@ def apply(
     services,
     yes,
     filters,
-    server_side: bool,
-    force_conflicts: bool,
+    server_side: bool | None,
+    force_conflicts: bool | None,
     important_diffs_only: bool,
     use_canary: bool,
     soak_time: int,
@@ -205,6 +204,16 @@ def _apply(
     The regular "sentry-kube apply" currently has issues when dealing with custom
     resources, so this can be used as a workaround.
     """
+    effective_server_side, effective_force_conflicts = resolve_ssa_flags(
+        services, server_side, force_conflicts
+    )
+
+    if not quiet:
+        mode = "server-side" if effective_server_side else "client-side"
+        if effective_server_side and effective_force_conflicts:
+            mode += " (force-conflicts)"
+        click.echo(f"Using {mode} apply.")
+
     customer_name = ctx.obj.customer_name
     click.echo(f"Rendering services: {', '.join(services)}")
     skip_kinds = ("Job",) if not allow_jobs else None
@@ -219,7 +228,11 @@ def _apply(
     ).encode("utf-8")
 
     has_diffs, _ = _diff_kubectl(
-        ctx, definitions, server_side, force_conflicts, important_diffs_only
+        ctx,
+        definitions,
+        effective_server_side,
+        effective_force_conflicts,
+        important_diffs_only,
     )
     if not has_diffs:
         click.echo("Nothing to apply.")
@@ -238,7 +251,6 @@ def _apply(
     ):
         raise click.Abort()
 
-    # Run "kubectl apply"
     apply_cmd = [
         f"{ensure_kubectl()}",
         "--context",
@@ -247,9 +259,9 @@ def _apply(
         "-f",
         "/dev/stdin",
     ]
-    if server_side:
+    if effective_server_side:
         apply_cmd.append("--server-side")
-    if server_side and force_conflicts:
+    if effective_server_side and effective_force_conflicts:
         apply_cmd.append("--force-conflicts")
 
     child_process = subprocess.Popen(apply_cmd, stdin=subprocess.PIPE)
