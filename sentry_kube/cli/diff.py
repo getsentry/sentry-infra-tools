@@ -192,6 +192,12 @@ def _diff(
         services, server_side, force_conflicts
     )
 
+    if not ctx.obj.quiet_mode:
+        mode = "server-side" if effective_server_side else "client-side"
+        if effective_server_side and effective_force_conflicts:
+            mode += " (force-conflicts)"
+        click.echo(f"Using {mode} apply.")
+
     _set_deployment_image_env(services, deployment_image)
 
     click.echo(f"Rendering services: {', '.join(services)}")

@@ -208,6 +208,12 @@ def _apply(
         services, server_side, force_conflicts
     )
 
+    if not quiet:
+        mode = "server-side" if effective_server_side else "client-side"
+        if effective_server_side and effective_force_conflicts:
+            mode += " (force-conflicts)"
+        click.echo(f"Using {mode} apply.")
+
     customer_name = ctx.obj.customer_name
     click.echo(f"Rendering services: {', '.join(services)}")
     skip_kinds = ("Job",) if not allow_jobs else None
