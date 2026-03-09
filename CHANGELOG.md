@@ -1,3 +1,13 @@
+## 1.29.0
+
+### New Features ✨
+
+- Add service-level server-side apply flags by @mwarkentin in [#217](https://github.com/getsentry/sentry-infra-tools/pull/217)
+
+### Bug Fixes 🐛
+
+- (diff) Handle kubectl diff exit code 1 correctly by @mwarkentin in [#218](https://github.com/getsentry/sentry-infra-tools/pull/218)
+
 ## 1.28.0
 
 ### New Features ✨
