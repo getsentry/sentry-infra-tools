@@ -809,6 +809,10 @@ class SysctlInitContainer(SimpleExtension):
                 "image": "alpine:3.19",
                 "securityContext": {"privileged": True},
                 "command": ["sh", "-c", command],
+                "resources": {
+                    "requests": {"cpu": "50m", "memory": "64Mi"},
+                    "limits": {"memory": "64Mi"},
+                },
             }
         )
 
