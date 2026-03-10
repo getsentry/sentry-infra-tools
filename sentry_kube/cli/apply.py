@@ -4,16 +4,17 @@ from time import sleep
 
 import click
 
-from sentry_kube.cli.util import allow_for_all_services, _set_deployment_image_env
-from sentry_kube.cli.render import _render
-from sentry_kube.cli.diff import _diff_kubectl
-
-from libsentrykube.datadog import check_monitors
-from libsentrykube.datadog import MissingOverallStateException
-from libsentrykube.datadog import MissingDataDogAppKeyException
+from libsentrykube.datadog import (
+    MissingDataDogAppKeyException,
+    MissingOverallStateException,
+    check_monitors,
+)
 from libsentrykube.events import report_event_for_service_list
 from libsentrykube.kube import resolve_ssa_flags
 from libsentrykube.utils import ensure_kubectl, macos_notify
+from sentry_kube.cli.diff import _diff_kubectl
+from sentry_kube.cli.render import _render
+from sentry_kube.cli.util import _set_deployment_image_env, allow_for_all_services
 
 __all__ = ("apply",)
 
@@ -177,9 +178,9 @@ def apply(
                         f"service: {click.style(service, fg='green')}, proceeding."
                     )
 
-    if only_canary:
-        click.echo("--only-canary set, stopping after canary apply.")
-        return
+        if only_canary:
+            click.echo("--only-canary set, stopping after canary apply.")
+            return
 
     # Deploy to all if we confirm to proceed
     _apply(
