@@ -4,16 +4,17 @@ from time import sleep
 
 import click
 
-from sentry_kube.cli.util import allow_for_all_services, _set_deployment_image_env
-from sentry_kube.cli.render import _render
-from sentry_kube.cli.diff import _diff_kubectl
-
-from libsentrykube.datadog import check_monitors
-from libsentrykube.datadog import MissingOverallStateException
-from libsentrykube.datadog import MissingDataDogAppKeyException
+from libsentrykube.datadog import (
+    MissingDataDogAppKeyException,
+    MissingOverallStateException,
+    check_monitors,
+)
 from libsentrykube.events import report_event_for_service_list
 from libsentrykube.kube import resolve_ssa_flags
 from libsentrykube.utils import ensure_kubectl, macos_notify
+from sentry_kube.cli.diff import _diff_kubectl
+from sentry_kube.cli.render import _render
+from sentry_kube.cli.util import _set_deployment_image_env, allow_for_all_services
 
 __all__ = ("apply",)
 
@@ -71,6 +72,12 @@ DEFAULT_SOAK_TIME_S = 120
     help="Skip canary deploy and wait for soak before applying to everything.",
 )
 @click.option(
+    "--only-canary",
+    is_flag=True,
+    default=False,
+    help="Stop after applying canary, do not proceed to full rollout.",
+)
+@click.option(
     "--allow-jobs",
     "-j",
     is_flag=True,
@@ -95,6 +102,7 @@ def apply(
     soak_time: int,
     skip_monitor_checks: bool,
     soak_only: bool,
+    only_canary: bool,
     allow_jobs: bool,
     deployment_image: str | None = None,
 ):
@@ -169,6 +177,10 @@ def apply(
                         f"are not in error state for customer: {click.style(customer_name, fg='green')}, "
                         f"service: {click.style(service, fg='green')}, proceeding."
                     )
+
+        if only_canary:
+            click.echo("--only-canary set, stopping after canary apply.")
+            return
 
     # Deploy to all if we confirm to proceed
     _apply(
