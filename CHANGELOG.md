@@ -1,3 +1,9 @@
+## 1.29.1
+
+### Bug Fixes 🐛
+
+- Add resource requests/limits to init-sysctl containers by @mwarkentin in [#220](https://github.com/getsentry/sentry-infra-tools/pull/220)
+
 ## 1.29.0
 
 ### New Features ✨
