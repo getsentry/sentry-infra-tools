@@ -1,3 +1,13 @@
+## 1.29.2
+
+### Bug Fixes 🐛
+
+- Add resource requests/limits to init-geoip container by @mwarkentin in [#221](https://github.com/getsentry/sentry-infra-tools/pull/221)
+
+### Internal Changes 🔧
+
+- (apply) Add only-canary flag for apply by @dmajere in [#219](https://github.com/getsentry/sentry-infra-tools/pull/219)
+
 ## 1.29.1
 
 ### Bug Fixes 🐛
