@@ -722,6 +722,10 @@ class GeoIPInitContainer(SimpleExtension):
                 "runAsUser": 65534,
                 "runAsGroup": 65534,
             },
+            "resources": {
+                "requests": {"cpu": "10m", "memory": "64Mi"},
+                "limits": {"memory": "64Mi"},
+            },
             "volumeMounts": [json.loads(GeoIPVolumeMount().run())],
         }
         return json.dumps(res)
