@@ -418,7 +418,6 @@ class ValuesOf(SimpleExtension):
     e.g. you want to reference a service that is not enabled for the current cluster).
     """
 
-    @cache
     @pass_context
     def run(
         self,
@@ -428,7 +427,17 @@ class ValuesOf(SimpleExtension):
         external: bool = False,
     ) -> dict:
         record_dependency(service_name)
+        return self._run_cached(context, service_name, cluster_name, external)
 
+    @cache
+    @pass_context
+    def _run_cached(
+        self,
+        context,
+        service_name: str,
+        cluster_name: str = "default",
+        external: bool = False,
+    ) -> dict:
         customer_name = context["customer"]["id"]
 
         # Handle sentry4sentry id being in the s4s directory

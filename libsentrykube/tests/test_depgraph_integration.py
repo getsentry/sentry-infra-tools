@@ -71,6 +71,37 @@ class TestValuesOfRecordsDependency:
         deps = get_dependencies()
         assert deps == {"service_a": {"k8s/services/external_svc"}}
 
+    @patch("libsentrykube.ext.render_service_values")
+    def test_values_of_records_dependency_despite_cache(
+        self,
+        mock_render,
+    ):
+        """
+        Two different services calling values_of with identical args must
+        both get their dependency recorded, even though @cache returns a
+        cached result for the second call.
+        """
+        mock_render.return_value = {"some": "values"}
+
+        ValuesOf.install("values_of")
+        ext = ValuesOf()
+        context = MagicMock()
+        context.parent = {"customer": {"id": "customer1"}}
+
+        start_tracking("service_a")
+        ext.run(context, "shared_dep")
+        stop_tracking()
+
+        start_tracking("service_b")
+        ext.run(context, "shared_dep")
+        stop_tracking()
+
+        deps = get_dependencies()
+        assert deps == {
+            "service_a": {"shared_dep"},
+            "service_b": {"shared_dep"},
+        }
+
 
 class TestRenderTemplatesTracking:
     def setup_method(self):
