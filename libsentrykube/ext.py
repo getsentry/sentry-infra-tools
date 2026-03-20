@@ -15,6 +15,7 @@ from kubernetes.client import AppsV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
+from libsentrykube.depgraph import record_dependency
 from libsentrykube.kube import (
     render_service_values,
 )
@@ -426,6 +427,8 @@ class ValuesOf(SimpleExtension):
         cluster_name: str = "default",
         external: bool = False,
     ) -> dict:
+        record_dependency(service_name)
+
         customer_name = context["customer"]["id"]
 
         # Handle sentry4sentry id being in the s4s directory
