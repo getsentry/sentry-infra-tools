@@ -196,10 +196,17 @@ def upload_plaintext_to_google_secret(
         payload = response.payload.data.decode("utf-8")
         data = json.loads(payload)
     except exceptions.NotFound:
-        print(
-            f"ERROR: The secret `{secret_id}` should be created with Terragrunt before running this script."
-        )
-        return
+        # Check if the secret itself exists (but has no versions yet)
+        try:
+            secret_name = f"projects/{project_id}/secrets/{secret_id}"
+            client.get_secret(request={"name": secret_name})
+            # Secret exists but has no versions — proceed with empty data
+            print(f"Secret `{secret_id}` exists but has no versions, creating first version.")
+        except exceptions.NotFound:
+            print(
+                f"ERROR: The secret `{secret_id}` should be created with Terragrunt before running this script."
+            )
+            return
 
     merged_data = merge_secrets(data, users, f"Secret Manager secret `{secret_id}`", update_existing)
 
@@ -334,10 +341,17 @@ def upload_userlist_to_google_secret(
         payload = response.payload.data.decode("utf-8")
         data = json.loads(payload)
     except exceptions.NotFound:
-        print(
-            f"ERROR: The secret `{secret_id}` should be created with Terragrunt before running this script."
-        )
-        return
+        # Check if the secret itself exists (but has no versions yet)
+        try:
+            secret_name = f"projects/{project_id}/secrets/{secret_id}"
+            client.get_secret(request={"name": secret_name})
+            # Secret exists but has no versions — proceed with empty data
+            print(f"Secret `{secret_id}` exists but has no versions, creating first version.")
+        except exceptions.NotFound:
+            print(
+                f"ERROR: The secret `{secret_id}` should be created with Terragrunt before running this script."
+            )
+            return
 
     # decode the userlist
     encoded_userlist = data["userlist"]
