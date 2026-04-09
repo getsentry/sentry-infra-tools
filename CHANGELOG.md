@@ -1,3 +1,13 @@
+## 1.30.0
+
+### Internal Changes 🔧
+
+- (iap) Handle non-gke clusters better by @rgibert in [#226](https://github.com/getsentry/sentry-infra-tools/pull/226)
+
+### Other
+
+- Create the first revision of the secret if one doesn't exist yet by @BojanOro in [#225](https://github.com/getsentry/sentry-infra-tools/pull/225)
+
 ## 1.29.2
 
 ### Bug Fixes 🐛
