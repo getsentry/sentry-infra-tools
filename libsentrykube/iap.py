@@ -25,15 +25,11 @@ def _get_cluster_credentials(context: str) -> None:
     # example context: gke_internal-sentry_us-central1-b_zdpwkxst
     parts = context.split("_")
     if len(parts) != 4 or parts[0] != "gke":
-        logger.debug(
-            "Invalid context format: got %d parts, prefix=%s",
-            len(parts),
-            parts[0] if parts else "",
+        logger.info(
+            "Context %s is not in gke_PROJECT_REGION_CLUSTER format, skipping automatic credential fetch",
+            context,
         )
-        raise click.ClickException(
-            f"Invalid GKE context format: {context}\n"
-            "Expected format: gke_PROJECT_REGION_CLUSTER"
-        )
+        return
 
     _, project, region, cluster = parts
     logger.debug(
@@ -132,7 +128,8 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
             if server is None:
                 logger.debug("Context still not found after credential fetch")
                 raise click.ClickException(
-                    f"Failed to add context {context} to kubeconfig after credential fetch"
+                    f"Context '{context}' not found in kubeconfig and could not be fetched automatically.\n"
+                    "Ensure the context exists in your kubeconfig or is in gke_PROJECT_REGION_CLUSTER format."
                 )
             else:
                 logger.debug(
