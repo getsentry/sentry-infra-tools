@@ -1,3 +1,9 @@
+## 1.30.1
+
+### Internal Changes 🔧
+
+- (dd) Don't report events for non-prod regions by @rgibert in [#227](https://github.com/getsentry/sentry-infra-tools/pull/227)
+
 ## 1.30.0
 
 ### Internal Changes 🔧
