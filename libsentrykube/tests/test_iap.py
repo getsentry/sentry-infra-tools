@@ -32,6 +32,20 @@ dummy_kube_config_non_dns = json.dumps(
     }
 )
 
+dummy_kube_config_non_gke = json.dumps(
+    {
+        "clusters": [
+            {
+                "name": "kind-local-cluster",
+                "cluster": {
+                    "certificate-authority-data": "secure-data",
+                    "server": "https://127.0.0.1:6443",
+                },
+            }
+        ]
+    }
+)
+
 
 @mock.patch("builtins.open", new_callable=mock.mock_open, read_data=dummy_kube_config)
 @mock.patch("os.path.isfile", return_value=True)
@@ -46,15 +60,13 @@ def test_ensure_iap_tunnel(mock_isdir, mock_isfile, mock_open) -> None:
 
 
 def test_get_cluster_credentials_invalid_context_format() -> None:
-    with pytest.raises(click.ClickException) as exc_info:
-        _get_cluster_credentials("invalid-context")
-    assert "Invalid GKE context format" in str(exc_info.value)
+    # Non-GKE format: should return silently without raising
+    _get_cluster_credentials("invalid-context")
 
 
 def test_get_cluster_credentials_non_gke_context() -> None:
-    with pytest.raises(click.ClickException) as exc_info:
-        _get_cluster_credentials("eks_project_region_cluster")
-    assert "Invalid GKE context format" in str(exc_info.value)
+    # Non-GKE prefix: should return silently without raising
+    _get_cluster_credentials("eks_project_region_cluster")
 
 
 @mock.patch("libsentrykube.iap.subprocess.run")
@@ -98,7 +110,9 @@ def test_ensure_iap_tunnel_empty_kubeconfig(
     # After credential fetch, still empty - should raise
     with pytest.raises(click.ClickException) as exc_info:
         ensure_iap_tunnel(mock_ctx)
-    assert "Failed to add context" in str(exc_info.value)
+    assert "not found in kubeconfig and could not be fetched automatically" in str(
+        exc_info.value
+    )
     mock_get_creds.assert_called_once()
 
 
@@ -116,7 +130,9 @@ def test_ensure_iap_tunnel_no_clusters_key(
 
     with pytest.raises(click.ClickException) as exc_info:
         ensure_iap_tunnel(mock_ctx)
-    assert "Failed to add context" in str(exc_info.value)
+    assert "not found in kubeconfig and could not be fetched automatically" in str(
+        exc_info.value
+    )
     mock_get_creds.assert_called_once()
 
 
@@ -134,7 +150,9 @@ def test_ensure_iap_tunnel_null_clusters_value(
 
     with pytest.raises(click.ClickException) as exc_info:
         ensure_iap_tunnel(mock_ctx)
-    assert "Failed to add context" in str(exc_info.value)
+    assert "not found in kubeconfig and could not be fetched automatically" in str(
+        exc_info.value
+    )
     mock_get_creds.assert_called_once()
 
 
@@ -156,3 +174,19 @@ def test_ensure_iap_tunnel_non_dns_endpoint_triggers_refetch(
         ensure_iap_tunnel(mock_ctx)
     assert "Failed to configure DNS endpoint" in str(exc_info.value)
     mock_get_creds.assert_called_once()
+
+
+@mock.patch(
+    "builtins.open", new_callable=mock.mock_open, read_data=dummy_kube_config_non_gke
+)
+@mock.patch("os.path.isfile", return_value=True)
+@mock.patch("os.path.isdir", return_value=True)
+@mock.patch("libsentrykube.iap.KUBE_CONFIG_PATH", "/tmp/kubeconfig")
+def test_ensure_iap_tunnel_non_gke_context_in_kubeconfig(
+    mock_isdir, mock_isfile, mock_open
+) -> None:
+    """Non-GKE context already in kubeconfig should succeed without credential fetch."""
+    mock_ctx = mock.Mock()
+    mock_ctx.obj.context_name = "kind-local-cluster"
+    result = ensure_iap_tunnel(mock_ctx)
+    assert result == "/tmp/kubeconfig"

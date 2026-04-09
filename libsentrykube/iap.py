@@ -111,12 +111,14 @@ def ensure_iap_tunnel(ctx: click.core.Context) -> str:
         if server is None:
             logger.debug("Context not found, need to fetch credentials")
             return True
-        if not server.endswith("gke.goog"):
-            logger.debug(
-                "Server %s does not end with gke.goog, need to re-fetch with --dns-endpoint",
-                server,
-            )
-            return True
+        parts = context.split("_")
+        if len(parts) == 4 and parts[0] == "gke":
+            if not server.endswith("gke.goog"):
+                logger.debug(
+                    "Server %s does not end with gke.goog, need to re-fetch with --dns-endpoint",
+                    server,
+                )
+                return True
         return False
 
     if _needs_credential_fetch():
