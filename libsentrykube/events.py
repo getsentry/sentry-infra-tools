@@ -68,11 +68,6 @@ def _markdown_text(text: str) -> str:
     return f"%%%\n{text}\n%%%"
 
 
-def _get_sentry_region(region_name: str) -> str:
-    _, region_config = get_region_config(Config(), region_name)
-    return region_config.sentry_region
-
-
 def report_terragrunt_event(
     cli_args: str,
     extra_tags: Optional[dict] = None,
@@ -90,7 +85,11 @@ def report_terragrunt_event(
     else:
         raise RuntimeError("Unable to determine what slice you're running in.")
 
-    sentry_region = Config().silo_regions[region].sentry_region
+    region_data = Config().silo_regions[region]
+    if region_data.stage != "production":
+        return
+
+    sentry_region = region_data.sentry_region
 
     user = getpass.getuser()
 
@@ -126,7 +125,10 @@ def report_event_for_service(
     quiet: bool = False,
 ) -> None:
     user = getpass.getuser()
-    sentry_region = _get_sentry_region(customer_name)
+    _, region_config = get_region_config(Config(), customer_name)
+    if region_config.stage != "production":
+        return
+    sentry_region = region_config.sentry_region
     command_line = " ".join(sys.argv)
 
     # Determine service_name from the manifest prefix
