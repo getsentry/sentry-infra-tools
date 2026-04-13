@@ -153,15 +153,6 @@ Valid regions for stage '{stage}':
 """
             )
 
-        if customer_config.stage != stage:
-            die(
-                f"""Region '{customer_name}' has stage '{customer_config.stage}', not '{stage}'.
-
-Valid regions for stage '{stage}':
-{newline_customers}
-"""
-            )
-
         if not quiet:
             click.echo(f"Operating for customer {customer_name}.")
 
