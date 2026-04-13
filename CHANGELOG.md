@@ -1,3 +1,9 @@
+## 1.30.2
+
+### Internal Changes 🔧
+
+- Don't enforce stage match for non-CI work by @rgibert in [#228](https://github.com/getsentry/sentry-infra-tools/pull/228)
+
 ## 1.30.1
 
 ### Internal Changes 🔧
