@@ -15,6 +15,7 @@ from kubernetes.client import AppsV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
+from libsentrykube.depgraph import record_dependency
 from libsentrykube.kube import (
     render_service_values,
 )
@@ -417,9 +418,20 @@ class ValuesOf(SimpleExtension):
     e.g. you want to reference a service that is not enabled for the current cluster).
     """
 
-    @cache
     @pass_context
     def run(
+        self,
+        context,
+        service_name: str,
+        cluster_name: str = "default",
+        external: bool = False,
+    ) -> dict:
+        record_dependency(service_name)
+        return self._run_cached(context, service_name, cluster_name, external)
+
+    @cache
+    @pass_context
+    def _run_cached(
         self,
         context,
         service_name: str,

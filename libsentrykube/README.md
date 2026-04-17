@@ -110,6 +110,100 @@ If the file is absent or a flag is omitted, the default value is used.
    conflicting SSA settings (without a CLI override), an error is raised
    asking you to process them one at a time.
 
+## Service Dependency Graph
+
+Services can reference other services' values at render time using the
+`values_of()` Jinja macro. For example, a getsentry template might call
+`{{ values_of("pgbouncer") }}` to read pgbouncer's merged configuration.
+This creates a hidden dependency: a change to pgbouncer's values can
+affect getsentry's rendered output.
+
+The dependency graph module (`libsentrykube/depgraph.py`) instruments
+`values_of()` to automatically track these cross-service references during
+rendering, then exposes the resulting graph for CI and tooling use.
+
+### How it works
+
+When a service's templates are rendered via `render_templates()`, the
+rendering pipeline:
+
+1. Calls `start_tracking(service_name)` before rendering begins.
+2. Each `values_of("other_service")` call inside the templates triggers
+   `record_dependency("other_service")`, which records the edge
+   `service_name -> other_service`.
+3. Calls `stop_tracking()` after rendering completes.
+
+Tracking is thread-safe (each thread tracks its own "current service" via
+thread-local storage, edges are collected in a global lock-protected set)
+and is a no-op when no tracking session is active, so there is zero overhead
+during normal `sentry-kube render` / `sentry-kube apply` workflows.
+
+### CLI usage
+
+The `sentry-kube depgraph` command renders all services across all
+regions and clusters, collects the dependency edges, and outputs a JSON
+graph:
+
+```shell
+sentry-kube depgraph
+sentry-kube depgraph --stage production
+```
+
+Output format:
+
+```json
+{
+  "dependencies": {
+    "getsentry": ["pgbouncer", "seer"],
+    "service-a": ["service-b"]
+  },
+  "reverse_dependencies": {
+    "pgbouncer": ["getsentry"],
+    "seer": ["getsentry"],
+    "service-b": ["service-a"]
+  }
+}
+```
+
+- `dependencies`: for each service, lists the services it pulls values
+  from (i.e., "getsentry depends on pgbouncer").
+- `reverse_dependencies`: the inverse -- for each service, lists the
+  services that would be affected if it changes (i.e., "if pgbouncer
+  changes, getsentry is affected").
+
+### Programmatic usage
+
+```python
+from libsentrykube.depgraph import DependencyGraph, build_dependency_graph
+
+# Build the graph by rendering everything
+graph = build_dependency_graph(stage="production")
+
+# Query forward dependencies (what does getsentry depend on?)
+graph.dependencies_of("getsentry")  # {"pgbouncer", "seer"}
+
+# Query reverse dependencies (what is affected if pgbouncer changes?)
+graph.dependents_of("pgbouncer")  # {"getsentry"}
+
+# Serialize to JSON-friendly dict
+data = graph.to_dict()
+
+# Restore from serialized dict
+restored = DependencyGraph.from_dict(data)
+```
+
+### Limitations
+
+- Only `values_of()` dependencies are tracked. Other cross-service
+  references via `json_file()` or `md5file()` (which take arbitrary
+  workspace-relative paths) are not yet instrumented.
+- Dependencies can vary per region/cluster due to conditional Jinja logic.
+  The graph produced by `build_dependency_graph()` is the union across all
+  rendered contexts, which is conservative (it may include edges that only
+  apply to specific regions).
+- The graph must be rebuilt when templates or cluster configurations
+  change, since dependencies are discovered at render time.
+
 ## Running tests
 
 From root of repo:
