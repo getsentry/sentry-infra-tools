@@ -1,12 +1,9 @@
 from typing import Sequence
 
-from setuptools import find_packages
-from setuptools import setup
+from setuptools import find_packages, setup
 
 macros = [
     "iap_service=sentry_kube.ext:IAPService",
-    "pgbouncer_sidecar=sentry_kube.ext:PGBouncerSidecar",
-    "pgbouncer_init_sidecar=sentry_kube.ext:PGBouncerInitSidecar",
     "xds_configmap_from=sentry_kube.ext:XDSConfigMapFrom",
     "raise=libsentrykube.ext:RaiseExtension",
     "json_file=libsentrykube.ext:JsonFile",
@@ -18,7 +15,6 @@ macros = [
     "md5template=libsentrykube.ext:Md5Template",
     "ha_pod_affinity=libsentrykube.ext:HAPodAffinity",
     "internal_service=libsentrykube.ext:InternalService",
-    "envoy_sidecar=libsentrykube.ext:EnvoySidecar",
     "envoy_native_sidecar=libsentrykube.ext:EnvoyNativeSidecar",
     "geoip_volume=libsentrykube.ext:GeoIPVolume",
     "geoip_volumemount=libsentrykube.ext:GeoIPVolumeMount",
@@ -27,9 +23,6 @@ macros = [
     "deep_merge=libsentrykube.ext:DeepMerge",
     "sysctl_initcontainer=libsentrykube.ext:SysctlInitContainer",
     "xds_eds_cluster_config=libsentrykube.ext:XDSEDSClusterConfig",
-    "xds_proxy_sidecar=libsentrykube.ext:XDSProxySidecar",
-    "xds_proxy_initcontainer=libsentrykube.ext:XDSProxyInitContainer",
-    "xds_proxy_volume=libsentrykube.ext:XDSProxyVolume",
     "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
     "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
     "get_var=libsentrykube.ext:GetVar",

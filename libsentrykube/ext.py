@@ -19,9 +19,9 @@ from libsentrykube.kube import (
     render_service_values,
 )
 from libsentrykube.service import (
-    get_deployment_image,
     KUBE_API_TIMEOUT_DEFAULT,
     KUBE_API_TIMEOUT_ENV_NAME,
+    get_deployment_image,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -437,110 +437,6 @@ class ValuesOf(SimpleExtension):
         )
 
 
-class EnvoySidecar(SimpleExtension):
-    """
-    Creates a sidecar container using Envoy which is required
-    for any outbound communincation between your Pod and another Pod.
-    This requires an Envoy cluster name which is used to fetch the
-    required data from the xDS service to construct listeners and clusters.
-    An optional preStopWait argument is to control how long the Envoy
-    container waits to shut down before exiting. This is needed to coordinate
-    with other containers in the Pod for a graceful shutdown. Envoy should
-    ideally shut down after everything else. To be used as a container within
-    pod.spec.containers. See xDS for more information.
-    """
-
-    def run(
-        self,
-        cluster: str,
-        concurrency: int = 1,
-        preStopWait: int = 1,
-        xds_address: str = XDS_DEFAULT_ADDRESS,
-        admin: Optional[dict] = None,
-        datadog: Optional[dict] = None,
-        draining: Optional[dict] = None,
-        resources: Optional[dict] = None,
-        version: str = "1.16.0",
-        custom_config: Optional[dict] = None,
-        custom_pre_stop_command: Optional[str] = None,
-        livenessProbe: Optional[dict] = None,
-        readinessProbe: Optional[dict] = None,
-        cds_refresh_delay: int = 3600,
-        lds_refresh_delay: int = 3600,
-    ):
-        if draining:
-            draining = {
-                "strategy": "immediate",
-                "time": 300,
-                "drain_listeners": False,
-                **draining,
-            }
-        else:
-            draining = {}
-
-        pre_stop_command = f"/bin/sleep {preStopWait}"
-        if draining.get("drain_listeners"):
-            if admin:
-                pre_stop_command = (
-                    "wget -q -O- --post-data '' "
-                    f"http://127.0.0.1:{admin['port']}/drain_listeners?graceful ; "
-                    f"{pre_stop_command}"
-                )
-            else:
-                raise ValueError(
-                    "'admin' configuration is required for draining to work"
-                )
-
-        if custom_pre_stop_command:
-            pre_stop_command = custom_pre_stop_command
-
-        custom_config_str = yaml.dump(custom_config) if custom_config else None
-        res = {
-            "image": f"envoyproxy/envoy-alpine:v{version}",
-            "name": "envoy",
-            "args": [
-                "/bin/sh",
-                "-ec",
-                jinja2.Template(ENVOY_ENTRYPOINT)
-                .render(
-                    concurrency=concurrency,
-                    cluster=cluster,
-                    xds_address=xds_address,
-                    admin=admin,
-                    datadog=datadog,
-                    draining=draining,
-                    custom_config=custom_config_str,
-                    cds_refresh_delay=cds_refresh_delay,
-                    lds_refresh_delay=lds_refresh_delay,
-                )
-                .strip(),
-            ],
-            # Starting from version 1.15.0, the default user inside the Envoy container
-            # is "envoy", not "root". However, without "root" the entrypoint script can
-            # only write to "/tmp", plus there might be issues with binding to unix
-            # sockets. Setting ENVOY_UID to 0 reverts that change in behavior.
-            "env": [{"name": "ENVOY_UID", "value": "0"}],
-            "lifecycle": {
-                "preStop": {"exec": {"command": ["/bin/sh", "-c", pre_stop_command]}}
-            },
-            "resources": {
-                "requests": {"cpu": "15m", "memory": "20Mi"},
-                "limits": {"memory": "50Mi"},
-            },
-        }
-
-        if resources:
-            res["resources"] = resources
-
-        if livenessProbe:
-            res["livenessProbe"] = livenessProbe
-
-        if readinessProbe:
-            res["readinessProbe"] = readinessProbe
-
-        return json.dumps(res)
-
-
 class EnvoyNativeSidecar(SimpleExtension):
     """
     Creates a native sidecar container using Envoy, defined as an init container
@@ -750,37 +646,6 @@ class ServiceAccount(SimpleExtension):
         )
 
 
-class XDSProxySidecar(SimpleExtension):
-    def run(self, cluster: str, preStopWait: int = 1, concurrency: int = 1):
-        return json.dumps(
-            {
-                "image": "us.gcr.io/sentryio/xds:20200921",
-                "name": "xds-proxy",
-                "command": [
-                    "/bin/sh",
-                    "-ec",
-                    XDS_SIDECAR_ENTRYPOINT.format(
-                        cluster=cluster, concurrency=concurrency
-                    ).strip(),
-                ],
-                "lifecycle": {
-                    "preStop": {
-                        "exec": {
-                            "command": ["/bin/sh", "-c", f"/bin/sleep {preStopWait}"]
-                        }
-                    }
-                },
-                "resources": {
-                    "requests": {"cpu": "15m", "memory": "20Mi"},
-                    "limits": {"cpu": "1000m", "memory": "50Mi"},
-                },
-                "volumeMounts": [
-                    {"name": "envoy-bootstrap-data", "mountPath": "/data"}
-                ],
-            }
-        )
-
-
 class DeepMerge(SimpleExtension):
     """
     Merges one dictionary into another.
@@ -819,32 +684,6 @@ class SysctlInitContainer(SimpleExtension):
                 },
             }
         )
-
-
-class XDSProxyInitContainer(SimpleExtension):
-    def run(self, cluster: str):
-        return json.dumps(
-            {
-                "image": "us.gcr.io/sentryio/xds:20200921",
-                "name": "bootstrap-xds-proxy",
-                "command": [
-                    "sh",
-                    "-ec",
-                    XDS_BOOTSTRAP_ENTRYPOINT.format(cluster=cluster).strip(),
-                ],
-                "volumeMounts": [
-                    {"name": "envoy-bootstrap-data", "mountPath": "/data"}
-                ],
-            }
-        )
-
-
-class XDSProxyVolume(SimpleExtension):
-    def run(self, json_encode=True):
-        volume = {"name": "envoy-bootstrap-data", "emptyDir": {}}
-        if json_encode:
-            return json.dumps(volume)
-        return volume
 
 
 class XDSEDSClusterConfig(SimpleExtension):
