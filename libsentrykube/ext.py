@@ -102,18 +102,6 @@ exec envoy -c /etc/envoy/envoy.yaml \
 
 XDS_DEFAULT_ADDRESS = "xds.sentry-system.svc.cluster.local."
 
-XDS_BASE_ARGS = f"""
--upstream-proxy {XDS_DEFAULT_ADDRESS} -bootstrap-data /data/ -service-node $(hostname) -service-cluster {{cluster}}
-""".strip()  # noqa: E501
-
-XDS_SIDECAR_ENTRYPOINT = f"""
-xds -listen 127.0.0.1:49150 -mode proxy -concurrency {{concurrency}} {XDS_BASE_ARGS}
-"""  # noqa: E501
-
-XDS_BOOTSTRAP_ENTRYPOINT = f"""
-xds -mode bootstrap {XDS_BASE_ARGS}
-"""  # noqa: E501
-
 
 class SimpleExtension(Extension):
     key = None
