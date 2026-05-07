@@ -82,6 +82,7 @@ def debug(ctx, container, image, namespace, privileged, quiet):
     cmd += [
         "debug",
         "-it",
+        f"--namespace={namespace}",
         f"--image={image}",
         f"--target={container}",
         f"--custom={tmp.name}",
