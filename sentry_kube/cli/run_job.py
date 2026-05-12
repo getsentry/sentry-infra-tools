@@ -44,7 +44,13 @@ def run_job(ctx, job_name, arg, kwarg, service_name, yes, quiet):
             cluster_name,
             # Skip GKE CRDs which don't work with our
             # client-side kubernetes API management
-            skip_kinds=("BackendConfig", "ManagedCertificate", "VerticalPodAutoscaler"),
+            skip_kinds=(
+                "BackendConfig",
+                "ManagedCertificate",
+                "VerticalPodAutoscaler",
+                "SecretProviderClass",
+                "SecretSync",
+            ),
             kind_matches=("Job",),
             name_matches=(job_name,),
             extra_args=arg,
