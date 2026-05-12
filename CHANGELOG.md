@@ -1,3 +1,14 @@
+## 1.30.3
+
+### Bug Fixes 🐛
+
+- (debug) Pass namespace to kubectl command by @Dav1dde in [#230](https://github.com/getsentry/sentry-infra-tools/pull/230)
+
+### Other
+
+- Adds more custom types to be excluded in run-job. by @ellisonmarks in [#231](https://github.com/getsentry/sentry-infra-tools/pull/231)
+- rm(ext): Remove unused macro by @dmajere in [#229](https://github.com/getsentry/sentry-infra-tools/pull/229)
+
 ## 1.30.2
 
 ### Internal Changes 🔧
