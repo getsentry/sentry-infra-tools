@@ -1,5 +1,6 @@
 import logging
 import os
+import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Sequence
@@ -31,7 +32,7 @@ def _materialize_service_worker(
 
 def _render_multithreaded(
     resources_to_render, split_by_kind: bool, workers: int
-) -> bool:
+) -> tuple[bool, list[tuple[str, str, str, Exception]]]:
     work_items = []
     for resource in resources_to_render:
         logger.debug(
@@ -54,31 +55,48 @@ def _render_multithreaded(
             )
 
     changes_made = False
+    errors: list[tuple[str, str, str, Exception]] = []
+    future_to_work = {}
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = [
-            executor.submit(
+        for customer_name, service_name, cluster_name in work_items:
+            future = executor.submit(
                 _materialize_service_worker,
                 customer_name,
                 service_name,
                 cluster_name,
                 split_by_kind,
             )
-            for customer_name, service_name, cluster_name in work_items
-        ]
+            future_to_work[future] = (customer_name, service_name, cluster_name)
 
-        for future in as_completed(futures):
-            customer_name, cluster_name, service_name, changed = future.result()
+        for future in as_completed(future_to_work):
+            cust, svc, clust = future_to_work[future]
+            try:
+                _, _, _, changed = future.result()
+            except Exception as exc:
+                errors.append((cust, clust, svc, exc))
+                click.echo(
+                    f"Service FAILED: {cust} : {clust} : {svc} — {type(exc).__name__}: {exc}",
+                    err=True,
+                )
+                logger.debug(
+                    f"Traceback for {cust} : {clust} : {svc}:\n{traceback.format_exc()}"
+                )
+                continue
             if changed:
                 changes_made = True
-                click.echo(
-                    f"Service materialized: {customer_name} : {cluster_name} : {service_name}"
-                )
+                click.echo(f"Service materialized: {cust} : {clust} : {svc}")
             else:
-                click.echo(
-                    f"Service unchanged: {customer_name} : {cluster_name} : {service_name}"
-                )
+                click.echo(f"Service unchanged: {cust} : {clust} : {svc}")
 
-    return changes_made
+    if errors:
+        click.echo(
+            f"\n{len(errors)} service(s) failed to render:",
+            err=True,
+        )
+        for cust, clust, svc, err in errors:
+            click.echo(f"  - {cust} : {clust} : {svc} — {err}", err=True)
+
+    return changes_made, errors
 
 
 @click.command()
@@ -143,9 +161,12 @@ def render_services(
     changes_made = False
 
     if multithreaded:
-        changes_made = _render_multithreaded(
+        changes_made, errors = _render_multithreaded(
             resources_to_render, split_by_kind, workers
         )
+
+        if errors:
+            raise SystemExit(1)
 
         if changes_made:
             click.echo(
@@ -153,6 +174,7 @@ def render_services(
             )
             exit(-1)
     else:
+        errors = []
         for resource in resources_to_render:
             logger.debug(
                 f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
@@ -170,21 +192,39 @@ def render_services(
 
             for s in services_to_materialize:
                 logger.debug(f"Materializing service: {s}")
-                changed = materialize(
-                    customer_name=resource.customer_name,
-                    service_name=s,
-                    cluster_name=resource.cluster_name,
-                    split_by_kind=split_by_kind,
-                )
+                cust = resource.customer_name
+                clust = resource.cluster_name
+                try:
+                    changed = materialize(
+                        customer_name=cust,
+                        service_name=s,
+                        cluster_name=clust,
+                        split_by_kind=split_by_kind,
+                    )
+                except Exception as exc:
+                    errors.append((cust, clust, s, exc))
+                    click.echo(
+                        f"Service FAILED: {cust} : {clust} : {s} — {type(exc).__name__}: {exc}",
+                        err=True,
+                    )
+                    logger.debug(
+                        f"Traceback for {cust} : {clust} : {s}:\n{traceback.format_exc()}"
+                    )
+                    continue
                 if changed:
                     changes_made = True
-                    click.echo(
-                        f"Service materialized: {resource.customer_name} : {resource.cluster_name} : {s}"
-                    )
+                    click.echo(f"Service materialized: {cust} : {clust} : {s}")
                 else:
-                    click.echo(
-                        f"Service unchanged: {resource.customer_name} : {resource.cluster_name} : {s}"
-                    )
+                    click.echo(f"Service unchanged: {cust} : {clust} : {s}")
+
+        if errors:
+            click.echo(
+                f"\n{len(errors)} service(s) failed to render:",
+                err=True,
+            )
+            for cust, clust, svc, err in errors:
+                click.echo(f"  - {cust} : {clust} : {svc} — {err}", err=True)
+            raise SystemExit(1)
 
         if changes_made:
             click.echo(
