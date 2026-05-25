@@ -1,3 +1,9 @@
+## 0.31.0
+
+### Bug Fixes 🐛
+
+- Make render_services exit non-zero on materialization failures by @mwarkentin in [#232](https://github.com/getsentry/sentry-infra-tools/pull/232)
+
 ## 1.30.3
 
 ### Bug Fixes 🐛
