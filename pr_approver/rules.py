@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Callable, Iterable
 from functools import reduce
 from enum import Enum
@@ -79,3 +80,44 @@ def assess_service_registry_change(
             return ApprovalDecision.DECLINE
 
     return ApprovalDecision.APPROVE
+
+
+DATA_DISK_SIZE_LINE = re.compile(r"^(?P<indent>\s*)data_disk_size\s*=\s*(?P<value>\d+)\s*$")
+
+
+def assess_data_disk_size_increase(
+    file_path: Path, base: Path, pr: Path
+) -> ApprovalDecision:
+    """
+    Approve terragrunt HCL changes that consist exclusively of strict
+    increases to ``data_disk_size`` values. Any other modification,
+    file creation, deletion, or a decrease in disk size requires
+    manual review.
+    """
+    base_file = base / file_path
+    pr_file = pr / file_path
+    if not base_file.exists() or not pr_file.exists():
+        return ApprovalDecision.DECLINE
+
+    base_lines = base_file.read_text().splitlines()
+    pr_lines = pr_file.read_text().splitlines()
+    if len(base_lines) != len(pr_lines):
+        return ApprovalDecision.DECLINE
+
+    saw_increase = False
+    for base_line, pr_line in zip(base_lines, pr_lines):
+        if base_line == pr_line:
+            continue
+
+        base_match = DATA_DISK_SIZE_LINE.match(base_line)
+        pr_match = DATA_DISK_SIZE_LINE.match(pr_line)
+        if not base_match or not pr_match:
+            return ApprovalDecision.DECLINE
+        if base_match.group("indent") != pr_match.group("indent"):
+            return ApprovalDecision.DECLINE
+        if int(pr_match.group("value")) <= int(base_match.group("value")):
+            return ApprovalDecision.DECLINE
+
+        saw_increase = True
+
+    return ApprovalDecision.APPROVE if saw_increase else ApprovalDecision.IGNORE
