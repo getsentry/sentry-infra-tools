@@ -23,7 +23,7 @@ from libsentrykube.utils import set_workspace_root_start, workspace_root
 CLUSTER = {
     "id": "cluster1",
     "services": [],
-    "helm": {"services": ["k8s/helm_services/my_helm_service"]},
+    "helm": {"services": ["k8s/helm_services/my-helm-service"]},
 }
 
 CONFIGURATION = {
@@ -73,7 +73,7 @@ HELM_TEMPLATE_OUTPUT = """\
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my_helm_service
+  name: my-helm-service
 spec:
   replicas: 3
 ---
@@ -81,14 +81,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: my_helm_service
+  name: my-helm-service
   namespace: other
 """
 
 
 @pytest.fixture
 def helm_workspace(tmp_path: Path) -> Iterator[Path]:
-    service_dir = tmp_path / "k8s" / "helm_services" / "my_helm_service"
+    service_dir = tmp_path / "k8s" / "helm_services" / "my-helm-service"
     os.makedirs(service_dir / "chart" / "templates")
     with open(service_dir / "_helm.yaml", "w") as f:
         f.write(safe_dump(HELM_CONFIG))
@@ -129,7 +129,7 @@ def helm_workspace(tmp_path: Path) -> Iterator[Path]:
         os.environ["SENTRY_KUBE_CONFIG_FILE"] = start_config_file
 
 
-def _release(name="my_helm_service", namespace="default", chart=None):
+def _release(name="my-helm-service", namespace="default", chart=None):
     return HelmRelease(
         name=name,
         chart=chart
@@ -150,10 +150,10 @@ class TestSplitReleaseManifests:
     def test_split_and_naming(self):
         files = _split_release_manifests(_release(), HELM_TEMPLATE_OUTPUT)
         assert sorted(files) == [
-            "default-deployment-my_helm_service.yaml",
-            "other-service-my_helm_service.yaml",
+            "default-deployment-my-helm-service.yaml",
+            "other-service-my-helm-service.yaml",
         ]
-        deployment = safe_load(files["default-deployment-my_helm_service.yaml"])
+        deployment = safe_load(files["default-deployment-my-helm-service.yaml"])
         assert deployment["kind"] == "Deployment"
         assert deployment["spec"]["replicas"] == 3
 
@@ -177,7 +177,7 @@ class TestSplitReleaseManifests:
 
 class TestFetchChart:
     def test_local_chart(self, helm_workspace):
-        service_path = helm_workspace / "k8s" / "helm_services" / "my_helm_service"
+        service_path = helm_workspace / "k8s" / "helm_services" / "my-helm-service"
         chart = HelmChart(
             name="chart",
             repo=None,
@@ -297,7 +297,7 @@ class TestMaterializeManifests:
             / "k8s"
             / "materialized_helm_manifests"
             / "cluster1"
-            / "my_helm_service"
+            / "my-helm-service"
         )
 
     def test_materialize_and_rerun_is_stable(self, helm_workspace):
@@ -315,20 +315,20 @@ class TestMaterializeManifests:
             return HELM_TEMPLATE_OUTPUT
 
         with patch("libsentrykube.helm._run_helm", side_effect=fake_template):
-            changed = materialize_manifests("customer1", "my_helm_service", "cluster1")
+            changed = materialize_manifests("customer1", "my-helm-service", "cluster1")
         assert changed is True
 
         output_dir = self._materialized_dir(helm_workspace)
         assert sorted(p.name for p in output_dir.iterdir()) == [
-            "default-deployment-my_helm_service.yaml",
-            "other-service-my_helm_service.yaml",
+            "default-deployment-my-helm-service.yaml",
+            "other-service-my-helm-service.yaml",
         ]
         contents = {p.name: p.read_text() for p in output_dir.iterdir() if p.is_file()}
 
         # Deterministic helm invocation: release name, pinned kube version,
         # CRDs included and the merged values passed in order.
         cmd = commands[0]
-        assert cmd[1] == "my_helm_service"
+        assert cmd[1] == "my-helm-service"
         assert cmd[cmd.index("--namespace") + 1] == "default"
         assert "--include-crds" in cmd
         assert cmd[cmd.index("--kube-version") + 1]
@@ -340,7 +340,7 @@ class TestMaterializeManifests:
         # Re-running with no input change touches nothing and is
         # byte-identical.
         with patch("libsentrykube.helm._run_helm", side_effect=fake_template):
-            changed = materialize_manifests("customer1", "my_helm_service", "cluster1")
+            changed = materialize_manifests("customer1", "my-helm-service", "cluster1")
         assert changed is False
         assert {
             p.name: p.read_text() for p in output_dir.iterdir() if p.is_file()
@@ -352,12 +352,12 @@ class TestMaterializeManifests:
         (output_dir / "default-deployment-stale.yaml").write_text("kind: Deployment\n")
 
         with patch("libsentrykube.helm._run_helm", return_value=HELM_TEMPLATE_OUTPUT):
-            changed = materialize_manifests("customer1", "my_helm_service", "cluster1")
+            changed = materialize_manifests("customer1", "my-helm-service", "cluster1")
         assert changed is True
         assert not (output_dir / "default-deployment-stale.yaml").exists()
 
     def test_multiple_releases_get_subdirectories(self, helm_workspace):
-        service_dir = helm_workspace / "k8s" / "helm_services" / "my_helm_service"
+        service_dir = helm_workspace / "k8s" / "helm_services" / "my-helm-service"
         with open(service_dir / "_helm.yaml", "w") as f:
             f.write(
                 safe_dump(
@@ -378,7 +378,7 @@ class TestMaterializeManifests:
             return f"kind: Deployment\nmetadata:\n  name: {cmd[1]}\n"
 
         with patch("libsentrykube.helm._run_helm", side_effect=fake_template):
-            changed = materialize_manifests("customer1", "my_helm_service", "cluster1")
+            changed = materialize_manifests("customer1", "my-helm-service", "cluster1")
         assert changed is True
         assert release_names == [
             ("production", "relay"),
@@ -395,13 +395,13 @@ class TestMaterializeManifests:
             side_effect=HelmException("template error"),
         ):
             with pytest.raises(HelmException, match="template error"):
-                materialize_manifests("customer1", "my_helm_service", "cluster1")
+                materialize_manifests("customer1", "my-helm-service", "cluster1")
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="helm binary not available")
 class TestMaterializeManifestsIntegration:
     def test_local_chart_end_to_end(self, helm_workspace):
-        changed = materialize_manifests("customer1", "my_helm_service", "cluster1")
+        changed = materialize_manifests("customer1", "my-helm-service", "cluster1")
         assert changed is True
 
         output_dir = (
@@ -409,9 +409,9 @@ class TestMaterializeManifestsIntegration:
             / "k8s"
             / "materialized_helm_manifests"
             / "cluster1"
-            / "my_helm_service"
+            / "my-helm-service"
         )
-        deployment_file = output_dir / "default-deployment-my_helm_service.yaml"
+        deployment_file = output_dir / "default-deployment-my-helm-service.yaml"
         deployment = safe_load(deployment_file.read_text())
         # The merged sentry-kube values must win over the chart defaults
         # and the real scheduling constraints must be visible.
@@ -422,6 +422,6 @@ class TestMaterializeManifestsIntegration:
 
         content = deployment_file.read_text()
         assert (
-            materialize_manifests("customer1", "my_helm_service", "cluster1") is False
+            materialize_manifests("customer1", "my-helm-service", "cluster1") is False
         )
         assert deployment_file.read_text() == content
