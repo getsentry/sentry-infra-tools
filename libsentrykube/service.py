@@ -589,6 +589,29 @@ def build_helm_materialized_directory(
     return path
 
 
+def build_helm_manifests_directory(
+    region_name: str, cluster_name: str, service_name: str, release: str | None = None
+) -> Path:
+    """
+    Returns the directory where the fully rendered manifests of a helm
+    service (`helm template` output) are materialized.
+    """
+    config = Config().silo_regions[region_name].k8s_config
+
+    kube_config_dir = workspace_root() / config.root
+
+    path = (
+        kube_config_dir
+        / config.materialized_helm_manifests
+        / cluster_name
+        / service_name
+    )
+    if release:
+        path = path / release
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def build_materialized_path(
     customer_name: str, cluster_name: str, service_name: str
 ) -> Path:
