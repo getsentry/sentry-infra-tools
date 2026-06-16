@@ -480,26 +480,6 @@ class SysctlInitContainer(SimpleExtension):
         )
 
 
-class XDSEDSClusterConfig(SimpleExtension):
-    """
-    Generate the XDS EDS config for use in an envoy cluster definition.
-    """
-
-    def run(self, service_name: str, refresh_delay: str = "1s") -> str:
-        return json.dumps(
-            {
-                "service_name": service_name,
-                "eds_config": {
-                    "api_config_source": {
-                        "api_type": "REST",
-                        "cluster_names": ["xds_cluster"],
-                        "refresh_delay": refresh_delay,
-                    },
-                },
-            }
-        )
-
-
 class RaiseExtension(SimpleExtension):
     """
     Raise a custorm exception from Jinja template
