@@ -11,7 +11,6 @@ default_macros = [
     "md5template=libsentrykube.ext:Md5Template",
     "ha_pod_affinity=libsentrykube.ext:HAPodAffinity",
     "internal_service=libsentrykube.ext:InternalService",
-    "envoy_native_sidecar=libsentrykube.ext:EnvoyNativeSidecar",
     "geoip_volume=libsentrykube.ext:GeoIPVolume",
     "geoip_volumemount=libsentrykube.ext:GeoIPVolumeMount",
     "geoip_initcontainer=libsentrykube.ext:GeoIPInitContainer",
