@@ -7,7 +7,6 @@ from functools import cache
 from typing import Any, Dict, List, Optional
 
 import click
-import jinja2
 import yaml
 from jinja2.ext import Extension
 from jinja2.utils import pass_context
@@ -31,76 +30,6 @@ from libsentrykube.utils import (
     md5_fileobj,
     workspace_root,
 )
-
-ENVOY_ENTRYPOINT = """
-cat << EOF > /etc/envoy/envoy.yaml
-
-{% if custom_config -%}
-{{ custom_config }}
-{% else %}
-static_resources:
-  clusters:
-  - name: xds_cluster
-    type: LOGICAL_DNS
-    dns_lookup_family: V4_ONLY
-    connect_timeout: 5s
-    load_assignment:
-      cluster_name: xds_cluster
-      endpoints:
-      - lb_endpoints:
-        - endpoint:
-            address:
-              socket_address:
-                address: {{ xds_address }}
-                port_value: 80
-
-dynamic_resources:
-  lds_config:
-    api_config_source:
-      api_type: REST
-      cluster_names: [xds_cluster]
-      refresh_delay: {{ lds_refresh_delay }}s
-      request_timeout: 10s
-
-  cds_config:
-    api_config_source:
-      api_type: REST
-      cluster_names: [xds_cluster]
-      refresh_delay: {{ cds_refresh_delay }}s
-      request_timeout: 10s
-{% if admin %}
-admin:
-  access_log_path: "/dev/null"
-  address:
-    socket_address:
-      address: {{ admin.address }}
-      port_value: {{ admin.port }}
-{% endif -%}
-{% if datadog %}
-stats_sinks:
-  - name: envoy.dog_statsd
-    typed_config:
-      "@type": type.googleapis.com/envoy.config.metrics.v2.DogStatsdSink
-      prefix: envoy
-      address:
-        socket_address:
-          address: {{ datadog.address }}
-          port_value: {{ datadog.port }}
-{% endif -%}
-{% endif -%}
-EOF
-
-exec envoy -c /etc/envoy/envoy.yaml \
-     --concurrency {{ concurrency }} \
-    {% if draining -%}
-     --drain-strategy {{ draining.strategy }} \
-     --drain-time-s {{ draining.time }} \
-    {% endif -%}
-     --service-node $(hostname) \
-     --service-cluster {{ cluster }}
-"""  # noqa: E501
-
-XDS_DEFAULT_ADDRESS = "xds.sentry-system.svc.cluster.local."
 
 
 class SimpleExtension(Extension):
