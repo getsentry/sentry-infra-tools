@@ -17,7 +17,6 @@ default_macros = [
     "serviceaccount=libsentrykube.ext:ServiceAccount",
     "deep_merge=libsentrykube.ext:DeepMerge",
     "sysctl_initcontainer=libsentrykube.ext:SysctlInitContainer",
-    "xds_eds_cluster_config=libsentrykube.ext:XDSEDSClusterConfig",
     "get_var=libsentrykube.ext:GetVar",
     "render_external=libsentrykube.ext:RenderExternal",
 ]

@@ -4,7 +4,6 @@ from setuptools import find_packages, setup
 
 macros = [
     "iap_service=sentry_kube.ext:IAPService",
-    "xds_configmap_from=sentry_kube.ext:XDSConfigMapFrom",
     "raise=libsentrykube.ext:RaiseExtension",
     "json_file=libsentrykube.ext:JsonFile",
     "values_of=libsentrykube.ext:ValuesOf",
@@ -21,7 +20,6 @@ macros = [
     "serviceaccount=libsentrykube.ext:ServiceAccount",
     "deep_merge=libsentrykube.ext:DeepMerge",
     "sysctl_initcontainer=libsentrykube.ext:SysctlInitContainer",
-    "xds_eds_cluster_config=libsentrykube.ext:XDSEDSClusterConfig",
     "service_registry_annotations=libsentrykube.ext:ServiceRegistryAnnotations",
     "service_registry_labels=libsentrykube.ext:ServiceRegistryLabels",
     "get_var=libsentrykube.ext:GetVar",
