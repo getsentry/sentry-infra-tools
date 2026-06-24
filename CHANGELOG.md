@@ -1,3 +1,14 @@
+## 1.32.0
+
+### New Features ✨
+
+- (ext) Add cronjob_image macro for SHA-pinned CronJob deploys by @oioki in [#237](https://github.com/getsentry/sentry-infra-tools/pull/237)
+
+### Internal Changes 🔧
+
+- Remove XDS envoy extensions by @oioki in [#236](https://github.com/getsentry/sentry-infra-tools/pull/236)
+- Remove EnvoyNativeSidecar extension by @oioki in [#235](https://github.com/getsentry/sentry-infra-tools/pull/235)
+
 ## 1.31.0
 
 - No documented changes.
