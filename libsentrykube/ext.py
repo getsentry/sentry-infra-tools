@@ -10,7 +10,7 @@ import click
 import yaml
 from jinja2.ext import Extension
 from jinja2.utils import pass_context
-from kubernetes.client import AppsV1Api
+from kubernetes.client import AppsV1Api, BatchV1Api
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.customer import get_machine_type_list
@@ -94,6 +94,42 @@ class StatefulSetImage(SimpleExtension):
                 return default
             raise
         for c in stateful_set.spec.template.spec.containers:
+            if c.name == container:
+                return c.image
+        return default
+
+
+class CronJobImage(SimpleExtension):
+    """
+    Query production Kubernetes cluster for CronJob image. If a CronJob
+    and container name combo exists, use this value found. If not, fall
+    back to default value. This should be paired with any CronJob that is
+    pushed out through by GoCD to make sure the image tag is correct. To be
+    used as the value to spec.jobTemplate.spec.template.spec.containers[*].image.
+    """
+
+    def run(self, cron_job_name: str, container: str, default: str):
+        if os.getenv("KUBERNETES_OFFLINE"):
+            return default
+
+        if "DEPLOYMENT_IMAGE" in os.environ:
+            return os.getenv("DEPLOYMENT_IMAGE")
+
+        namespace, name = kube_extract_namespace(cron_job_name)
+        client = kube_get_client()
+        try:
+            cron_job = BatchV1Api(client).read_namespaced_cron_job(
+                name,
+                namespace,
+                _request_timeout=os.getenv(
+                    KUBE_API_TIMEOUT_ENV_NAME, KUBE_API_TIMEOUT_DEFAULT
+                ),
+            )
+        except ApiException as e:
+            if e.status == 404:
+                return default
+            raise
+        for c in cron_job.spec.job_template.spec.template.spec.containers:
             if c.name == container:
                 return c.image
         return default

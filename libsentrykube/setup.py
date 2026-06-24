@@ -6,6 +6,7 @@ default_macros = [
     "values_of=libsentrykube.ext:ValuesOf",
     "deployment_image=libsentrykube.ext:DeploymentImage",
     "statefulset_image=libsentrykube.ext:StatefulSetImage",
+    "cronjob_image=libsentrykube.ext:CronJobImage",
     "machine_info=libsentrykube.ext:MachineType",
     "md5file=libsentrykube.ext:Md5File",
     "md5template=libsentrykube.ext:Md5Template",
