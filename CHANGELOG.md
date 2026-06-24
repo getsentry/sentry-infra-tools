@@ -1,3 +1,9 @@
+## 1.32.1
+
+### Bug Fixes 🐛
+
+- (ext) Register cronjob_image entry point in the released package by @oioki in [#238](https://github.com/getsentry/sentry-infra-tools/pull/238)
+
 ## 1.32.0
 
 ### New Features ✨
