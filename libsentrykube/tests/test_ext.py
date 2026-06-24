@@ -435,3 +435,68 @@ def test_render_external_class_not_found():
 
     with pytest.raises(ValueError):
         render_external.run("libsentrykube.tests.test_ext.NotAnExternalMacro", context)
+
+
+def _make_cron_job(containers):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        spec=SimpleNamespace(
+            job_template=SimpleNamespace(
+                spec=SimpleNamespace(
+                    template=SimpleNamespace(
+                        spec=SimpleNamespace(containers=containers)
+                    )
+                )
+            )
+        )
+    )
+
+
+def _cronjob_image_ext():
+    from libsentrykube.ext import CronJobImage
+
+    CronJobImage.install("cronjob_image")
+    return CronJobImage()
+
+
+def test_cronjob_image_offline_returns_default(monkeypatch):
+    monkeypatch.setenv("KUBERNETES_OFFLINE", "1")
+    ext = _cronjob_image_ext()
+    assert ext.run("sentry-system/x-cronjob", "x", "img:latest") == "img:latest"
+
+
+def test_cronjob_image_env_override(monkeypatch):
+    monkeypatch.delenv("KUBERNETES_OFFLINE", raising=False)
+    monkeypatch.setenv("DEPLOYMENT_IMAGE", "img:override")
+    ext = _cronjob_image_ext()
+    assert ext.run("sentry-system/x-cronjob", "x", "img:latest") == "img:override"
+
+
+def test_cronjob_image_returns_live_image(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.delenv("KUBERNETES_OFFLINE", raising=False)
+    monkeypatch.delenv("DEPLOYMENT_IMAGE", raising=False)
+
+    cron_job = _make_cron_job([SimpleNamespace(name="x", image="img:abc123")])
+    with patch("libsentrykube.ext.kube_get_client"), patch(
+        "libsentrykube.ext.BatchV1Api"
+    ) as api:
+        api.return_value.read_namespaced_cron_job.return_value = cron_job
+        ext = _cronjob_image_ext()
+        assert ext.run("sentry-system/x-cronjob", "x", "img:latest") == "img:abc123"
+
+
+def test_cronjob_image_missing_returns_default(monkeypatch):
+    from kubernetes.client.rest import ApiException
+
+    monkeypatch.delenv("KUBERNETES_OFFLINE", raising=False)
+    monkeypatch.delenv("DEPLOYMENT_IMAGE", raising=False)
+
+    with patch("libsentrykube.ext.kube_get_client"), patch(
+        "libsentrykube.ext.BatchV1Api"
+    ) as api:
+        api.return_value.read_namespaced_cron_job.side_effect = ApiException(status=404)
+        ext = _cronjob_image_ext()
+        assert ext.run("sentry-system/missing", "x", "img:latest") == "img:latest"
