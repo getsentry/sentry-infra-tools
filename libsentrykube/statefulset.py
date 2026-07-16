@@ -17,6 +17,15 @@ ANNOTATION_SKIP = "sts-reconciler.sentry.io/skip"
 TERMINAL_STATES = {"Failed", "DryRun"}
 ACTIVE_STATES = {"Blocked", "Patching", "AwaitingConvergence", "Deleting"}
 
+RESIZE_EVENT_REASONS = {
+    "VolumeResizeFailed",
+    "ExternalExpanding",
+    "Resizing",
+    "FileSystemResizeRequired",
+    "FileSystemResizeSuccessful",
+    "VolumeResizeSuccessful",
+}
+
 
 @dataclass
 class PVCInfo:
@@ -47,6 +56,56 @@ def get_apps_api():
 
 def get_core_api():
     return client.CoreV1Api(kube_get_client())
+
+
+def get_pvc_warning_events(
+    namespace: str, pvc_names: list[str], since_minutes: int = 30
+) -> dict[str, list[str]]:
+    """Fetch recent warning events for the given PVCs, filtered to resize-related reasons."""
+    core_api = get_core_api()
+    result: dict[str, list[str]] = {}
+    for pvc_name in pvc_names:
+        try:
+            events = core_api.list_namespaced_event(
+                namespace=namespace,
+                field_selector=f"involvedObject.name={pvc_name},involvedObject.kind=PersistentVolumeClaim,type=Warning",
+            )
+        except ApiException:
+            continue
+
+        messages = []
+        for event in events.items:
+            reason = event.reason or ""
+            if reason not in RESIZE_EVENT_REASONS:
+                continue
+            age = ""
+            event_time = event.last_timestamp or event.event_time
+            if event_time:
+                if hasattr(event_time, "replace"):
+                    try:
+                        delta = datetime.now(timezone.utc) - event_time.replace(
+                            tzinfo=timezone.utc
+                        )
+                        total_sec = int(delta.total_seconds())
+                        if total_sec < 0 or total_sec > since_minutes * 60:
+                            continue
+                        if total_sec < 60:
+                            age = f"{total_sec}s ago"
+                        else:
+                            age = f"{total_sec // 60}m ago"
+                    except (ValueError, TypeError):
+                        pass
+
+            count = event.count or 1
+            msg = event.message or ""
+            count_str = f" (x{count})" if count > 1 else ""
+            age_str = f" [{age}]" if age else ""
+            messages.append(f"{reason}{count_str}{age_str}: {msg}")
+
+        if messages:
+            result[pvc_name] = messages
+
+    return result
 
 
 def read_statefulset(namespace: str, name: str) -> StatefulSetInfo:
@@ -302,6 +361,16 @@ def print_status(sts_info: StatefulSetInfo, pvcs: list[PVCInfo]) -> None:
                 f"  {pvc.name:<30} {pvc.spec_storage:<10} "
                 f"{spec_match:<10} {vac_display:<20} {pvc_state:<15}"
             )
+
+        pvc_events = get_pvc_warning_events(
+            sts_info.namespace, [p.name for p in pvcs]
+        )
+        if pvc_events:
+            click.echo()
+            click.secho("  Events:", bold=True)
+            for pvc_name, messages in pvc_events.items():
+                for msg in messages:
+                    click.secho(f"    {pvc_name}: {msg}", fg="yellow")
     elif sts_info.desired_annotation:
         click.secho(
             "State:       pending (annotation set, controller has not started)",
@@ -390,6 +459,8 @@ def monitor_reconciliation(
 ) -> bool:
     last_state = None
     last_pvc_states: dict[str, str] = {}
+    seen_event_keys: set[str] = set()
+    polls_since_event_check = 0
 
     click.echo()
     while True:
@@ -442,6 +513,19 @@ def monitor_reconciliation(
             if pvc_state != last_pvc_states.get(pvc_name):
                 _log(f"  {pvc_name}: {pvc_state}")
                 last_pvc_states[pvc_name] = pvc_state
+
+        polls_since_event_check += 1
+        if polls_since_event_check >= 3:
+            polls_since_event_check = 0
+            pvc_names = list(pvc_statuses.keys())
+            if pvc_names:
+                pvc_events = get_pvc_warning_events(namespace, pvc_names, since_minutes=5)
+                for pvc_name, messages in pvc_events.items():
+                    for msg in messages:
+                        event_key = f"{pvc_name}:{msg}"
+                        if event_key not in seen_event_keys:
+                            seen_event_keys.add(event_key)
+                            _log(click.style(f"  {pvc_name}: {msg}", fg="yellow"))
 
         time.sleep(poll_interval)
 
