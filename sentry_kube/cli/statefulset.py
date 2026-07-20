@@ -86,15 +86,44 @@ def resize(ctx, namespace, sts_name, claim_name, storage, vac, batch_size, yes, 
     sts_info = read_statefulset(namespace, sts_name)
 
     if sts_info.desired_annotation:
-        click.secho(
-            f"A reconcile is already in progress for {namespace}/{sts_name}.",
-            fg="red",
-        )
-        click.echo(
-            "Use 'sentry-kube statefulset cancel' to stop it first, "
-            "or 'sentry-kube statefulset status' to check progress."
-        )
-        sys.exit(1)
+        status = sts_info.status_annotation or {}
+        state = status.get("state", "")
+
+        if state == "Failed":
+            reason = status.get("reason", "unknown")
+            click.secho(
+                f"Previous reconcile failed for {namespace}/{sts_name}:",
+                fg="red",
+            )
+            click.echo(f"  Reason: {reason}\n")
+
+            if not yes and not click.confirm("Clear failed state and retry?"):
+                raise click.Abort()
+
+            remove_annotations(namespace, sts_name)
+            click.echo("Cleared failed annotations.")
+        elif state in ("Blocked", "Patching", "AwaitingConvergence", "Deleting"):
+            click.secho(
+                f"A reconcile is already active for {namespace}/{sts_name} "
+                f"(state: {state}).",
+                fg="red",
+            )
+            click.echo(
+                "Use 'sentry-kube statefulset cancel' to stop it first, "
+                "or 'sentry-kube statefulset status' to check progress."
+            )
+            sys.exit(1)
+        else:
+            click.secho(
+                f"A reconcile annotation exists for {namespace}/{sts_name} "
+                f"(state: {state or 'pending'}).",
+                fg="red",
+            )
+            click.echo(
+                "Use 'sentry-kube statefulset cancel' to stop it first, "
+                "or 'sentry-kube statefulset status' to check progress."
+            )
+            sys.exit(1)
 
     if sts_info.skip_annotation:
         click.secho(
@@ -134,7 +163,8 @@ def resize(ctx, namespace, sts_name, claim_name, storage, vac, batch_size, yes, 
 
     if storage:
         for pvc in pvcs:
-            validate_storage_expansion(pvc.spec_storage, storage)
+            if pvc.spec_storage != storage:
+                validate_storage_expansion(pvc.spec_storage, storage)
 
     print_resize_preview(sts_info, pvcs, claim_name, storage, vac, batch_size)
 
