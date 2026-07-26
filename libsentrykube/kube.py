@@ -29,6 +29,7 @@ from kubernetes.client.rest import ApiException
 import kubernetes.client
 from yaml import dump_all, safe_dump, safe_dump_all, safe_load, safe_load_all
 
+from libsentrykube.depgraph import start_tracking, stop_tracking
 from libsentrykube.loader import load_macros
 from libsentrykube.service import (
     MergeConfig,
@@ -309,6 +310,26 @@ def render_services(
 
 
 def render_templates(
+    customer_name,
+    service_name,
+    cluster_name="default",
+    skip_kinds: Optional[Tuple] = None,
+    filters: Optional[List[str]] = None,
+) -> str:
+    start_tracking(service_name)
+    try:
+        return _render_templates_inner(
+            customer_name,
+            service_name,
+            cluster_name,
+            skip_kinds,
+            filters,
+        )
+    finally:
+        stop_tracking()
+
+
+def _render_templates_inner(
     customer_name,
     service_name,
     cluster_name="default",

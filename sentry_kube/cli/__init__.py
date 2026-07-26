@@ -114,6 +114,7 @@ Get kubed.
     if ctx.invoked_subcommand in (
         "datadog-log-terragrunt",
         "datadog-log",
+        "depgraph",
         "get-regions",
         "get-clusters",
     ):
