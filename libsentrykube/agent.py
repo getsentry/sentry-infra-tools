@@ -1,18 +1,19 @@
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from langchain.agents import create_agent
-from langchain_core.tools import BaseTool
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
 from libsentrykube.prompts import SYSTEM_PROMPT, USER_PROMPT
+from libsentrykube.tools import build_tools
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "anthropic/claude-sonnet-4.5"
 
-# The tools the agent is given. Add them here.
-TOOLS: list[BaseTool] = []
+# Tool results can be whole rendered manifests. Only show the head of one.
+MAX_REPORTED_RESULT = 400
 
 
 class AgentConfigurationError(Exception):
@@ -46,11 +47,35 @@ def load_agent_config() -> AgentConfig:
     )
 
 
+@dataclass(frozen=True)
+class AgentStep:
+    """
+    Something the agent did, reported as it happens.
+
+    `kind` is one of:
+      - "thought": the agent reasoned about what to do next.
+      - "tool_call": the agent decided to call a tool. `tool` and `tool_input`
+        are set.
+      - "tool_result": a tool returned. `tool` and `detail` are set.
+    """
+
+    kind: str
+    message: str
+    tool: Optional[str] = None
+    tool_input: Optional[dict] = None
+    detail: Optional[str] = None
+
+
+# Called once per step while the agent works. See `AgentStep`.
+StepCallback = Callable[[AgentStep], None]
+
+
 def run_agent(
     query: str,
     region: str,
     cluster: Optional[str] = None,
     config: Optional[AgentConfig] = None,
+    on_step: Optional[StepCallback] = None,
 ) -> str:
     """
     Runs `query` through a langchain agent and returns the agent's response.
@@ -58,6 +83,9 @@ def run_agent(
     The prompts live in `libsentrykube.prompts`. `region` and `cluster` describe
     what the operator is working on and are rendered into the user prompt.
     `config` defaults to being read from the environment.
+
+    If `on_step` is given it is called with an `AgentStep` every time the agent
+    reasons or uses a tool, so callers can show progress while it works.
     """
     if config is None:
         config = load_agent_config()
@@ -70,15 +98,75 @@ def run_agent(
 
     agent = create_agent(
         model=model,
-        tools=TOOLS,
+        tools=build_tools(region, cluster),
         system_prompt=SYSTEM_PROMPT,
     )
 
     content = USER_PROMPT.format(query=query, region=region, cluster=cluster or "")
+    payload = {"messages": [{"role": "user", "content": content}]}
 
-    result = agent.invoke({"messages": [{"role": "user", "content": content}]})
+    if on_step is None:
+        result = agent.invoke(payload)
+        return _message_text(result["messages"][-1])
 
-    return _message_text(result["messages"][-1])
+    # Streaming so we can report each step. The last message the model produces
+    # is the answer, so hold on to it as we go.
+    answer = ""
+    for update in agent.stream(payload, stream_mode="updates"):
+        for node_update in update.values():
+            if not isinstance(node_update, dict):
+                continue
+            for message in node_update.get("messages", []):
+                text = _message_text(message)
+                for step in _steps_for(message, text):
+                    on_step(step)
+                if isinstance(message, AIMessage) and text:
+                    answer = text
+
+    return answer
+
+
+def _steps_for(message: Any, text: str) -> list[AgentStep]:
+    """
+    Turns one streamed message into the steps worth reporting.
+
+    A single model message can both reason and call tools, so this can return
+    more than one step.
+    """
+    steps = []
+
+    if isinstance(message, ToolMessage):
+        result = text.strip()
+        # The line count is of the whole result, so it stays honest even
+        # though `detail` only carries the head of it.
+        lines = len(result.splitlines())
+        detail = result
+        if len(detail) > MAX_REPORTED_RESULT:
+            detail = detail[:MAX_REPORTED_RESULT] + "..."
+        return [
+            AgentStep(
+                kind="tool_result",
+                message=f"{message.name} returned {lines} line(s)",
+                tool=message.name,
+                detail=detail,
+            )
+        ]
+
+    if isinstance(message, AIMessage):
+        if text.strip():
+            steps.append(AgentStep(kind="thought", message=text.strip()))
+        for call in message.tool_calls or []:
+            args = call.get("args") or {}
+            steps.append(
+                AgentStep(
+                    kind="tool_call",
+                    message=f"Calling {call['name']}",
+                    tool=call["name"],
+                    tool_input=args,
+                )
+            )
+
+    return steps
 
 
 def _message_text(message: Any) -> str:
