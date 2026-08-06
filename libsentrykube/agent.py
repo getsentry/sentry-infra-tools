@@ -1,14 +1,18 @@
 import os
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 from langchain.agents import create_agent
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
+from libsentrykube.prompts import SYSTEM_PROMPT, USER_PROMPT
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "anthropic/claude-sonnet-4.5"
+
+# The tools the agent is given. Add them here.
+TOOLS: list[BaseTool] = []
 
 
 class AgentConfigurationError(Exception):
@@ -44,16 +48,16 @@ def load_agent_config() -> AgentConfig:
 
 def run_agent(
     query: str,
-    system_prompt: Optional[str] = None,
-    tools: Optional[Sequence[BaseTool]] = None,
+    region: str,
+    cluster: Optional[str] = None,
     config: Optional[AgentConfig] = None,
 ) -> str:
     """
     Runs `query` through a langchain agent and returns the agent's response.
 
-    `system_prompt` and `tools` are optional so callers can shape the agent
-    without this module knowing about them. `config` defaults to being read from
-    the environment.
+    The prompts live in `libsentrykube.prompts`. `region` and `cluster` describe
+    what the operator is working on and are rendered into the user prompt.
+    `config` defaults to being read from the environment.
     """
     if config is None:
         config = load_agent_config()
@@ -66,11 +70,13 @@ def run_agent(
 
     agent = create_agent(
         model=model,
-        tools=list(tools) if tools else [],
-        system_prompt=system_prompt,
+        tools=TOOLS,
+        system_prompt=SYSTEM_PROMPT,
     )
 
-    result = agent.invoke({"messages": [{"role": "user", "content": query}]})
+    content = USER_PROMPT.format(query=query, region=region, cluster=cluster or "")
+
+    result = agent.invoke({"messages": [{"role": "user", "content": content}]})
 
     return _message_text(result["messages"][-1])
 

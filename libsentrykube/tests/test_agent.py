@@ -5,11 +5,13 @@ import pytest
 from libsentrykube.agent import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
+    TOOLS,
     AgentConfig,
     AgentConfigurationError,
     load_agent_config,
     run_agent,
 )
+from libsentrykube.prompts import SYSTEM_PROMPT, USER_PROMPT
 
 
 def test_load_agent_config_defaults(monkeypatch) -> None:
@@ -45,7 +47,6 @@ def _mock_agent(content) -> MagicMock:
 
 def test_run_agent() -> None:
     config = AgentConfig(api_key="TEST_KEY", base_url="https://example.com/v1")
-    tool = MagicMock()
 
     with (
         patch("libsentrykube.agent.ChatOpenAI") as mock_model,
@@ -55,8 +56,8 @@ def test_run_agent() -> None:
 
         response = run_agent(
             "what is 6 times 7?",
-            system_prompt="be terse",
-            tools=[tool],
+            region="us",
+            cluster="default",
             config=config,
         )
 
@@ -69,12 +70,60 @@ def test_run_agent() -> None:
     )
     mock_create_agent.assert_called_once_with(
         model=mock_model.return_value,
-        tools=[tool],
-        system_prompt="be terse",
+        tools=TOOLS,
+        system_prompt=SYSTEM_PROMPT,
     )
     mock_create_agent.return_value.invoke.assert_called_once_with(
-        {"messages": [{"role": "user", "content": "what is 6 times 7?"}]}
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": USER_PROMPT.format(
+                        query="what is 6 times 7?", region="us", cluster="default"
+                    ),
+                }
+            ]
+        }
     )
+
+
+def test_run_agent_query_region_and_cluster_reach_the_prompt() -> None:
+    """Whatever the prompt looks like, the three values must be rendered into it."""
+    with (
+        patch("libsentrykube.agent.ChatOpenAI"),
+        patch("libsentrykube.agent.create_agent") as mock_create_agent,
+    ):
+        mock_create_agent.return_value = _mock_agent("ok")
+
+        run_agent(
+            "why is it down?",
+            region="s4s",
+            cluster="primary",
+            config=AgentConfig(api_key="TEST_KEY"),
+        )
+
+    content = mock_create_agent.return_value.invoke.call_args[0][0]["messages"][0][
+        "content"
+    ]
+    assert "why is it down?" in content
+    assert "s4s" in content
+    assert "primary" in content
+
+
+def test_run_agent_without_cluster() -> None:
+    """cluster is optional and must not leak a `None` into the prompt."""
+    with (
+        patch("libsentrykube.agent.ChatOpenAI"),
+        patch("libsentrykube.agent.create_agent") as mock_create_agent,
+    ):
+        mock_create_agent.return_value = _mock_agent("ok")
+
+        run_agent("hi", region="us", config=AgentConfig(api_key="TEST_KEY"))
+
+    content = mock_create_agent.return_value.invoke.call_args[0][0]["messages"][0][
+        "content"
+    ]
+    assert "None" not in content
 
 
 def test_run_agent_loads_config_from_env(monkeypatch) -> None:
@@ -87,13 +136,13 @@ def test_run_agent_loads_config_from_env(monkeypatch) -> None:
     ):
         mock_create_agent.return_value = _mock_agent("hello")
 
-        assert run_agent("hi") == "hello"
+        assert run_agent("hi", region="us") == "hello"
 
     mock_model.assert_called_once_with(
         model=DEFAULT_MODEL, base_url=DEFAULT_BASE_URL, api_key="ENV_KEY"
     )
     mock_create_agent.assert_called_once_with(
-        model=mock_model.return_value, tools=[], system_prompt=None
+        model=mock_model.return_value, tools=TOOLS, system_prompt=SYSTEM_PROMPT
     )
 
 
@@ -111,6 +160,6 @@ def test_run_agent_content_blocks() -> None:
     ):
         mock_create_agent.return_value = _mock_agent(content)
 
-        response = run_agent("hi", config=AgentConfig(api_key="TEST_KEY"))
+        response = run_agent("hi", region="us", config=AgentConfig(api_key="TEST_KEY"))
 
     assert response == "hello world"

@@ -14,7 +14,11 @@ def agent(ctx: click.core.Context, query: str) -> None:
     Ask the sentry-kube AI agent a question.
     """
     try:
-        response = run_agent(query)
+        response = run_agent(
+            query,
+            region=ctx.obj.customer_name,
+            cluster=ctx.obj.cluster_name,
+        )
     except AgentConfigurationError as e:
         die(str(e))
     else:
