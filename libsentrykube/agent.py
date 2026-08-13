@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from langchain.agents import create_agent
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
 from libsentrykube.prompts import SYSTEM_PROMPT, USER_PROMPT
@@ -102,8 +102,10 @@ def run_agent(
         system_prompt=SYSTEM_PROMPT,
     )
 
-    content = USER_PROMPT.format(query=query, region=region, cluster=cluster or "")
-    payload = {"messages": [{"role": "user", "content": content}]}
+    message = HumanMessage(
+        USER_PROMPT.format(query=query, region=region, cluster=cluster or "")
+    )
+    payload = {"messages": [message]}
 
     if on_step is None:
         result = agent.invoke(payload)

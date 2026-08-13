@@ -1,12 +1,13 @@
 """
 Prompts used by the sentry-kube agent.
 
-USER_PROMPT is a `str.format` template. It is rendered with the `query`
-keyword, so that placeholder has to stay present when the prompt is rewritten.
+USER_PROMPT is a `str.format` template. It is rendered with the `query`,
+`region` and `cluster` keywords, so those placeholders have to stay present
+when the prompt is rewritten.
 
-The region and cluster are deliberately not in the prompt: they are bound to
-the tools in `libsentrykube.tools`, so the agent can only ever act on the
-region the operator chose on the command line.
+Telling the agent the region and cluster is informational only. What it can
+actually reach is decided by the tools in `libsentrykube.tools`, which are
+bound to the region the operator chose on the command line.
 """
 
 SYSTEM_PROMPT = """\

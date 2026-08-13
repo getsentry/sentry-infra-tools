@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain.messages import AIMessage, HumanMessage, ToolMessage
 
 from libsentrykube.agent import (
     DEFAULT_BASE_URL,
@@ -79,13 +79,35 @@ def test_run_agent() -> None:
     mock_create_agent.return_value.invoke.assert_called_once_with(
         {
             "messages": [
-                {
-                    "role": "user",
-                    "content": USER_PROMPT.format(query="what is 6 times 7?"),
-                }
+                HumanMessage(
+                    USER_PROMPT.format(
+                        query="what is 6 times 7?", region="us", cluster="default"
+                    )
+                )
             ]
         }
     )
+
+
+def _sent_message(mock_agent) -> HumanMessage:
+    """The message run_agent handed to the agent."""
+    return mock_agent.invoke.call_args[0][0]["messages"][0]
+
+
+def test_run_agent_sends_a_human_message() -> None:
+    """The input is a typed message, not a raw dict."""
+    with (
+        patch("libsentrykube.agent.ChatOpenAI"),
+        patch("libsentrykube.agent.create_agent") as mock_create_agent,
+        patch("libsentrykube.agent.build_tools"),
+    ):
+        mock_create_agent.return_value = _mock_agent("ok")
+
+        run_agent("hi", region="us", config=AgentConfig(api_key="TEST_KEY"))
+
+    message = _sent_message(mock_create_agent.return_value)
+    assert isinstance(message, HumanMessage)
+    assert message.type == "human"
 
 
 def test_run_agent_query_reaches_the_prompt() -> None:
@@ -104,16 +126,30 @@ def test_run_agent_query_reaches_the_prompt() -> None:
             config=AgentConfig(api_key="TEST_KEY"),
         )
 
-    content = mock_create_agent.return_value.invoke.call_args[0][0]["messages"][0][
-        "content"
-    ]
+    content = _sent_message(mock_create_agent.return_value).content
     assert "why is it down?" in content
+    assert "s4s" in content
+    assert "primary" in content
+
+
+def test_run_agent_without_cluster() -> None:
+    """cluster is optional and must not leak a `None` into the prompt."""
+    with (
+        patch("libsentrykube.agent.ChatOpenAI"),
+        patch("libsentrykube.agent.create_agent") as mock_create_agent,
+        patch("libsentrykube.agent.build_tools"),
+    ):
+        mock_create_agent.return_value = _mock_agent("ok")
+
+        run_agent("hi", region="us", config=AgentConfig(api_key="TEST_KEY"))
+
+    assert "None" not in _sent_message(mock_create_agent.return_value).content
 
 
 def test_run_agent_region_and_cluster_reach_the_tools() -> None:
     """
-    Region and cluster are not in the prompt. They are bound to the tools so
-    the model cannot reach into a different region.
+    The tools are bound to the region and cluster, so the model cannot reach
+    into a different region no matter what the prompt says.
     """
     with (
         patch("libsentrykube.agent.ChatOpenAI"),
