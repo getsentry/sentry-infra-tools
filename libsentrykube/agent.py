@@ -6,11 +6,13 @@ from langchain.agents import create_agent
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
-from libsentrykube.prompts import SYSTEM_PROMPT, USER_PROMPT
-from libsentrykube.tools import build_tools
+from libsentrykube.prompts import RESEARCH_SYSTEM_PROMPT, RESEARCH_USER_PROMPT, SYSTEM_PROMPT, USER_PROMPT
+from libsentrykube.tools import build_research_tools, build_tools
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "anthropic/claude-sonnet-4.5"
+# DEFAULT_RESEARCH_MODEL = "anthropic/claude-3-haiku"
+DEFAULT_RESEARCH_MODEL = "anthropic/claude-sonnet-4.5"
 
 # Tool results can be whole rendered manifests. Only show the head of one.
 MAX_REPORTED_RESULT = 400
@@ -96,9 +98,18 @@ def run_agent(
         api_key=config.api_key,
     )
 
+    research_model = ChatOpenAI(
+        model=DEFAULT_RESEARCH_MODEL,
+        base_url=config.base_url,
+        api_key=config.api_key,
+    )
+
     agent = create_agent(
         model=model,
-        tools=build_tools(region, cluster),
+        tools=[
+            *build_tools(region, cluster),
+            *build_research_tools(research_model, region, cluster),
+        ],
         system_prompt=SYSTEM_PROMPT,
     )
 

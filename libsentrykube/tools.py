@@ -11,10 +11,16 @@ from pathlib import Path
 from typing import Any, Optional
 
 import click
+from langchain.agents import create_agent
+from langchain.messages import HumanMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph.state import CompiledStateGraph
+from pydantic import BaseModel
 import yaml
 from langchain_core.tools import BaseTool, tool
 
 from libsentrykube.kube import render_templates
+from libsentrykube.prompts import RESEARCH_SYSTEM_PROMPT, RESEARCH_USER_PROMPT
 from libsentrykube.service import (
     get_service_names,
     get_service_path,
@@ -75,7 +81,7 @@ def _resource_names(rendered: str) -> list[str]:
             continue
         name = (doc.get("metadata") or {}).get("name")
         if name:
-            names.append(f"{doc.get('kind', 'Unknown')}/{name}")
+            names.append(name)
     return names
 
 
@@ -278,3 +284,38 @@ def build_tools(region: str, cluster: Optional[str] = None) -> list[BaseTool]:
         update_region_override,
     ]
     return tools
+
+
+class ResourceIdentifierResult(BaseModel):
+    service: str
+    resource_name: str
+    service_file: str
+
+def build_research_tools(research_model: ChatOpenAI, region: str, cluster: Optional[str] = None) -> list[BaseTool]:
+    """
+    Builds the tools for the research agent.
+    """
+    
+    subagent = create_agent(
+        model=research_model,
+        tools=build_tools(region, cluster),
+        system_prompt=RESEARCH_SYSTEM_PROMPT,
+        response_format=ResourceIdentifierResult,
+    )
+    
+    @tool
+    def resource_identifier(query: str) -> ResourceIdentifierResult:
+        """
+        Identify the service and resource the user wants to change.
+
+        This tool returns the service name, the resource name identified
+        as the the kubernetes metadata name and the service file where 
+        the resource is defined.
+        """
+        message = HumanMessage(
+            RESEARCH_USER_PROMPT.format(query=query, region=region, cluster=cluster or "")
+        )
+        result = subagent.invoke({"messages": [message]})
+        return result["structured_response"]
+
+    return [resource_identifier]
