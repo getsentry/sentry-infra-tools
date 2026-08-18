@@ -23,11 +23,17 @@ import click
     help="Stage to operate on. Only regions with matching stage will be validated.",
     envvar="SENTRY_KUBE_STAGE",
 )
+@click.option(
+    "--combine",
+    is_flag=True,
+    help="Use combined service evaluation",
+)
 def test_services(
     filename: Sequence[str],
     skip_region: Sequence[str],
     include_region: Sequence[str],
     stage: str | None,
+    combine: bool = False,
 ) -> None:
     """
     Identifies the sentry-kube k8s services that may have been modified
@@ -98,20 +104,23 @@ def test_services(
             click.echo(f"Testing resource {resource.service_name}")
             for path in policies_paths:
                 if path.exists() and path.is_dir():
-                    for doc in rendered_validate:
-                        click.echo(f"Evaluating policies in {path}")
-                        cmd = ["conftest", "test", "--policy", path, "-"]
-                        child_process = subprocess.Popen(
-                            cmd,  # type: ignore[arg-type]
-                            stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE,
-                            text=True,
-                        )
-                        stdout, _ = child_process.communicate(input=doc)
-                        click.echo(stdout)
-
-                        if not stdout or child_process.returncode != 0:
+                    click.echo(f"Evaluating policies in {path}")
+                    if combine:
+                        rendered_docs = " ".join(rendered_validate)
+                        cmd = ["conftest", "test", "--policy", str(path), rendered_docs]
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+                        click.echo(result.stdout)
+                        if not result.stdout or result.returncode != 0:
                             raise click.ClickException("Validation failed")
+                    else:
+                        for doc in rendered_validate:
+                            cmd = ["conftest", "test", "--policy", str(path), "-"]
+                            result = subprocess.run(
+                                cmd, input=doc, capture_output=True, text=True
+                            )
+                            click.echo(result.stdout)
+                            if not result.stdout or result.returncode != 0:
+                                raise click.ClickException("Validation failed")
 
     if lint_errors_count > 0:
         raise click.ClickException(f"{lint_errors_count} Lint violations")
