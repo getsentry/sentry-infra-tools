@@ -106,9 +106,18 @@ def test_services(
                 if path.exists() and path.is_dir():
                     click.echo(f"Evaluating policies in {path}")
                     if combine:
-                        rendered_docs = " ".join(rendered_validate)
-                        cmd = ["conftest", "test", "--policy", str(path), rendered_docs]
-                        result = subprocess.run(cmd, capture_output=True, text=True)
+                        rendered_docs = "\n".join(rendered_validate)
+                        cmd = [
+                            "conftest",
+                            "test",
+                            "--policy",
+                            str(path),
+                            "--combine",
+                            "-",
+                        ]
+                        result = subprocess.run(
+                            cmd, input=rendered_docs, capture_output=True, text=True
+                        )
                         click.echo(result.stdout)
                         if not result.stdout or result.returncode != 0:
                             raise click.ClickException("Validation failed")
