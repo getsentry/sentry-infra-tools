@@ -98,8 +98,12 @@ def test_services(
                 rendered_lint,
             )
 
-            rendered_validate = render_services(
-                resource.customer_name, resource.cluster_name, [resource.service_name]
+            rendered_validate = list(
+                render_services(
+                    resource.customer_name,
+                    resource.cluster_name,
+                    [resource.service_name],
+                )
             )
             click.echo(f"Testing resource {resource.service_name}")
             for path in policies_paths:
