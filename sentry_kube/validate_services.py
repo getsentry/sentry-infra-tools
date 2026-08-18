@@ -106,7 +106,7 @@ def test_services(
                 if path.exists() and path.is_dir():
                     click.echo(f"Evaluating policies in {path}")
                     if combine:
-                        rendered_docs = "\n".join(rendered_validate)
+                        rendered_docs = "\n---\n".join(rendered_validate)
                         cmd = [
                             "conftest",
                             "test",
