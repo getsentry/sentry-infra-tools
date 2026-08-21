@@ -1,5 +1,4 @@
 import os
-import socket
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
@@ -19,12 +18,13 @@ from libsentrykube.service import set_service_paths
 from libsentrykube.utils import die
 from libsentrykube.utils import kube_set_context
 from libsentrykube.utils import set_workspace_root_start
+from .sentry_environment import resolve_sentry_environment
 
 SESSION_FILE = Path("/") / "tmp" / "sentry-kube-session"
 sentry_sdk.init(
     dsn="https://6b86f72181e2484f949994447137d64d@o1.ingest.sentry.io/4504373448540160",
     traces_sample_rate=1.0,
-    environment=socket.gethostname(),
+    environment=resolve_sentry_environment(),
 )
 
 
