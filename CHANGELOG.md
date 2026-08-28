@@ -1,3 +1,9 @@
+## 1.33.0
+
+### Bug Fixes 🐛
+
+- (sentry-kube) Collapse gocd and script-runner Sentry environments by @mwarkentin in [#245](https://github.com/getsentry/sentry-infra-tools/pull/245)
+
 ## 1.32.3
 
 - No documented changes.
