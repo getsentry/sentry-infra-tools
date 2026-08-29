@@ -1,4 +1,6 @@
---index-url https://pypi.devinfra.sentry.io/simple
+# TODO: restore before merging. langchain/langchain-openai are not mirrored on
+# pypi.devinfra.sentry.io yet, so during development we resolve from public PyPI.
+# --index-url https://pypi.devinfra.sentry.io/simple
 
 click>=8.1.7
 dictdiffer>=0.9.0
@@ -11,6 +13,8 @@ jsonpatch>=1.33
 jsonpath_ng>=1.6.1
 jsonschema>=4.23.0
 kubernetes>=30.1.0
+langchain>=1.0.0
+langchain-openai>=1.0.0
 paramiko>=3.4.0
 protobuf>=5.28.1
 PyYAML>=6.0.1
