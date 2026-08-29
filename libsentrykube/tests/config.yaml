@@ -11,6 +11,7 @@ silo_regions:
       cluster_def_root: clusters/saas
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      materialized_helm_manifests: rendered_helm_manifests
       service_class: multi-tenant
     sentry_region: us
     stage: production
@@ -20,6 +21,7 @@ silo_regions:
       cluster_def_root: clusters/my_customer
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      materialized_helm_manifests: rendered_helm_manifests
       service_class: single-tenant
     sentry_region: st-my_customer
     stage: staging
@@ -29,6 +31,7 @@ silo_regions:
       cluster_def_root: clusters/my_other_customer
       materialized_manifests: rendered_services
       materialized_helm_values: rendered_helm_values
+      materialized_helm_manifests: rendered_helm_manifests
       service_class: single-tenant
     sentry_region: st-my_other_customer
     stage: production

@@ -1,5 +1,8 @@
 import base64
 import copy
+import hashlib
+import os
+import shutil
 import subprocess
 import tempfile
 
@@ -15,6 +18,16 @@ from yaml import safe_dump, safe_load_all
 
 from libsentrykube.loader import load_macros
 from libsentrykube.utils import deep_merge_dict, pretty
+
+# Defaults used when rendering manifests with `helm template` so the
+# output does not change when the helm/kubernetes versions installed on
+# the machine running the render change.
+DEFAULT_TEMPLATE_KUBE_VERSION = "1.32.0"
+KUBE_VERSION_ENV_NAME = "SENTRY_KUBE_HELM_KUBE_VERSION"
+API_VERSIONS_ENV_NAME = "SENTRY_KUBE_HELM_API_VERSIONS"
+# Directory where remote charts pulled at a pinned version are cached.
+CHART_CACHE_ENV_NAME = "SENTRY_KUBE_HELM_CHART_CACHE"
+DEFAULT_CHART_CACHE_DIR = "~/.cache/sentry-kube/helm-charts"
 
 
 @dataclass(frozen=True)
@@ -116,16 +129,25 @@ class HelmData:
 class HelmException(RuntimeError): ...
 
 
-def _run_helm(cmd: list[str], raise_on_err: bool = False) -> str:
+def _run_helm(
+    cmd: list[str], raise_on_err: bool = False, capture_stderr: bool = False
+) -> str:
     helm_cmd = ["helm"] + cmd
     helm_env = None
     child_process = subprocess.Popen(
-        helm_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=helm_env
+        helm_cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE if capture_stderr else None,
+        env=helm_env,
     )
-    child_output = child_process.communicate()[0].decode("utf-8")
+    child_stdout, child_stderr = child_process.communicate()
+    child_output = child_stdout.decode("utf-8")
 
     if child_process.returncode != 0:
         if raise_on_err or not child_output:
+            if child_stderr:
+                raise HelmException(child_stderr.decode("utf-8") or child_output)
             raise HelmException(child_output)
     return child_output
 
@@ -405,6 +427,236 @@ def materialize_values(
             if existing_content != rendered_content:
                 with open(output_path, "w") as f:
                     f.write(rendered_content)
+                rv = True
+    return rv
+
+
+def _chart_cache_dir() -> Path:
+    return Path(
+        os.environ.get(CHART_CACHE_ENV_NAME, DEFAULT_CHART_CACHE_DIR)
+    ).expanduser()
+
+
+def fetch_chart(chart: HelmChart, service_path: Path) -> Path:
+    """
+    Returns a local filesystem path to the chart (directory or .tgz
+    archive) to be rendered.
+
+    Local charts are used in place. Remote charts (both https and OCI
+    repositories) must have a pinned version and are pulled into a
+    content-addressed cache keyed on (repository, name, version), so
+    repeated renders do not re-download and CI can persist the cache
+    across runs. Note that pulling from OCI repositories requires the
+    local registry credentials (`helm registry login` /
+    `gcloud auth configure-docker`) to be set up.
+    """
+    if chart.is_local:
+        path = chart.local_path(service_path)
+        assert path is not None
+        if not path.is_dir():
+            raise HelmException(f"Local chart directory {path} does not exist")
+        return path
+
+    if not chart.version:
+        raise HelmException(
+            f"Chart {chart.name!r} from {chart.repo!r} does not pin a version: "
+            "manifests cannot be rendered reproducibly without one"
+        )
+
+    cache_key = hashlib.sha256(
+        f"{chart.repo}|{chart.name}|{chart.version}".encode()
+    ).hexdigest()[:16]
+    cache_entry = _chart_cache_dir() / f"{chart.name}-{chart.version}-{cache_key}"
+    if cache_entry.is_dir():
+        cached = sorted(cache_entry.glob("*.tgz"))
+        if cached:
+            return cached[0]
+        # A directory without an archive is a broken cache entry: refetch.
+        shutil.rmtree(cache_entry)
+
+    tmp_entry = cache_entry.with_name(f"{cache_entry.name}.tmp.{os.getpid()}")
+    tmp_entry.mkdir(parents=True, exist_ok=True)
+    try:
+        helm_params = [
+            "pull",
+            chart.cmd_target(service_path),
+            "--version",
+            chart.version,
+            "--destination",
+            str(tmp_entry),
+        ]
+        if not chart.is_oci:
+            helm_params.extend(["--repo", chart.repo])  # type: ignore[list-item]
+        _run_helm(helm_params, raise_on_err=True, capture_stderr=True)
+        if not sorted(tmp_entry.glob("*.tgz")):
+            raise HelmException(
+                f"helm pull for chart {chart.name} {chart.version} "
+                "did not produce a chart archive"
+            )
+        try:
+            os.replace(tmp_entry, cache_entry)
+        except OSError:
+            # Lost the race against a concurrent fetch of the same chart:
+            # the winner's cache entry is just as good.
+            if not sorted(cache_entry.glob("*.tgz")):
+                raise
+    finally:
+        shutil.rmtree(tmp_entry, ignore_errors=True)
+    return sorted(cache_entry.glob("*.tgz"))[0]
+
+
+def _split_release_manifests(
+    helm_release: HelmRelease, manifest_stream: str
+) -> dict[str, str]:
+    """
+    Splits a `helm template` output stream into one file per resource,
+    following the same naming convention as the non-helm materialized
+    manifests: `{namespace}-{kind}-{name}.yaml`. Resources that don't
+    set their namespace get the release namespace, which is where helm
+    creates them on install.
+    """
+    documents = [doc for doc in safe_load_all(manifest_stream) if doc]
+    documents.sort(
+        key=lambda doc: (
+            doc.get("kind", ""),
+            (doc.get("metadata") or {}).get("namespace", ""),
+            (doc.get("metadata") or {}).get("name", ""),
+        )
+    )
+    files: dict[str, str] = {}
+    for doc in documents:
+        metadata = doc.get("metadata") or {}
+        namespace = metadata.get("namespace") or helm_release.namespace
+        kind = str(doc.get("kind", "unknown")).lower()
+        name = str(metadata.get("name", "unnamed")).lower()
+        base = f"{namespace}-{kind}-{name}"
+        filename = f"{base}.yaml"
+        seq = 1
+        while filename in files:
+            seq += 1
+            filename = f"{base}-{seq}.yaml"
+        files[filename] = safe_dump(doc, sort_keys=True)
+    return files
+
+
+def render_manifests(
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    kube_version=None,
+    api_versions=None,
+):
+    """
+    Renders the full manifests of each helm release of a service with
+    `helm template`, using the pinned chart version and the same merged
+    values that `materialize_values` writes out.
+
+    The render is offline and deterministic:
+    - remote charts are pulled at their pinned version (see fetch_chart),
+    - `--kube-version` and `--api-versions` are pinned explicitly so the
+      output does not depend on the helm/kubernetes versions of the
+      machine running the render,
+    - no live-cluster lookups happen: dynamic app versions and blue/green
+      active flags keep whatever defaults the chart and merged values
+      define, and charts calling `lookup()` see empty results, as always
+      under `helm template`.
+
+    Yields (HelmRelease, {filename: manifest_content}) tuples.
+    """
+    from libsentrykube.service import get_service_path
+
+    service_path = get_service_path(service_name, namespace="helm")
+    if kube_version is None:
+        kube_version = os.environ.get(
+            KUBE_VERSION_ENV_NAME, DEFAULT_TEMPLATE_KUBE_VERSION
+        )
+    if api_versions is None:
+        api_versions = tuple(
+            filter(None, os.environ.get(API_VERSIONS_ENV_NAME, "").split(","))
+        )
+
+    for helm_release, rendered_contents in _render_values(
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
+    ):
+        chart_ref = fetch_chart(helm_release.chart, service_path)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            helm_params = [
+                "template",
+                helm_release.name,
+                str(chart_ref),
+                "--namespace",
+                helm_release.namespace,
+                "--include-crds",
+                "--kube-version",
+                kube_version,
+            ]
+            for api_version in api_versions:
+                helm_params.extend(["--api-versions", api_version])
+            # Values files must be passed in the merge order used on apply:
+            # later files take precedence.
+            for index, (_, rendered_content) in enumerate(rendered_contents):
+                values_file = Path(tmpdirname) / f"values-{index:02d}.yaml"
+                values_file.write_text(rendered_content)
+                helm_params.extend(["-f", str(values_file)])
+            output = _run_helm(helm_params, raise_on_err=True, capture_stderr=True)
+        yield helm_release, _split_release_manifests(helm_release, output)
+
+
+def materialize_manifests(
+    region_name,
+    service_name,
+    cluster_name="default",
+    release=None,
+    namespace=None,
+    kube_version=None,
+    api_versions=None,
+) -> bool:
+    """
+    Renders the full manifests of a helm service (see render_manifests)
+    and writes them under the `materialized_helm_manifests` tree, one
+    file per resource, mirroring what `materialize_values` does for the
+    merged values (including the per-release subdirectory for services
+    whose release names differ from the service name).
+
+    Returns True when the files on disk changed.
+    """
+    from libsentrykube.service import build_helm_manifests_directory
+
+    rv = False
+    for helm_release, manifest_files in render_manifests(
+        region_name,
+        service_name,
+        cluster_name,
+        release=release,
+        namespace=namespace,
+        kube_version=kube_version,
+        api_versions=api_versions,
+    ):
+        materialize_rel_path = helm_release.name != service_name and helm_release.name
+        output_dir = build_helm_manifests_directory(
+            region_name,
+            cluster_name,
+            service_name,
+            release=materialize_rel_path or None,
+        )
+        for existing in sorted(output_dir.iterdir()):
+            if existing.is_file() and existing.name not in manifest_files:
+                existing.unlink()
+                rv = True
+        for filename, content in sorted(manifest_files.items()):
+            output_path = output_dir / filename
+            try:
+                existing_content = output_path.read_text()
+            except Exception:
+                existing_content = None
+            if existing_content != content:
+                output_path.write_text(content)
                 rv = True
     return rv
 
