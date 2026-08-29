@@ -56,7 +56,12 @@ def quickpatch(
     applies to production and sends a PR with the change.
     """
 
-    # TODO: Validate parameters
+    if not service:
+        raise click.UsageError("Missing required option '--service' / '-s'.")
+    if not resource:
+        raise click.UsageError("Missing required option '--resource' / '-r'.")
+    if not patch:
+        raise click.UsageError("Missing required option '--patch' / '-p'.")
 
     if not no_pull:
         git = Git(repo_path=str(workspace_root()))
@@ -71,13 +76,19 @@ def quickpatch(
         git.fetch_origin()
         git.merge_origin(git.default_branch)
 
-    get_arguments(service, patch)
+    required_args = get_arguments(service, patch)
 
-    # TODO: Validate all arguments are passed and prompt for the missing ones.
     populated_arguments: MutableMapping[str, str] = {}
     for arg in arguments:
         key, value = arg.split("=", 2)
         populated_arguments[key] = value
+
+    # Prompt for any required arguments that were not provided
+    for arg_name in required_args:
+        if arg_name not in populated_arguments:
+            populated_arguments[arg_name] = click.prompt(
+                f"Enter value for required argument '{arg_name}'"
+            )
     apply_patch(
         service,
         ctx.obj.customer_name,
