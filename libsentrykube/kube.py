@@ -230,6 +230,11 @@ def _consolidate_variables(
     )
 
 
+def clear_consolidated_variables_cache() -> None:
+    """Drop the cached merges. Anything that writes a values file has to call this."""
+    _read_consolidated_variables.cache_clear()
+
+
 @lru_cache(maxsize=None)
 def _read_consolidated_variables(
     workspace: Path,
