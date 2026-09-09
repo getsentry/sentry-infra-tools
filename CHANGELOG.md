@@ -1,3 +1,7 @@
+## 1.34.0
+
+- kube: cache consolidated service values by @tnt-sentry in [#246](https://github.com/getsentry/sentry-infra-tools/pull/246)
+
 ## 1.33.0
 
 ### Bug Fixes 🐛
