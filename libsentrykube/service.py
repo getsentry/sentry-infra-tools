@@ -497,6 +497,12 @@ def write_managed_values_overrides(
         file.write("\n")
         yaml.dump(values, file)
 
+    # quickpatch renders in the same process it writes from, so the merge this
+    # file feeds must not stay cached. Imported here: kube imports this module.
+    from libsentrykube.kube import clear_consolidated_variables_cache
+
+    clear_consolidated_variables_cache()
+
 
 def get_service_flags(service_name: str, namespace: str | None = None) -> dict:
     service_dir = get_service_path(service_name, namespace=namespace)

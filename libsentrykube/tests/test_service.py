@@ -694,3 +694,27 @@ workers:
         # worker-secondary should be unaffected
         assert ctx["workers"]["worker-secondary"]["resources"]["requests"]["memory"] == "2Gi"
         assert len(ctx["workers"]["worker-secondary"]["env_vars"]) == 2
+
+
+def test_write_managed_file_invalidates_the_values_cache(config_structure) -> None:
+    # quickpatch writes this file and renders from the same process.
+    from libsentrykube.kube import _consolidate_variables
+
+    start_workspace_root = workspace_root().as_posix()
+    set_workspace_root_start(config_structure)
+    os.environ["SENTRY_KUBE_CONFIG_FILE"] = str(
+        workspace_root() / "cli_config/configuration.yaml"
+    )
+    init_cluster_context("customer1", "cluster1")
+
+    before = _consolidate_variables("customer1", "my_service", "cluster1")
+    assert "patched" not in before
+
+    write_managed_values_overrides(
+        {"patched": "value"}, "my_service", "customer1", "cluster1"
+    )
+
+    after = _consolidate_variables("customer1", "my_service", "cluster1")
+    assert after["patched"] == "value"
+
+    set_workspace_root_start(start_workspace_root)

@@ -6,8 +6,10 @@ import yaml
 import operator
 import logging
 import re
+from copy import deepcopy
 from dataclasses import dataclass
 import os
+from pathlib import Path
 from pprint import pformat
 from typing import (
     Any,
@@ -22,7 +24,7 @@ from typing import (
 )
 
 import click
-from functools import partial
+from functools import lru_cache, partial
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from markupsafe import Markup
 from kubernetes.client.rest import ApiException
@@ -184,6 +186,10 @@ def _consolidate_variables(
     external: bool = False,
 ) -> dict:
     """
+    Rendering one service calls this once per template, and the values macro
+    calls it again per use, so the result is cached per workspace and copied on
+    the way out: callers merge into what they get back.
+
     We have multiple levels of overrides for our value files.
     1. The values defined inside the service directory as values.yaml.
     2. overridden by creating a hierarchical structure. Adding an intermediate directory
@@ -217,7 +223,27 @@ def _consolidate_variables(
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
     """
+    return deepcopy(
+        _read_consolidated_variables(
+            workspace_root(), customer_name, service_name, cluster_name, external
+        )
+    )
 
+
+def clear_consolidated_variables_cache() -> None:
+    """Drop the cached merges. Anything that writes a values file has to call this."""
+    _read_consolidated_variables.cache_clear()
+
+
+@lru_cache(maxsize=None)
+def _read_consolidated_variables(
+    workspace: Path,
+    customer_name: str,
+    service_name: str,
+    cluster_name: str,
+    external: bool,
+) -> dict:
+    """Read and merge one service's values. Keyed on the workspace they come from."""
     if external:
         service_path = workspace_root() / service_name
     else:
