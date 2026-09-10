@@ -334,6 +334,35 @@ def render_services(
         yield out if raw else pretty(out)
 
 
+@lru_cache(maxsize=None)
+def _jinja_env(service_path: str, easymode: bool) -> Environment:
+    extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
+    extensions.extend(load_macros())
+    loader = FileSystemLoader(service_path)
+    env = Environment(
+        extensions=extensions,
+        keep_trailing_newline=True,
+        trim_blocks=easymode,
+        lstrip_blocks=easymode,
+        undefined=StrictUndefined,
+        loader=loader,
+    )
+
+    # Add custom jinja filters here
+    env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode(
+        "utf-8"
+    )
+    env.filters["md5"] = lambda x: hashlib.md5(x.encode()).hexdigest()
+    env.filters["yaml"] = safe_dump
+    # debugging filter which prints a var to console
+    env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
+    # helper to safely get nested path or default
+    env.filters["get_path"] = _get_path
+
+    env.globals["include_raw"] = partial(_include_raw, loader=loader, env=env)
+    return env
+
+
 def render_templates(
     customer_name,
     service_name,
@@ -361,30 +390,7 @@ def render_templates(
         cluster_name,
     )
 
-    extensions = ["jinja2.ext.do", "jinja2.ext.loopcontrols"]
-    extensions.extend(load_macros())
-    loader = FileSystemLoader(str(service_path))
-    env = Environment(
-        extensions=extensions,
-        keep_trailing_newline=True,
-        trim_blocks=flags["jinja_whitespace_easymode"],
-        lstrip_blocks=flags["jinja_whitespace_easymode"],
-        undefined=StrictUndefined,
-        loader=loader,
-    )
-
-    # Add custom jinja filters here
-    env.filters["b64encode"] = lambda x: base64.b64encode(x.encode("utf-8")).decode(
-        "utf-8"
-    )
-    env.filters["md5"] = lambda x: hashlib.md5(x.encode()).hexdigest()
-    env.filters["yaml"] = safe_dump
-    # debugging filter which prints a var to console
-    env.filters["echo"] = lambda x: click.echo(pformat(x, indent=4))
-    # helper to safely get nested path or default
-    env.filters["get_path"] = _get_path
-
-    env.globals["include_raw"] = partial(_include_raw, loader=loader, env=env)
+    env = _jinja_env(str(service_path), flags["jinja_whitespace_easymode"])
 
     rendered_templates = []
     for template in template_files:
