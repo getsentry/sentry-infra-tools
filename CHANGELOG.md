@@ -1,3 +1,9 @@
+## 1.34.1
+
+- kube: copy consolidated values without copy.deepcopy by @tnt-sentry in [#249](https://github.com/getsentry/sentry-infra-tools/pull/249)
+- kube: cache the jinja environment per service by @tnt-sentry in [#248](https://github.com/getsentry/sentry-infra-tools/pull/248)
+- config: cache the parsed config file by path by @tnt-sentry in [#247](https://github.com/getsentry/sentry-infra-tools/pull/247)
+
 ## 1.34.0
 
 - kube: cache consolidated service values by @tnt-sentry in [#246](https://github.com/getsentry/sentry-infra-tools/pull/246)
