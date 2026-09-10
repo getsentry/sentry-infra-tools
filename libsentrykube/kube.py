@@ -47,6 +47,7 @@ from libsentrykube.service import (
     get_common_regional_override,
 )
 from libsentrykube.utils import (
+    deep_copy_without_refs,
     deep_merge_dict,
     kube_classes_for_data,
     kube_convert_kind_to_func,
@@ -223,7 +224,7 @@ def _consolidate_variables(
     TODO: write the minimum components of a yaml parser to remove step 3 and
           patch the regional override preserving comments.
     """
-    return deepcopy(
+    return deep_copy_without_refs(
         _read_consolidated_variables(
             workspace_root(), customer_name, service_name, cluster_name, external
         )
