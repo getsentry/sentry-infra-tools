@@ -80,28 +80,32 @@ class SiloRegion:
         )
 
 
+@cache
+def _load_config(config_file_name: str):
+    # Keyed on the path so a different SENTRY_KUBE_CONFIG_FILE still reloads.
+    with open(config_file_name) as file:
+        configuration = load(file, Loader=SafeLoader)
+
+        assert "silo_regions" in configuration, (
+            "silo_regions entry not present in the config"
+        )
+        silo_regions = {
+            name: SiloRegion.from_conf(conf)
+            for name, conf in configuration["silo_regions"].items()
+        }
+    return silo_regions, configuration.get("service_container_map", {})
+
+
 class Config:
     def __init__(self) -> None:
         config_file_name = os.environ.get(
             "SENTRY_KUBE_CONFIG_FILE", workspace_root() / DEFAULT_CONFIG
         )
 
-        with open(config_file_name) as file:
-            configuration = load(file, Loader=SafeLoader)
-
-            assert "silo_regions" in configuration, (
-                "silo_regions entry not present in the config"
-            )
-            silo_regions = {
-                name: SiloRegion.from_conf(conf)
-                for name, conf in configuration["silo_regions"].items()
-            }
-
+        silo_regions, service_container_map = _load_config(str(config_file_name))
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
         # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
-        self.service_container_map: Mapping[str, Dict[str, str]] = configuration.get(
-            "service_container_map", {}
-        )
+        self.service_container_map: Mapping[str, Dict[str, str]] = service_container_map
 
     @cache
     def get_regions(self, stage: Optional[str] = None) -> Sequence[str]:
