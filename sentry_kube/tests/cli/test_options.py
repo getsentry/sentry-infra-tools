@@ -78,6 +78,16 @@ def test_options_is_available_without_selecting_one_customer() -> None:
     assert "set" in result.output
 
 
+def test_set_help_explains_fleet_and_region_scoping() -> None:
+    result = CliRunner().invoke(options, ["set", "--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "Examples:" in result.output
+    assert "--region" in result.output
+    assert "--exclude-region" in result.output
+    assert "--apply" in result.output
+
+
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
@@ -261,6 +271,64 @@ def test_set_rejects_an_unknown_region_before_reading_any_cluster(
 
     assert result.exit_code != 0
     assert "Unknown region(s): not-a-region" in result.output
+
+
+def test_set_rejects_combining_included_and_excluded_regions() -> None:
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--region",
+            "us",
+            "--exclude-region",
+            "control",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Use either --region or --exclude-region, not both" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_excludes_requested_regions_from_the_default_fleet_scope(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _success("yes\n"),
+        _success("yes\n"),
+        _configmap("1", {"sample-rate": 1.0}),
+    ]
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--exclude-region",
+            "control",
+            "--service",
+            "getsentry-control",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "in 1 ConfigMaps" in result.output
+    assert "us/default/getsentry-control" in result.output
+    assert "control/default/getsentry-control" not in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
