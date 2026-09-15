@@ -40,6 +40,39 @@ All commands support `--help`, so please reference this.
 sentry-kube --help
 ```
 
+## Emergency sentry-options changes
+
+`sentry-kube break-glass set` makes an incident-only change directly to the
+live `sentry-options` ConfigMaps. It does not invoke GoCD or GitHub Actions.
+It discovers the relevant clusters from the current sentry-kube configuration:
+all clusters running `getsentry`, plus the control-silo ConfigMap in both the
+US and control clusters.
+
+The command is a dry run by default. It verifies `get` and `patch` access and
+parses `values.json` in every selected ConfigMap before changing any cluster.
+Pass JSON to `--value`; `--apply` is required to make the change:
+
+```shell
+sentry-kube break-glass set \
+  --option billing.quota-enforcement \
+  --value false
+
+sentry-kube break-glass set \
+  --option billing.quota-enforcement \
+  --value false \
+  --apply
+```
+
+Use `--region` or `--configmap-target` to restrict an invocation only when the
+incident is intentionally scoped. The tool uses a resource-version JSON Patch,
+so it refuses to overwrite a ConfigMap changed after preflight. There is no
+cross-cluster transaction: a patch failure after apply starts is reported with
+its exact cluster, and must be retried after investigating that cluster.
+
+This is intentionally temporary. The next normal `sentry-options-automator`
+deployment restores the declarative value from `option-values/`; make the
+corresponding normal change if the emergency value should remain in effect.
+
 ## Environment Variables
 
 `sentry-kube` can be further configured by setting environment variables.
