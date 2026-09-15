@@ -51,23 +51,22 @@ configuration (normally `ops`), or pass that checkout with the global
 `--root` option.
 
 Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
-new store does not declare the option; the application may therefore use a
-legacy fallback or another configured default.
+ConfigMap does not declare the option.
 
 ```shell
 sentry-kube --root ~/dev/ops options get \
   --option billing.quota-enforcement
 ```
 
-`set` is a dry run by default. It verifies `get` and `patch` access and parses
-`values.json` in every selected ConfigMap before changing any cluster. It also
-validates the requested key and strict JSON value with the native
+`set` is a dry run by default. It verifies patch access and reads every
+selected ConfigMap before changing any cluster. It also validates the requested
+key and strict JSON value with the native
 `sentry_options.SchemaRegistry` used by the application. Point `--schemas` at
 the Getsentry schema snapshot, or set `SENTRY_KUBE_OPTIONS_SCHEMAS` once for
 the shell:
 
 ```shell
-export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/getsentry/sentry-options/schemas
+export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/sentry-options/schemas
 ```
 
 The snapshot must be the revision deployed with the Getsentry image. Validation
@@ -78,12 +77,12 @@ make the change:
 
 ```shell
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/getsentry/sentry-options/schemas \
+  --schemas ~/dev/sentry-options/schemas \
   --option billing.quota-enforcement \
   --value false
 
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/getsentry/sentry-options/schemas \
+  --schemas ~/dev/sentry-options/schemas \
   --option billing.quota-enforcement \
   --value false \
   --apply
@@ -125,12 +124,7 @@ structure (including both `generated_at` timestamps). It atomically refreshes
 the ConfigMap annotation and the `values.json` timestamp.
 
 The command confirms that it can prepare the ConfigMap write; it cannot prove
-runtime precedence or pod reload. In particular, GetSentry currently has a
-temporary dual-read rollout guard that continues to prefer a present legacy
-option-store value. While that guard remains, a ConfigMap patch for such a key
-is accepted but does not become the effective runtime value. Use the existing
-legacy emergency procedure for those keys until the application rollout removes
-that guard.
+pod reload.
 
 This is intentionally temporary. The next normal `sentry-options-automator`
 deployment restores the declarative value from `option-values/`; make the
