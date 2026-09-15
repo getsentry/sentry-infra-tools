@@ -76,10 +76,30 @@ sentry-kube --root ~/dev/ops options set \
 
 Use `--region` (configured names and aliases are accepted) or `--service`
 (`getsentry` or `getsentry-control`) to restrict an invocation only when the
-incident is intentionally scoped. Unknown regions fail before any `kubectl`
-call. The default intentionally covers every configured topology target rather
-than applying the generic `--stage` filter: the live control-silo cluster is
-classified as `build` in the shared sentry-kube configuration.
+incident is intentionally scoped. Region selection is explicit:
+
+```shell
+# Include only US and DE. Repeat --region for every included region.
+sentry-kube --root ~/dev/ops options get \
+  --region us \
+  --region de \
+  --option billing.quota-enforcement
+
+# Start with the full fleet and leave out single-tenant regions.
+sentry-kube --root ~/dev/ops options set \
+  --exclude-region geico \
+  --exclude-region goldmansachs \
+  --exclude-region ly \
+  --option billing.quota-enforcement \
+  --value false \
+  --apply
+```
+
+`--region` and `--exclude-region` are mutually exclusive. Unknown regions fail
+before any `kubectl` call. The default intentionally covers every configured
+topology target rather than applying the generic `--stage` filter: the live
+control-silo cluster is classified as `build` in the shared sentry-kube
+configuration.
 
 The tool uses a resource-version JSON Patch, so it refuses to overwrite a
 ConfigMap changed after preflight. There is no cross-cluster transaction: a

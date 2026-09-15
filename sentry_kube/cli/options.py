@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -62,6 +62,7 @@ def _configmap_name(options_namespace: str, target: ConfigMapTarget) -> str:
 def _find_targets(
     config: Config,
     regions: Iterable[str],
+    excluded_regions: Iterable[str],
     services: Iterable[str],
 ) -> list[ConfigMapTarget]:
     """Find mounted Getsentry ConfigMaps from sentry-kube's live topology.
@@ -71,7 +72,7 @@ def _find_targets(
     both be patched for an all-region emergency change.
     """
 
-    wanted_regions = _resolve_regions(config, regions)
+    wanted_regions = _resolve_regions(config, regions, excluded_regions)
     wanted_services = set(services)
     targets: list[ConfigMapTarget] = []
 
@@ -97,8 +98,10 @@ def _find_targets(
     return targets
 
 
-def _resolve_regions(config: Config, regions: Iterable[str]) -> set[str]:
-    """Resolve configured region names and aliases before discovering targets.
+def _resolve_regions(
+    config: Config, regions: Iterable[str], excluded_regions: Iterable[str]
+) -> set[str]:
+    """Resolve the included or excluded configured region names and aliases.
 
     Silently dropping one misspelled ``--region`` while changing every other
     requested region is unsafe during an incident, so reject the entire
@@ -106,8 +109,27 @@ def _resolve_regions(config: Config, regions: Iterable[str]) -> set[str]:
     """
 
     requested_regions = set(regions)
-    if not requested_regions:
-        return set(config.silo_regions)
+    requested_excluded_regions = set(excluded_regions)
+    if requested_regions and requested_excluded_regions:
+        raise click.UsageError(
+            "Use either --region or --exclude-region, not both."
+        )
+
+    if requested_regions:
+        return _resolve_region_names(config, requested_regions)
+
+    selected_regions = set(config.silo_regions)
+    if requested_excluded_regions:
+        selected_regions.difference_update(
+            _resolve_region_names(config, requested_excluded_regions)
+        )
+    if not selected_regions:
+        raise click.UsageError("All configured regions were excluded.")
+    return selected_regions
+
+
+def _resolve_region_names(config: Config, requested_regions: set[str]) -> set[str]:
+    """Use sentry-kube's normal configured-name and alias resolver."""
 
     resolved_regions = set()
     unknown_regions = []
@@ -387,12 +409,157 @@ def _parse_json_value(value_json: str) -> Any:
         ) from exc
 
 
-@click.group()
+OPTIONS_HELP = """\
+\b
+Read deployed sentry-options values or make a temporary, incident-only update.
+
+`set` talks directly to the selected Kubernetes ConfigMaps. It never starts a
+GoCD pipeline or GitHub Action. It is a dry run by default and requires
+`--apply` after every selected ConfigMap has passed preflight.
+
+Scope defaults to every configured Getsentry ConfigMap, including both
+control-silo ConfigMaps. Use either repeated `--region` to include only named
+regions, or repeated `--exclude-region` to start with the fleet and omit named
+regions. Configured aliases (such as `saas` for `us`) are accepted.
+
+Examples:
+
+\b
+# Inspect a value everywhere.
+$ sentry-kube --root ~/dev/ops options get --option billing.quota-enforcement
+
+\b
+# Preview a fleet-wide emergency change (the default; no write occurs).
+$ sentry-kube --root ~/dev/ops options set \\
+    --option billing.quota-enforcement --value false
+
+\b
+# Apply only to US and DE after inspecting the generated plan.
+$ sentry-kube --root ~/dev/ops options set \\
+    --region us --region de --option billing.quota-enforcement \\
+    --value false --apply
+
+\b
+# Apply to all configured regions except single tenants.
+$ sentry-kube --root ~/dev/ops options set \\
+    --exclude-region geico --exclude-region goldmansachs --exclude-region ly \\
+    --option billing.quota-enforcement --value false --apply
+"""
+
+
+SET_HELP = """\
+\b
+Set OPTION in every selected live sentry-options ConfigMap.
+
+This is an incident-only override. It fully preflights `get` and `patch` access
+and validates `values.json` in every selected ConfigMap before the first write.
+Without `--apply`, it prints the exact fleet plan and makes no changes. Each
+write uses the ConfigMap resource version read during preflight, so it refuses
+to overwrite a concurrent change.
+
+VALUE must be strict JSON. Quote JSON strings (for example, `--value '"on"'`).
+The option and value must already be valid for the schema deployed in every
+selected region.
+
+Examples:
+
+\b
+# Dry run across the entire fleet.
+$ sentry-kube --root ~/dev/ops options set --option sample-rate --value 0.1
+
+\b
+# Apply only to a pair of named regions.
+$ sentry-kube --root ~/dev/ops options set \\
+    --region us --region de --option sample-rate --value 0.1 --apply
+
+\b
+# Apply everywhere except one region.
+$ sentry-kube --root ~/dev/ops options set \\
+    --exclude-region geico --option sample-rate --value 0.1 --apply
+"""
+
+
+GET_HELP = """\
+\b
+Read OPTION from every selected live sentry-options ConfigMap.
+
+`<unset>` means the ConfigMap does not declare the option. The application may
+therefore use a legacy fallback or another configured default. The command
+requires read access to every selected ConfigMap and does not change anything.
+
+Examples:
+
+\b
+# Read from the full fleet.
+$ sentry-kube --root ~/dev/ops options get --option sample-rate
+
+\b
+# Read only the control-silo ConfigMaps in US and control.
+$ sentry-kube --root ~/dev/ops options get \\
+    --region us --region control --service getsentry-control \\
+    --option sample-rate
+"""
+
+
+def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
+    """Apply the shared fleet-targeting interface to an options subcommand."""
+
+    command = click.option(
+        "--service",
+        "services",
+        type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
+        multiple=True,
+        help=(
+            "Limit targets to a service (default: both). `getsentry` selects "
+            "regional ConfigMaps; `getsentry-control` selects the control-silo "
+            "ConfigMaps in US and control."
+        ),
+    )(command)
+    command = click.option(
+        "--exclude-region",
+        "excluded_regions",
+        multiple=True,
+        help=(
+            "Start with the whole fleet and omit this configured region or alias; "
+            "repeat to omit several. Cannot be combined with --region."
+        ),
+    )(command)
+    command = click.option(
+        "--region",
+        "regions",
+        multiple=True,
+        help=(
+            "Include only this configured region or alias; repeat to include "
+            "several. Cannot be combined with --exclude-region."
+        ),
+    )(command)
+    command = click.option(
+        "--kubernetes-namespace",
+        default=DEFAULT_KUBERNETES_NAMESPACE,
+        show_default=True,
+        help="Kubernetes namespace containing the ConfigMaps.",
+    )(command)
+    return click.option(
+        "--options-namespace",
+        default="getsentry",
+        show_default=True,
+        help="sentry-options namespace used in the ConfigMap name.",
+    )(command)
+
+
+def _selected_targets(
+    regions: Iterable[str], excluded_regions: Iterable[str], services: Iterable[str]
+) -> list[ConfigMapTarget]:
+    selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
+    return _find_targets(Config(), regions, excluded_regions, selected_services)
+
+
+@click.group(help=OPTIONS_HELP)
 def options() -> None:
-    """Read or temporarily update live sentry-options ConfigMaps."""
+    pass
 
 
-@options.command("set")
+@options.command("set", help=SET_HELP)
 @click.option(
     "--option",
     "option_key",
@@ -406,31 +573,7 @@ def options() -> None:
     required=True,
     help='Value as JSON, for example false, 10, or ' + "'\"text\"'.",
 )
-@click.option(
-    "--options-namespace",
-    default="getsentry",
-    show_default=True,
-    help="sentry-options namespace used in the ConfigMap name.",
-)
-@click.option(
-    "--kubernetes-namespace",
-    default=DEFAULT_KUBERNETES_NAMESPACE,
-    show_default=True,
-    help="Kubernetes namespace containing the ConfigMaps.",
-)
-@click.option(
-    "--region",
-    "regions",
-    multiple=True,
-    help="Limit the update to a region; repeat to select several (default: all).",
-)
-@click.option(
-    "--service",
-    "services",
-    type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
-    multiple=True,
-    help="Limit the update to one service's ConfigMaps (default: both).",
-)
+@_target_scope_options
 @click.option(
     "--apply",
     is_flag=True,
@@ -442,6 +585,7 @@ def set_option(
     options_namespace: str,
     kubernetes_namespace: str,
     regions: tuple[str, ...],
+    excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
     apply: bool,
 ) -> None:
@@ -455,8 +599,7 @@ def set_option(
 
     value = _parse_json_value(value_json)
 
-    selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
-    targets = _find_targets(Config(), regions, selected_services)
+    targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
     prepared = _preflight_patches(
         kubectl,
@@ -536,7 +679,7 @@ def _read_option(
     return values_by_target
 
 
-@options.command("get")
+@options.command("get", help=GET_HELP)
 @click.option(
     "--option",
     "option_key",
@@ -544,36 +687,13 @@ def _read_option(
     callback=_validate_option_key,
     help="Option key to read.",
 )
-@click.option(
-    "--options-namespace",
-    default="getsentry",
-    show_default=True,
-    help="sentry-options namespace used in the ConfigMap name.",
-)
-@click.option(
-    "--kubernetes-namespace",
-    default=DEFAULT_KUBERNETES_NAMESPACE,
-    show_default=True,
-    help="Kubernetes namespace containing the ConfigMaps.",
-)
-@click.option(
-    "--region",
-    "regions",
-    multiple=True,
-    help="Limit the read to a region; repeat to select several (default: all).",
-)
-@click.option(
-    "--service",
-    "services",
-    type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
-    multiple=True,
-    help="Limit the read to one service's ConfigMaps (default: both).",
-)
+@_target_scope_options
 def get_option(
     option_key: str,
     options_namespace: str,
     kubernetes_namespace: str,
     regions: tuple[str, ...],
+    excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
 ) -> None:
     """Read OPTION from every selected live ConfigMap.
@@ -582,8 +702,7 @@ def get_option(
     application may use its legacy fallback or another configured default.
     """
 
-    selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
-    targets = _find_targets(Config(), regions, selected_services)
+    targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
     values_by_target = _read_option(
         kubectl,
