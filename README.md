@@ -60,15 +60,30 @@ sentry-kube --root ~/dev/ops options get \
 ```
 
 `set` is a dry run by default. It verifies `get` and `patch` access and parses
-`values.json` in every selected ConfigMap before changing any cluster. Pass a
-strict JSON value to `--value`; `--apply` is required to make the change:
+`values.json` in every selected ConfigMap before changing any cluster. It also
+validates the requested key and strict JSON value with the native
+`sentry_options.SchemaRegistry` used by the application. Point `--schemas` at
+the Getsentry schema snapshot, or set `SENTRY_KUBE_OPTIONS_SCHEMAS` once for
+the shell:
+
+```shell
+export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/getsentry/sentry-options/schemas
+```
+
+The snapshot must be the revision deployed with the Getsentry image. Validation
+proves the key and value are valid for that snapshot, but cannot prove that the
+same schema revision is mounted by every running target. Pass `--schemas`
+explicitly when the shell environment is not set. `--apply` is required to
+make the change:
 
 ```shell
 sentry-kube --root ~/dev/ops options set \
+  --schemas ~/dev/getsentry/sentry-options/schemas \
   --option billing.quota-enforcement \
   --value false
 
 sentry-kube --root ~/dev/ops options set \
+  --schemas ~/dev/getsentry/sentry-options/schemas \
   --option billing.quota-enforcement \
   --value false \
   --apply
@@ -104,12 +119,18 @@ configuration.
 The tool uses a resource-version JSON Patch, so it refuses to overwrite a
 ConfigMap changed after preflight. There is no cross-cluster transaction: a
 patch failure after apply starts is reported with its exact cluster, and must
-be retried after investigating that cluster. It validates strict JSON input and
-the deployed ConfigMap structure (including the writer's `generated_at`
-annotation), not the Sentry option schema. It atomically refreshes that
-annotation and the `values.json` timestamp. The option and its value must
-already be supported by the deployed schema in every selected region or the
-application will not serve it.
+be retried after investigating that cluster. It validates strict JSON input,
+the canonical `sentry-options` schema snapshot, and the deployed ConfigMap
+structure (including both `generated_at` timestamps). It atomically refreshes
+the ConfigMap annotation and the `values.json` timestamp.
+
+The command confirms that it can prepare the ConfigMap write; it cannot prove
+runtime precedence or pod reload. In particular, GetSentry currently has a
+temporary dual-read rollout guard that continues to prefer a present legacy
+option-store value. While that guard remains, a ConfigMap patch for such a key
+is accepted but does not become the effective runtime value. Use the existing
+legacy emergency procedure for those keys until the application rollout removes
+that guard.
 
 This is intentionally temporary. The next normal `sentry-options-automator`
 deployment restores the declarative value from `option-values/`; make the

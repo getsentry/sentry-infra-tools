@@ -1,8 +1,12 @@
 import json
 import subprocess
+from collections.abc import Generator
 from dataclasses import dataclass
+from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
+import click
+import pytest
 from click.testing import CliRunner
 
 from sentry_kube.cli import main
@@ -25,19 +29,19 @@ def _configmap(
     options: dict[str, object],
     *,
     include_generated_at_annotation: bool = True,
+    include_generated_at_value: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     metadata: dict[str, object] = {"resourceVersion": resource_version}
     if include_generated_at_annotation:
         metadata["annotations"] = {"generated_at": "old"}
+    values: dict[str, object] = {"options": options}
+    if include_generated_at_value:
+        values["generated_at"] = "old"
     return _success(
         json.dumps(
             {
                 "metadata": metadata,
-                "data": {
-                    "values.json": json.dumps(
-                        {"options": options, "generated_at": "old"}
-                    )
-                },
+                "data": {"values.json": json.dumps(values)},
             }
         )
     )
@@ -68,6 +72,13 @@ def _mock_clusters(mock_config: MagicMock, mock_list_clusters: MagicMock) -> Non
     }[k8s_config]
 
 
+@pytest.fixture(autouse=True)
+def mock_schema_validation() -> Generator[MagicMock, None, None]:
+    """Keep Kubernetes command tests independent of the compiled dependency."""
+    with patch("sentry_kube.cli.options._validate_against_schema") as validate:
+        yield validate
+
+
 def test_options_is_available_without_selecting_one_customer() -> None:
     result = CliRunner().invoke(main, ["options", "--help"])
 
@@ -86,6 +97,16 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
     assert "--region" in result.output
     assert "--exclude-region" in result.output
     assert "--apply" in result.output
+    assert "--schemas" in result.output
+
+
+def test_set_requires_an_explicit_schema_snapshot() -> None:
+    result = CliRunner().invoke(
+        options, ["set", "--option", "sample-rate", "--value", "false"]
+    )
+
+    assert result.exit_code != 0
+    assert "Missing option '--schemas'" in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -112,7 +133,16 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     ]
 
     result = CliRunner().invoke(
-        options, ["set", "--option", "sample-rate", "--value", "false"]
+        options,
+        [
+            "set",
+            "--schemas",
+            "schemas",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+        ],
     )
 
     assert result.exit_code == 0, result.output
@@ -146,6 +176,8 @@ def test_apply_patches_after_preflight_with_resource_version(
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--region",
             "saas",
             "--service",
@@ -207,6 +239,8 @@ def test_failed_preflight_prevents_every_patch(
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--option",
             "sample-rate",
             "--value",
@@ -241,7 +275,16 @@ def test_failed_preflight_prevents_every_patch(
 
 def test_set_rejects_non_standard_json_before_reading_any_cluster() -> None:
     result = CliRunner().invoke(
-        options, ["set", "--option", "sample-rate", "--value", "NaN"]
+        options,
+        [
+            "set",
+            "--schemas",
+            "schemas",
+            "--option",
+            "sample-rate",
+            "--value",
+            "NaN",
+        ],
     )
 
     assert result.exit_code != 0
@@ -260,6 +303,8 @@ def test_set_rejects_an_unknown_region_before_reading_any_cluster(
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--region",
             "not-a-region",
             "--option",
@@ -278,6 +323,8 @@ def test_set_rejects_combining_included_and_excluded_regions() -> None:
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--region",
             "us",
             "--exclude-region",
@@ -314,6 +361,8 @@ def test_set_excludes_requested_regions_from_the_default_fleet_scope(
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--exclude-region",
             "control",
             "--service",
@@ -352,6 +401,8 @@ def test_set_preflight_requires_the_writer_generated_at_annotation(
         options,
         [
             "set",
+            "--schemas",
+            "schemas",
             "--region",
             "us",
             "--service",
@@ -369,6 +420,77 @@ def test_set_preflight_requires_the_writer_generated_at_annotation(
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_preflight_requires_the_values_generated_at_timestamp(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _success("yes\n"),
+        _success("yes\n"),
+        _configmap("1", {"sample-rate": 1.0}, include_generated_at_value=False),
+    ]
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--schemas",
+            "schemas",
+            "--region",
+            "us",
+            "--service",
+            "getsentry",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "values.json has no generated_at timestamp" in result.output
+    assert not any(
+        _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
+    )
+
+
+@patch("sentry_kube.cli.options.Config")
+def test_set_validates_the_schema_before_discovering_targets(
+    mock_config: MagicMock, mock_schema_validation: MagicMock
+) -> None:
+    mock_schema_validation.side_effect = click.ClickException(
+        "schema validation failed; no clusters were contacted"
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--schemas",
+            "schemas",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "schema validation failed" in result.output
+    mock_schema_validation.assert_called_once_with(
+        Path("schemas"), "getsentry", "sample-rate", False
+    )
+    mock_config.assert_not_called()
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")

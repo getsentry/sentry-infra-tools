@@ -12,7 +12,8 @@ import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import click
 
@@ -21,6 +22,11 @@ from libsentrykube.config import Config
 from libsentrykube.customer import get_region_config
 from libsentrykube.utils import ensure_kubectl
 
+if TYPE_CHECKING:
+    from sentry_options import OptionValue
+else:
+    OptionValue = Any
+
 __all__ = ("options",)
 
 
@@ -28,6 +34,7 @@ DEFAULT_KUBERNETES_NAMESPACE = "default"
 GETSENTRY_SERVICE = "getsentry"
 GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
+SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 
 
 @dataclass(frozen=True)
@@ -264,6 +271,11 @@ def _read_values(
             f"{target.name}: ConfigMap {configmap_name} values.json must contain an "
             "options object"
         )
+    if not isinstance(values.get("generated_at"), str):
+        raise click.ClickException(
+            f"{target.name}: ConfigMap {configmap_name} values.json has no generated_at "
+            "timestamp"
+        )
     has_generated_at_annotation = isinstance(annotations, dict) and isinstance(
         annotations.get("generated_at"), str
     )
@@ -276,7 +288,7 @@ def _prepare_patch(
     kubernetes_namespace: str,
     options_namespace: str,
     option: str,
-    value: Any,
+    value: OptionValue,
 ) -> PreparedPatch:
     configmap_name = _configmap_name(options_namespace, target)
 
@@ -360,7 +372,7 @@ def _preflight_patches(
     kubernetes_namespace: str,
     options_namespace: str,
     option: str,
-    value: Any,
+    value: OptionValue,
 ) -> list[PreparedPatch]:
     """Prepare every patch, reporting all inaccessible or invalid targets together."""
 
@@ -396,7 +408,7 @@ def _validate_option_key(
     return option_key
 
 
-def _parse_json_value(value_json: str) -> Any:
+def _parse_json_value(value_json: str) -> OptionValue:
     def reject_nonstandard_constant(constant: str) -> None:
         raise ValueError(f"{constant} is not valid JSON")
 
@@ -409,18 +421,54 @@ def _parse_json_value(value_json: str) -> Any:
         ) from exc
 
 
+def _validate_against_schema(
+    schemas_dir: Path, options_namespace: str, option_key: str, value: OptionValue
+) -> None:
+    """Validate one prospective write with sentry-options' canonical validator.
+
+    This deliberately loads only schemas. Loading a runtime `Options` instance
+    would also require a values tree and process-global initialization, neither
+    of which belongs in a fleet-management CLI.
+    """
+
+    try:
+        from sentry_options import OptionsError, SchemaRegistry
+    except ImportError as exc:
+        raise click.ClickException(
+            "sentry-options schema validation is unavailable; install "
+            "sentry_options>=1.2.10"
+        ) from exc
+
+    try:
+        registry = SchemaRegistry.from_directory(schemas_dir)
+        registry.validate_option(options_namespace, option_key, value)
+    except OptionsError as exc:
+        raise click.ClickException(
+            f"Schema validation failed for {options_namespace}.{option_key} using "
+            f"{schemas_dir}: {exc}. No clusters were contacted."
+        ) from exc
+
+
 OPTIONS_HELP = """\
 \b
 Read deployed sentry-options values or make a temporary, incident-only update.
 
 `set` talks directly to the selected Kubernetes ConfigMaps. It never starts a
 GoCD pipeline or GitHub Action. It is a dry run by default and requires
-`--apply` after every selected ConfigMap has passed preflight.
+`--apply` after every selected ConfigMap has passed preflight. It also requires
+a local, trusted schema snapshot via `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`) and validates the requested JSON value with the
+same native validator the application uses.
 
 Scope defaults to every configured Getsentry ConfigMap, including both
 control-silo ConfigMaps. Use either repeated `--region` to include only named
 regions, or repeated `--exclude-region` to start with the fleet and omit named
 regions. Configured aliases (such as `saas` for `us`) are accepted.
+
+This command validates and writes ConfigMaps; it cannot override a Getsentry
+dual-read rollout guard that prefers a legacy option-store value. When that
+guard is active, use the existing legacy emergency procedure for a key with a
+present legacy value.
 
 Examples:
 
@@ -431,18 +479,20 @@ $ sentry-kube --root ~/dev/ops options get --option billing.quota-enforcement
 \b
 # Preview a fleet-wide emergency change (the default; no write occurs).
 $ sentry-kube --root ~/dev/ops options set \\
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
     --option billing.quota-enforcement --value false
 
 \b
 # Apply only to US and DE after inspecting the generated plan.
 $ sentry-kube --root ~/dev/ops options set \\
     --region us --region de --option billing.quota-enforcement \\
-    --value false --apply
+    --schemas ~/dev/getsentry/sentry-options/schemas --value false --apply
 
 \b
 # Apply to all configured regions except single tenants.
 $ sentry-kube --root ~/dev/ops options set \\
     --exclude-region geico --exclude-region goldmansachs --exclude-region ly \\
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
     --option billing.quota-enforcement --value false --apply
 """
 
@@ -451,31 +501,46 @@ SET_HELP = """\
 \b
 Set OPTION in every selected live sentry-options ConfigMap.
 
-This is an incident-only override. It fully preflights `get` and `patch` access
-and validates `values.json` in every selected ConfigMap before the first write.
-Without `--apply`, it prints the exact fleet plan and makes no changes. Each
-write uses the ConfigMap resource version read during preflight, so it refuses
-to overwrite a concurrent change.
+This is an incident-only override. Before contacting a cluster, it validates
+OPTION and VALUE against the schema snapshot supplied by `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`) using the native sentry-options validator. Then
+it fully preflights `get` and `patch` access and validates `values.json` in
+every selected ConfigMap before the first write. Without `--apply`, it prints
+the exact fleet plan and makes no changes. Each write uses the ConfigMap
+resource version read during preflight, so it refuses to overwrite a concurrent
+change.
+
+The snapshot proves the key and value are valid for that schema revision. It
+does not prove that revision has reached every running target; use the schema
+that was deployed with the Getsentry image and investigate a runtime schema
+mismatch before applying.
+
+This command changes the new store only. If Getsentry's dual-read rollout guard
+is still preferring a present legacy option-store value, the write will not
+become effective; use the legacy emergency procedure for that key instead.
 
 VALUE must be strict JSON. Quote JSON strings (for example, `--value '"on"'`).
-The option and value must already be valid for the schema deployed in every
-selected region.
+The option and value must be valid for the supplied schema snapshot.
 
 Examples:
 
 \b
 # Dry run across the entire fleet.
-$ sentry-kube --root ~/dev/ops options set --option sample-rate --value 0.1
+$ sentry-kube --root ~/dev/ops options set \\
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option sample-rate --value 0.1
 
 \b
 # Apply only to a pair of named regions.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --option sample-rate --value 0.1 --apply
+    --region us --region de --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option sample-rate --value 0.1 --apply
 
 \b
 # Apply everywhere except one region.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude-region geico --option sample-rate --value 0.1 --apply
+    --exclude-region geico --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option sample-rate --value 0.1 --apply
 """
 
 
@@ -573,6 +638,18 @@ def options() -> None:
     required=True,
     help='Value as JSON, for example false, 10, or ' + "'\"text\"'.",
 )
+@click.option(
+    "--schemas",
+    "schemas_dir",
+    type=click.Path(path_type=Path, file_okay=False, dir_okay=True, readable=True),
+    required=True,
+    envvar=SCHEMAS_ENVVAR,
+    help=(
+        "Schema snapshot root containing {namespace}/schema.json. Required unless "
+        f"{SCHEMAS_ENVVAR} is set; for Getsentry use "
+        "~/dev/getsentry/sentry-options/schemas."
+    ),
+)
 @_target_scope_options
 @click.option(
     "--apply",
@@ -582,6 +659,7 @@ def options() -> None:
 def set_option(
     option_key: str,
     value_json: str,
+    schemas_dir: Path,
     options_namespace: str,
     kubernetes_namespace: str,
     regions: tuple[str, ...],
@@ -598,6 +676,7 @@ def set_option(
     """
 
     value = _parse_json_value(value_json)
+    _validate_against_schema(schemas_dir, options_namespace, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
