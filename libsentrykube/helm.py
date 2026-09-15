@@ -89,12 +89,18 @@ class HelmRelease:
     templates: list[str]
     strategy: HelmStrategyStandard | HelmStrategyBlueGreen
 
-    def filter_template_files(self, cwd: Path, template_files):
+    def filter_template_files(self, cwd: Path, template_files: list[Path]) -> list[Path]:
         if not self.templates:
             return template_files
-        return list(
-            filter(lambda v: str(v.relative_to(cwd)) in self.templates, template_files)
-        )
+
+        template_files_by_name = {
+            str(template.relative_to(cwd)): template for template in template_files
+        }
+        return [
+            template_files_by_name[name]
+            for name in self.templates
+            if name in template_files_by_name
+        ]
 
 
 @dataclass(frozen=True)
