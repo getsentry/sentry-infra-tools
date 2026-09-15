@@ -114,7 +114,7 @@ Get kubed.
         set_workspace_root_start(root)
 
     if ctx.invoked_subcommand in (
-        "break-glass",
+        "options",
         "datadog-log-terragrunt",
         "datadog-log",
         "get-regions",

@@ -1,4 +1,4 @@
-"""Emergency fleet updates for values served by sentry-options.
+"""Read and make emergency fleet updates for values served by sentry-options.
 
 Normal option changes belong in sentry-options-automator. This command exists
 solely for incidents: it patches the already-deployed ConfigMaps directly and
@@ -18,9 +18,10 @@ import click
 
 from libsentrykube.cluster import Cluster, list_clusters_for_customer
 from libsentrykube.config import Config
+from libsentrykube.customer import get_region_config
 from libsentrykube.utils import ensure_kubectl
 
-__all__ = ("break_glass",)
+__all__ = ("options",)
 
 
 DEFAULT_KUBERNETES_NAMESPACE = "default"
@@ -49,6 +50,7 @@ class PreparedPatch:
     target: ConfigMapTarget
     configmap_name: str
     resource_version: str
+    generated_at: str
     values_json: str
 
 
@@ -69,7 +71,7 @@ def _find_targets(
     both be patched for an all-region emergency change.
     """
 
-    wanted_regions = set(regions)
+    wanted_regions = _resolve_regions(config, regions)
     wanted_services = set(services)
     targets: list[ConfigMapTarget] = []
 
@@ -90,9 +92,38 @@ def _find_targets(
             )
 
     if not targets:
-        scope = ", ".join(sorted(wanted_regions)) or "configured regions"
+        scope = ", ".join(sorted(wanted_regions))
         raise click.ClickException(f"No sentry-options ConfigMaps found for {scope}")
     return targets
+
+
+def _resolve_regions(config: Config, regions: Iterable[str]) -> set[str]:
+    """Resolve configured region names and aliases before discovering targets.
+
+    Silently dropping one misspelled ``--region`` while changing every other
+    requested region is unsafe during an incident, so reject the entire
+    invocation before it invokes kubectl.
+    """
+
+    requested_regions = set(regions)
+    if not requested_regions:
+        return set(config.silo_regions)
+
+    resolved_regions = set()
+    unknown_regions = []
+    for region in sorted(requested_regions):
+        try:
+            canonical_region, _ = get_region_config(config, region)
+        except ValueError:
+            unknown_regions.append(region)
+        else:
+            resolved_regions.add(canonical_region)
+
+    if unknown_regions:
+        raise click.ClickException(
+            "Unknown region(s): " + ", ".join(unknown_regions)
+        )
+    return resolved_regions
 
 
 def _targets_for_cluster(
@@ -175,7 +206,7 @@ def _read_values(
     target: ConfigMapTarget,
     kubernetes_namespace: str,
     configmap_name: str,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, dict[str, Any], bool]:
     result = _run(
         _kubectl_command(
             kubectl,
@@ -192,9 +223,11 @@ def _read_values(
 
     try:
         configmap = json.loads(result.stdout)
-        resource_version = configmap["metadata"]["resourceVersion"]
+        metadata = configmap["metadata"]
+        resource_version = metadata["resourceVersion"]
         values = json.loads(configmap["data"]["values.json"])
-    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        annotations = metadata.get("annotations", {})
+    except (AttributeError, KeyError, TypeError, json.JSONDecodeError) as exc:
         raise click.ClickException(
             f"{target.name}: ConfigMap {configmap_name} does not contain a valid "
             "values.json"
@@ -209,7 +242,10 @@ def _read_values(
             f"{target.name}: ConfigMap {configmap_name} values.json must contain an "
             "options object"
         )
-    return resource_version, values
+    has_generated_at_annotation = isinstance(annotations, dict) and isinstance(
+        annotations.get("generated_at"), str
+    )
+    return resource_version, values, has_generated_at_annotation
 
 
 def _prepare_patch(
@@ -226,19 +262,35 @@ def _prepare_patch(
     # evidence that the same invocation has the access it needs to apply.
     _require_permission(kubectl, target, kubernetes_namespace, configmap_name, "get")
     _require_permission(kubectl, target, kubernetes_namespace, configmap_name, "patch")
-    resource_version, values = _read_values(
+    resource_version, values, has_generated_at_annotation = _read_values(
         kubectl, target, kubernetes_namespace, configmap_name
     )
+    if not has_generated_at_annotation:
+        raise click.ClickException(
+            f"{target.name}: ConfigMap {configmap_name} has no generated_at annotation"
+        )
 
     values["options"][option] = value
     # Mounted ConfigMap updates trigger a reload by mtime. Keeping generated_at
     # current also lets the client report meaningful propagation delay.
-    values["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    generated_at = _generated_at()
+    values["generated_at"] = generated_at
     return PreparedPatch(
         target=target,
         configmap_name=configmap_name,
         resource_version=resource_version,
+        generated_at=generated_at,
         values_json=json.dumps(values, separators=(",", ":"), ensure_ascii=False),
+    )
+
+
+def _generated_at() -> str:
+    """Return a source-compatible, unique-enough timestamp for reload metrics."""
+
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
     )
 
 
@@ -253,6 +305,11 @@ def _apply_patch(
                 "value": prepared.resource_version,
             },
             {"op": "replace", "path": "/data/values.json", "value": prepared.values_json},
+            {
+                "op": "replace",
+                "path": "/metadata/annotations/generated_at",
+                "value": prepared.generated_at,
+            },
         ],
         separators=(",", ":"),
     )
@@ -309,13 +366,40 @@ def _preflight_patches(
     return prepared
 
 
+def _validate_option_key(
+    _ctx: click.Context, _param: click.Parameter, option_key: str
+) -> str:
+    if not option_key or option_key != option_key.strip():
+        raise click.BadParameter("must not be blank or have surrounding whitespace")
+    return option_key
+
+
+def _parse_json_value(value_json: str) -> Any:
+    def reject_nonstandard_constant(constant: str) -> None:
+        raise ValueError(f"{constant} is not valid JSON")
+
+    try:
+        return json.loads(value_json, parse_constant=reject_nonstandard_constant)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise click.BadParameter(
+            'must be valid JSON; quote strings, for example --value \'"disabled"\'',
+            param_hint="--value",
+        ) from exc
+
+
 @click.group()
-def break_glass() -> None:
-    """Make a temporary, direct update to all live sentry-options ConfigMaps."""
+def options() -> None:
+    """Read or temporarily update live sentry-options ConfigMaps."""
 
 
-@break_glass.command("set")
-@click.option("--option", "option_key", required=True, help="Option key to set.")
+@options.command("set")
+@click.option(
+    "--option",
+    "option_key",
+    required=True,
+    callback=_validate_option_key,
+    help="Option key to set.",
+)
 @click.option(
     "--value",
     "value_json",
@@ -341,11 +425,11 @@ def break_glass() -> None:
     help="Limit the update to a region; repeat to select several (default: all).",
 )
 @click.option(
-    "--configmap-target",
+    "--service",
     "services",
     type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
     multiple=True,
-    help="Limit the update to one mounted ConfigMap type (default: both).",
+    help="Limit the update to one service's ConfigMaps (default: both).",
 )
 @click.option(
     "--apply",
@@ -369,17 +453,11 @@ def set_option(
     replacing an unseen change.
     """
 
-    try:
-        value = json.loads(value_json)
-    except json.JSONDecodeError as exc:
-        raise click.BadParameter(
-            'must be JSON; quote strings, for example --value \'"disabled"\'',
-            param_hint="--value",
-        ) from exc
+    value = _parse_json_value(value_json)
 
     selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
     targets = _find_targets(Config(), regions, selected_services)
-    kubectl = ensure_kubectl()
+    kubectl = str(ensure_kubectl())
     prepared = _preflight_patches(
         kubectl,
         targets,
@@ -416,3 +494,111 @@ def set_option(
     click.echo(
         f"APPLIED: set {option_key}={value_description} in {len(prepared)} ConfigMaps"
     )
+
+
+def _read_option(
+    kubectl: str,
+    targets: Iterable[ConfigMapTarget],
+    kubernetes_namespace: str,
+    options_namespace: str,
+    option_key: str,
+) -> list[tuple[ConfigMapTarget, str, bool, Any]]:
+    """Read one option from every target, failing rather than hiding gaps."""
+
+    values_by_target = []
+    errors = []
+    for target in targets:
+        configmap_name = _configmap_name(options_namespace, target)
+        try:
+            _require_permission(
+                kubectl, target, kubernetes_namespace, configmap_name, "get"
+            )
+            _, values, _ = _read_values(
+                kubectl, target, kubernetes_namespace, configmap_name
+            )
+        except click.ClickException as exc:
+            errors.append(exc.message)
+        else:
+            configured = option_key in values["options"]
+            values_by_target.append(
+                (
+                    target,
+                    configmap_name,
+                    configured,
+                    values["options"].get(option_key),
+                )
+            )
+
+    if errors:
+        raise click.ClickException(
+            "Could not read every selected ConfigMap:\n" + "\n".join(errors)
+        )
+    return values_by_target
+
+
+@options.command("get")
+@click.option(
+    "--option",
+    "option_key",
+    required=True,
+    callback=_validate_option_key,
+    help="Option key to read.",
+)
+@click.option(
+    "--options-namespace",
+    default="getsentry",
+    show_default=True,
+    help="sentry-options namespace used in the ConfigMap name.",
+)
+@click.option(
+    "--kubernetes-namespace",
+    default=DEFAULT_KUBERNETES_NAMESPACE,
+    show_default=True,
+    help="Kubernetes namespace containing the ConfigMaps.",
+)
+@click.option(
+    "--region",
+    "regions",
+    multiple=True,
+    help="Limit the read to a region; repeat to select several (default: all).",
+)
+@click.option(
+    "--service",
+    "services",
+    type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
+    multiple=True,
+    help="Limit the read to one service's ConfigMaps (default: both).",
+)
+def get_option(
+    option_key: str,
+    options_namespace: str,
+    kubernetes_namespace: str,
+    regions: tuple[str, ...],
+    services: tuple[str, ...],
+) -> None:
+    """Read OPTION from every selected live ConfigMap.
+
+    ``<unset>`` means the ConfigMap does not declare the option, so the
+    application may use its legacy fallback or another configured default.
+    """
+
+    selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
+    targets = _find_targets(Config(), regions, selected_services)
+    kubectl = str(ensure_kubectl())
+    values_by_target = _read_option(
+        kubectl,
+        targets,
+        kubernetes_namespace,
+        options_namespace,
+        option_key,
+    )
+
+    for target, configmap_name, configured, value in values_by_target:
+        value_description = (
+            json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+            if configured
+            else "<unset>"
+        )
+        click.echo(
+            f"{target.name}: {value_description} ({configmap_name}; {target.context})"
+        )

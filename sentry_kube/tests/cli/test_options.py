@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, call, patch
 from click.testing import CliRunner
 
 from sentry_kube.cli import main
-from sentry_kube.cli.break_glass import break_glass
+from sentry_kube.cli.options import options
 
 
 @dataclass
@@ -21,12 +21,18 @@ def _success(stdout: str = "") -> subprocess.CompletedProcess[str]:
 
 
 def _configmap(
-    resource_version: str, options: dict[str, object]
+    resource_version: str,
+    options: dict[str, object],
+    *,
+    include_generated_at_annotation: bool = True,
 ) -> subprocess.CompletedProcess[str]:
+    metadata: dict[str, object] = {"resourceVersion": resource_version}
+    if include_generated_at_annotation:
+        metadata["annotations"] = {"generated_at": "old"}
     return _success(
         json.dumps(
             {
-                "metadata": {"resourceVersion": resource_version},
+                "metadata": metadata,
                 "data": {
                     "values.json": json.dumps(
                         {"options": options, "generated_at": "old"}
@@ -62,18 +68,20 @@ def _mock_clusters(mock_config: MagicMock, mock_list_clusters: MagicMock) -> Non
     }[k8s_config]
 
 
-def test_break_glass_is_available_without_selecting_one_customer() -> None:
-    result = CliRunner().invoke(main, ["break-glass", "--help"])
+def test_options_is_available_without_selecting_one_customer() -> None:
+    result = CliRunner().invoke(main, ["options", "--help"])
 
     assert result.exit_code == 0, result.output
-    assert "break-glass" in result.output
+    assert "options" in result.output
+    assert "break-glass" not in result.output
+    assert "get" in result.output
     assert "set" in result.output
 
 
-@patch("sentry_kube.cli.break_glass.ensure_kubectl", return_value="kubectl")
-@patch("sentry_kube.cli.break_glass.subprocess.run")
-@patch("sentry_kube.cli.break_glass.list_clusters_for_customer")
-@patch("sentry_kube.cli.break_glass.Config")
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
 def test_dry_run_preflights_every_relevant_configmap_without_patching(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
@@ -94,7 +102,7 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     ]
 
     result = CliRunner().invoke(
-        break_glass, ["set", "--option", "sample-rate", "--value", "false"]
+        options, ["set", "--option", "sample-rate", "--value", "false"]
     )
 
     assert result.exit_code == 0, result.output
@@ -105,10 +113,10 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     )
 
 
-@patch("sentry_kube.cli.break_glass.ensure_kubectl", return_value="kubectl")
-@patch("sentry_kube.cli.break_glass.subprocess.run")
-@patch("sentry_kube.cli.break_glass.list_clusters_for_customer")
-@patch("sentry_kube.cli.break_glass.Config")
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
 def test_apply_patches_after_preflight_with_resource_version(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
@@ -116,20 +124,21 @@ def test_apply_patches_after_preflight_with_resource_version(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
+    mock_config.return_value.silo_regions["us"].aliases = ["saas"]
     mock_run.side_effect = [
         _success("yes\n"),
         _success("yes\n"),
-        _configmap("7", {"sample-rate": 1.0}),
+        _configmap("7", {"sample-rate": 1.0, "unrelated-option": "preserved"}),
         _success(),
     ]
 
     result = CliRunner().invoke(
-        break_glass,
+        options,
         [
             "set",
             "--region",
-            "us",
-            "--configmap-target",
+            "saas",
+            "--service",
             "getsentry",
             "--option",
             "sample-rate",
@@ -150,14 +159,23 @@ def test_apply_patches_after_preflight_with_resource_version(
         "value": "7",
     }
     updated_values = json.loads(patch_data[1]["value"])
-    assert updated_values["options"] == {"sample-rate": False}
-    assert updated_values["generated_at"] != "old"
+    assert updated_values["options"] == {
+        "sample-rate": False,
+        "unrelated-option": "preserved",
+    }
+    assert updated_values["generated_at"].endswith("Z")
+    assert "." in updated_values["generated_at"]
+    assert patch_data[2] == {
+        "op": "replace",
+        "path": "/metadata/annotations/generated_at",
+        "value": updated_values["generated_at"],
+    }
 
 
-@patch("sentry_kube.cli.break_glass.ensure_kubectl", return_value="kubectl")
-@patch("sentry_kube.cli.break_glass.subprocess.run")
-@patch("sentry_kube.cli.break_glass.list_clusters_for_customer")
-@patch("sentry_kube.cli.break_glass.Config")
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
 def test_failed_preflight_prevents_every_patch(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
@@ -176,7 +194,7 @@ def test_failed_preflight_prevents_every_patch(
     ]
 
     result = CliRunner().invoke(
-        break_glass,
+        options,
         [
             "set",
             "--option",
@@ -208,4 +226,114 @@ def test_failed_preflight_prevents_every_patch(
         capture_output=True,
         check=False,
         text=True,
+    )
+
+
+def test_set_rejects_non_standard_json_before_reading_any_cluster() -> None:
+    result = CliRunner().invoke(
+        options, ["set", "--option", "sample-rate", "--value", "NaN"]
+    )
+
+    assert result.exit_code != 0
+    assert "must be valid JSON" in result.output
+
+
+@patch("sentry_kube.cli.options.Config")
+def test_set_rejects_an_unknown_region_before_reading_any_cluster(
+    mock_config: MagicMock,
+) -> None:
+    mock_config.return_value.silo_regions = {
+        "us": MagicMock(k8s_config="us-config", aliases=["saas"]),
+    }
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--region",
+            "not-a-region",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown region(s): not-a-region" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_preflight_requires_the_writer_generated_at_annotation(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _success("yes\n"),
+        _success("yes\n"),
+        _configmap("1", {"sample-rate": 1.0}, include_generated_at_annotation=False),
+    ]
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "--region",
+            "us",
+            "--service",
+            "getsentry",
+            "--option",
+            "sample-rate",
+            "--value",
+            "false",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "has no generated_at annotation" in result.output
+    assert not any(
+        _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
+    )
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_reads_the_option_from_each_selected_configmap(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _success("yes\n"),
+        _configmap("1", {"sample-rate": False}),
+    ]
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "get",
+            "--region",
+            "us",
+            "--service",
+            "getsentry",
+            "--option",
+            "sample-rate",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "us/default/getsentry: false" in result.output
+    assert not any(
+        _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
