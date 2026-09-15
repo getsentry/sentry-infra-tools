@@ -8,6 +8,7 @@ the next normal deployment reconciles them back to the declarative values.
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ __all__ = ("options",)
 
 
 DEFAULT_KUBERNETES_NAMESPACE = "default"
+DEFAULT_OPTIONS_NAMESPACE = "getsentry"
 GETSENTRY_SERVICE = "getsentry"
 GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
@@ -61,9 +63,9 @@ class PreparedPatch:
     values_json: str
 
 
-def _configmap_name(options_namespace: str, target: ConfigMapTarget) -> str:
+def _configmap_name(target: ConfigMapTarget) -> str:
     suffix = f"-{target.configmap_suffix}" if target.configmap_suffix else ""
-    return f"sentry-options-{options_namespace}{suffix}"
+    return f"sentry-options-{DEFAULT_OPTIONS_NAMESPACE}{suffix}"
 
 
 def _find_targets(
@@ -84,7 +86,7 @@ def _find_targets(
     targets: list[ConfigMapTarget] = []
 
     for region, region_config in config.silo_regions.items():
-        if wanted_regions and region not in wanted_regions:
+        if region not in wanted_regions:
             continue
         for cluster in list_clusters_for_customer(region_config.k8s_config):
             if not wanted_services.intersection(cluster.service_names):
@@ -102,7 +104,10 @@ def _find_targets(
     if not targets:
         scope = ", ".join(sorted(wanted_regions))
         raise click.ClickException(f"No sentry-options ConfigMaps found for {scope}")
-    return targets
+    return sorted(
+        targets,
+        key=lambda target: (target.region, target.cluster, target.service),
+    )
 
 
 def _resolve_regions(
@@ -179,14 +184,14 @@ def _targets_for_cluster(
 
 
 def _kubectl_command(
-    kubectl: str, target: ConfigMapTarget, kubernetes_namespace: str, *args: str
+    kubectl: str, target: ConfigMapTarget, *args: str
 ) -> list[str]:
     return [
         kubectl,
         "--context",
         target.context,
         "--namespace",
-        kubernetes_namespace,
+        DEFAULT_KUBERNETES_NAMESPACE,
         *args,
     ]
 
@@ -202,45 +207,38 @@ def _command_error(
     return click.ClickException(f"{target.name}: unable to {action}: {detail}")
 
 
-def _require_permission(
-    kubectl: str,
-    target: ConfigMapTarget,
-    kubernetes_namespace: str,
-    configmap_name: str,
-    verb: str,
+def _require_patch_permission(
+    kubectl: str, target: ConfigMapTarget, configmap_name: str
 ) -> None:
     result = _run(
         _kubectl_command(
             kubectl,
             target,
-            kubernetes_namespace,
             "auth",
             "can-i",
-            verb,
+            "patch",
             f"configmap/{configmap_name}",
         )
     )
     if result.returncode != 0:
         raise _command_error(
-            target, f"check {verb} access to ConfigMap {configmap_name}", result
+            target, f"check patch access to ConfigMap {configmap_name}", result
         )
     if result.stdout.strip().lower() != "yes":
         raise click.ClickException(
-            f"{target.name}: cannot {verb} ConfigMap {configmap_name}"
+            f"{target.name}: cannot patch ConfigMap {configmap_name}"
         )
 
 
 def _read_values(
     kubectl: str,
     target: ConfigMapTarget,
-    kubernetes_namespace: str,
     configmap_name: str,
 ) -> tuple[str, dict[str, Any], bool]:
     result = _run(
         _kubectl_command(
             kubectl,
             target,
-            kubernetes_namespace,
             "get",
             "configmap",
             configmap_name,
@@ -285,19 +283,16 @@ def _read_values(
 def _prepare_patch(
     kubectl: str,
     target: ConfigMapTarget,
-    kubernetes_namespace: str,
-    options_namespace: str,
     option: str,
     value: OptionValue,
 ) -> PreparedPatch:
-    configmap_name = _configmap_name(options_namespace, target)
+    configmap_name = _configmap_name(target)
 
-    # Check both capabilities even when dry-running. A successful dry run is
-    # evidence that the same invocation has the access it needs to apply.
-    _require_permission(kubectl, target, kubernetes_namespace, configmap_name, "get")
-    _require_permission(kubectl, target, kubernetes_namespace, configmap_name, "patch")
+    # Reading the ConfigMap below proves read access. Check patch access up
+    # front too, so a successful dry run has the permissions needed to apply.
+    _require_patch_permission(kubectl, target, configmap_name)
     resource_version, values, has_generated_at_annotation = _read_values(
-        kubectl, target, kubernetes_namespace, configmap_name
+        kubectl, target, configmap_name
     )
     if not has_generated_at_annotation:
         raise click.ClickException(
@@ -328,9 +323,7 @@ def _generated_at() -> str:
     )
 
 
-def _apply_patch(
-    kubectl: str, kubernetes_namespace: str, prepared: PreparedPatch
-) -> None:
+def _apply_patch(kubectl: str, prepared: PreparedPatch) -> None:
     patch = json.dumps(
         [
             {
@@ -351,7 +344,6 @@ def _apply_patch(
         _kubectl_command(
             kubectl,
             prepared.target,
-            kubernetes_namespace,
             "patch",
             "configmap",
             prepared.configmap_name,
@@ -369,8 +361,6 @@ def _apply_patch(
 def _preflight_patches(
     kubectl: str,
     targets: Iterable[ConfigMapTarget],
-    kubernetes_namespace: str,
-    options_namespace: str,
     option: str,
     value: OptionValue,
 ) -> list[PreparedPatch]:
@@ -384,8 +374,6 @@ def _preflight_patches(
                 _prepare_patch(
                     kubectl,
                     target,
-                    kubernetes_namespace,
-                    options_namespace,
                     option,
                     value,
                 )
@@ -412,8 +400,18 @@ def _parse_json_value(value_json: str) -> OptionValue:
     def reject_nonstandard_constant(constant: str) -> None:
         raise ValueError(f"{constant} is not valid JSON")
 
+    def parse_finite_float(number: str) -> float:
+        value = float(number)
+        if not math.isfinite(value):
+            raise ValueError(f"{number} is not a finite JSON number")
+        return value
+
     try:
-        return json.loads(value_json, parse_constant=reject_nonstandard_constant)
+        return json.loads(
+            value_json,
+            parse_constant=reject_nonstandard_constant,
+            parse_float=parse_finite_float,
+        )
     except (json.JSONDecodeError, ValueError) as exc:
         raise click.BadParameter(
             'must be valid JSON; quote strings, for example --value \'"disabled"\'',
@@ -422,7 +420,7 @@ def _parse_json_value(value_json: str) -> OptionValue:
 
 
 def _validate_against_schema(
-    schemas_dir: Path, options_namespace: str, option_key: str, value: OptionValue
+    schemas_dir: Path, option_key: str, value: OptionValue
 ) -> None:
     """Validate one prospective write with sentry-options' canonical validator.
 
@@ -441,11 +439,12 @@ def _validate_against_schema(
 
     try:
         registry = SchemaRegistry.from_directory(schemas_dir)
-        registry.validate_option(options_namespace, option_key, value)
+        registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
     except OptionsError as exc:
         raise click.ClickException(
-            f"Schema validation failed for {options_namespace}.{option_key} using "
-            f"{schemas_dir}: {exc}. No clusters were contacted."
+            "Schema validation failed for "
+            f"{DEFAULT_OPTIONS_NAMESPACE}.{option_key} using {schemas_dir}: {exc}. "
+            "No clusters were contacted."
         ) from exc
 
 
@@ -465,10 +464,9 @@ control-silo ConfigMaps. Use either repeated `--region` to include only named
 regions, or repeated `--exclude-region` to start with the fleet and omit named
 regions. Configured aliases (such as `saas` for `us`) are accepted.
 
-This command validates and writes ConfigMaps; it cannot override a Getsentry
-dual-read rollout guard that prefers a legacy option-store value. When that
-guard is active, use the existing legacy emergency procedure for a key with a
-present legacy value.
+The target is fixed to the Getsentry values ConfigMaps in Kubernetes'
+`default` namespace: `sentry-options-getsentry`, plus
+`sentry-options-getsentry-control-silo` for control workloads.
 
 Examples:
 
@@ -479,20 +477,20 @@ $ sentry-kube --root ~/dev/ops options get --option billing.quota-enforcement
 \b
 # Preview a fleet-wide emergency change (the default; no write occurs).
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --schemas ~/dev/sentry-options/schemas \\
     --option billing.quota-enforcement --value false
 
 \b
 # Apply only to US and DE after inspecting the generated plan.
 $ sentry-kube --root ~/dev/ops options set \\
     --region us --region de --option billing.quota-enforcement \\
-    --schemas ~/dev/getsentry/sentry-options/schemas --value false --apply
+    --schemas ~/dev/sentry-options/schemas --value false --apply
 
 \b
 # Apply to all configured regions except single tenants.
 $ sentry-kube --root ~/dev/ops options set \\
     --exclude-region geico --exclude-region goldmansachs --exclude-region ly \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --schemas ~/dev/sentry-options/schemas \\
     --option billing.quota-enforcement --value false --apply
 """
 
@@ -504,20 +502,15 @@ Set OPTION in every selected live sentry-options ConfigMap.
 This is an incident-only override. Before contacting a cluster, it validates
 OPTION and VALUE against the schema snapshot supplied by `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`) using the native sentry-options validator. Then
-it fully preflights `get` and `patch` access and validates `values.json` in
-every selected ConfigMap before the first write. Without `--apply`, it prints
-the exact fleet plan and makes no changes. Each write uses the ConfigMap
-resource version read during preflight, so it refuses to overwrite a concurrent
-change.
+it reads every selected ConfigMap and confirms patch access before the first
+write. Without `--apply`, it prints the exact fleet plan and makes no changes.
+Each write uses the ConfigMap resource version read during preflight, so it
+refuses to overwrite a concurrent change.
 
 The snapshot proves the key and value are valid for that schema revision. It
 does not prove that revision has reached every running target; use the schema
 that was deployed with the Getsentry image and investigate a runtime schema
 mismatch before applying.
-
-This command changes the new store only. If Getsentry's dual-read rollout guard
-is still preferring a present legacy option-store value, the write will not
-become effective; use the legacy emergency procedure for that key instead.
 
 VALUE must be strict JSON. Quote JSON strings (for example, `--value '"on"'`).
 The option and value must be valid for the supplied schema snapshot.
@@ -527,19 +520,19 @@ Examples:
 \b
 # Dry run across the entire fleet.
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --schemas ~/dev/sentry-options/schemas \\
     --option sample-rate --value 0.1
 
 \b
 # Apply only to a pair of named regions.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --region us --region de --schemas ~/dev/sentry-options/schemas \\
     --option sample-rate --value 0.1 --apply
 
 \b
 # Apply everywhere except one region.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude-region geico --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --exclude-region geico --schemas ~/dev/sentry-options/schemas \\
     --option sample-rate --value 0.1 --apply
 """
 
@@ -548,8 +541,7 @@ GET_HELP = """\
 \b
 Read OPTION from every selected live sentry-options ConfigMap.
 
-`<unset>` means the ConfigMap does not declare the option. The application may
-therefore use a legacy fallback or another configured default. The command
+`<unset>` means the ConfigMap does not declare the option. The command
 requires read access to every selected ConfigMap and does not change anything.
 
 Examples:
@@ -598,18 +590,7 @@ def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
             "several. Cannot be combined with --exclude-region."
         ),
     )(command)
-    command = click.option(
-        "--kubernetes-namespace",
-        default=DEFAULT_KUBERNETES_NAMESPACE,
-        show_default=True,
-        help="Kubernetes namespace containing the ConfigMaps.",
-    )(command)
-    return click.option(
-        "--options-namespace",
-        default="getsentry",
-        show_default=True,
-        help="sentry-options namespace used in the ConfigMap name.",
-    )(command)
+    return command
 
 
 def _selected_targets(
@@ -647,7 +628,7 @@ def options() -> None:
     help=(
         "Schema snapshot root containing {namespace}/schema.json. Required unless "
         f"{SCHEMAS_ENVVAR} is set; for Getsentry use "
-        "~/dev/getsentry/sentry-options/schemas."
+        "~/dev/sentry-options/schemas."
     ),
 )
 @_target_scope_options
@@ -660,8 +641,6 @@ def set_option(
     option_key: str,
     value_json: str,
     schemas_dir: Path,
-    options_namespace: str,
-    kubernetes_namespace: str,
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
@@ -676,24 +655,23 @@ def set_option(
     """
 
     value = _parse_json_value(value_json)
-    _validate_against_schema(schemas_dir, options_namespace, option_key, value)
+    _validate_against_schema(schemas_dir, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
     prepared = _preflight_patches(
         kubectl,
         targets,
-        kubernetes_namespace,
-        options_namespace,
         option_key,
         value,
     )
 
     value_description = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
+    configmap_count = f"{len(prepared)} ConfigMap{'s' if len(prepared) != 1 else ''}"
     mode = "APPLYING" if apply else "DRY RUN"
     verb = "will set" if apply else "would set"
     click.echo(
-        f"{mode}: {verb} {option_key}={value_description} in {len(prepared)} ConfigMaps"
+        f"{mode}: {verb} {option_key}={value_description} in {configmap_count}"
     )
     for patch in prepared:
         click.echo(
@@ -706,7 +684,7 @@ def set_option(
     errors = []
     for patch in prepared:
         try:
-            _apply_patch(kubectl, kubernetes_namespace, patch)
+            _apply_patch(kubectl, patch)
         except click.ClickException as exc:
             errors.append(exc.message)
     if errors:
@@ -714,15 +692,13 @@ def set_option(
             "Some ConfigMaps were not patched:\n" + "\n".join(errors)
         )
     click.echo(
-        f"APPLIED: set {option_key}={value_description} in {len(prepared)} ConfigMaps"
+        f"APPLIED: set {option_key}={value_description} in {configmap_count}"
     )
 
 
 def _read_option(
     kubectl: str,
     targets: Iterable[ConfigMapTarget],
-    kubernetes_namespace: str,
-    options_namespace: str,
     option_key: str,
 ) -> list[tuple[ConfigMapTarget, str, bool, Any]]:
     """Read one option from every target, failing rather than hiding gaps."""
@@ -730,14 +706,9 @@ def _read_option(
     values_by_target = []
     errors = []
     for target in targets:
-        configmap_name = _configmap_name(options_namespace, target)
+        configmap_name = _configmap_name(target)
         try:
-            _require_permission(
-                kubectl, target, kubernetes_namespace, configmap_name, "get"
-            )
-            _, values, _ = _read_values(
-                kubectl, target, kubernetes_namespace, configmap_name
-            )
+            _, values, _ = _read_values(kubectl, target, configmap_name)
         except click.ClickException as exc:
             errors.append(exc.message)
         else:
@@ -769,16 +740,13 @@ def _read_option(
 @_target_scope_options
 def get_option(
     option_key: str,
-    options_namespace: str,
-    kubernetes_namespace: str,
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
 ) -> None:
     """Read OPTION from every selected live ConfigMap.
 
-    ``<unset>`` means the ConfigMap does not declare the option, so the
-    application may use its legacy fallback or another configured default.
+    ``<unset>`` means the ConfigMap does not declare the option.
     """
 
     targets = _selected_targets(regions, excluded_regions, services)
@@ -786,8 +754,6 @@ def get_option(
     values_by_target = _read_option(
         kubectl,
         targets,
-        kubernetes_namespace,
-        options_namespace,
         option_key,
     )
 

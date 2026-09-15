@@ -98,6 +98,8 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
     assert "--exclude-region" in result.output
     assert "--apply" in result.output
     assert "--schemas" in result.output
+    assert "--options-namespace" not in result.output
+    assert "--kubernetes-namespace" not in result.output
 
 
 def test_set_requires_an_explicit_schema_snapshot() -> None:
@@ -122,12 +124,9 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
         _success("yes\n"),
-        _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}),
         _success("yes\n"),
-        _success("yes\n"),
         _configmap("2", {"sample-rate": 1.0}),
-        _success("yes\n"),
         _success("yes\n"),
         _configmap("3", {"sample-rate": 1.0}),
     ]
@@ -148,6 +147,18 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     assert result.exit_code == 0, result.output
     assert "DRY RUN: would set sample-rate=false in 3 ConfigMaps" in result.output
     assert "sentry-options-getsentry-control-silo" in result.output
+    assert result.output.index("control/default/getsentry-control") < result.output.index(
+        "us/default/getsentry"
+    )
+    access_checks = [
+        invocation.args[0]
+        for invocation in mock_run.call_args_list
+        if "can-i" in invocation.args[0]
+    ]
+    assert len(access_checks) == 3
+    assert all(
+        command[command.index("can-i") + 1] == "patch" for command in access_checks
+    )
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
@@ -166,7 +177,6 @@ def test_apply_patches_after_preflight_with_resource_version(
     _mock_clusters(mock_config, mock_list_clusters)
     mock_config.return_value.silo_regions["us"].aliases = ["saas"]
     mock_run.side_effect = [
-        _success("yes\n"),
         _success("yes\n"),
         _configmap("7", {"sample-rate": 1.0, "unrelated-option": "preserved"}),
         _success(),
@@ -227,10 +237,8 @@ def test_failed_preflight_prevents_every_patch(
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
         _success("yes\n"),
-        _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}),
         _success("no\n"),
-        _success("yes\n"),
         _success("yes\n"),
         _configmap("3", {"sample-rate": 1.0}),
     ]
@@ -250,16 +258,16 @@ def test_failed_preflight_prevents_every_patch(
     )
 
     assert result.exit_code != 0
-    assert "us/default/getsentry-control: cannot get ConfigMap" in result.output
+    assert "us/default/getsentry: cannot patch ConfigMap" in result.output
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
-    assert mock_run.call_count == 7
+    assert mock_run.call_count == 5
     assert mock_run.call_args_list[-1] == call(
         [
             "kubectl",
             "--context",
-            "control-context",
+            "us-context",
             "--namespace",
             "default",
             "get",
@@ -273,7 +281,8 @@ def test_failed_preflight_prevents_every_patch(
     )
 
 
-def test_set_rejects_non_standard_json_before_reading_any_cluster() -> None:
+@pytest.mark.parametrize("value", ("NaN", "1e999"))
+def test_set_rejects_non_standard_json_before_reading_any_cluster(value: str) -> None:
     result = CliRunner().invoke(
         options,
         [
@@ -283,7 +292,7 @@ def test_set_rejects_non_standard_json_before_reading_any_cluster() -> None:
             "--option",
             "sample-rate",
             "--value",
-            "NaN",
+            value,
         ],
     )
 
@@ -353,7 +362,6 @@ def test_set_excludes_requested_regions_from_the_default_fleet_scope(
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
         _success("yes\n"),
-        _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}),
     ]
 
@@ -375,7 +383,7 @@ def test_set_excludes_requested_regions_from_the_default_fleet_scope(
     )
 
     assert result.exit_code == 0, result.output
-    assert "in 1 ConfigMaps" in result.output
+    assert "in 1 ConfigMap" in result.output
     assert "us/default/getsentry-control" in result.output
     assert "control/default/getsentry-control" not in result.output
 
@@ -392,7 +400,6 @@ def test_set_preflight_requires_the_writer_generated_at_annotation(
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
-        _success("yes\n"),
         _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}, include_generated_at_annotation=False),
     ]
@@ -434,7 +441,6 @@ def test_set_preflight_requires_the_values_generated_at_timestamp(
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
-        _success("yes\n"),
         _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}, include_generated_at_value=False),
     ]
@@ -488,7 +494,7 @@ def test_set_validates_the_schema_before_discovering_targets(
     assert result.exit_code != 0
     assert "schema validation failed" in result.output
     mock_schema_validation.assert_called_once_with(
-        Path("schemas"), "getsentry", "sample-rate", False
+        Path("schemas"), "sample-rate", False
     )
     mock_config.assert_not_called()
 
@@ -505,7 +511,6 @@ def test_get_reads_the_option_from_each_selected_configmap(
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
-        _success("yes\n"),
         _configmap("1", {"sample-rate": False}),
     ]
 
@@ -524,6 +529,17 @@ def test_get_reads_the_option_from_each_selected_configmap(
 
     assert result.exit_code == 0, result.output
     assert "us/default/getsentry: false" in result.output
+    assert mock_run.call_args.args[0] == [
+        "kubectl",
+        "--context",
+        "us-context",
+        "--namespace",
+        "default",
+        "get",
+        "configmap",
+        "sentry-options-getsentry",
+        "--output=json",
+    ]
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
