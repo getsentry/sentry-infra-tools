@@ -48,14 +48,17 @@ It discovers the relevant clusters from the current sentry-kube configuration:
 all clusters running `getsentry`, plus the control-silo ConfigMap in both the
 US and control clusters. Run it from the checkout that contains the fleet
 configuration (normally `ops`), or pass that checkout with the global
-`--root` option.
+`--root` option. Before it reads or writes, it prepares every selected
+Kubernetes context with sentry-kube's standard credential and DNS-endpoint
+setup. It requires normal Kubernetes contexts; `SENTRY_KUBE_NO_CONTEXT` is not
+supported for fleet operations.
 
 Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
 ConfigMap does not declare the option.
 
 ```shell
 sentry-kube --root ~/dev/ops options get \
-  --option billing.quota-enforcement
+  --option billing.quotas.exceeded.enabled
 ```
 
 `set` is a dry run by default. It verifies patch access and reads every
@@ -66,7 +69,7 @@ the Getsentry schema snapshot, or set `SENTRY_KUBE_OPTIONS_SCHEMAS` once for
 the shell:
 
 ```shell
-export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/sentry-options/schemas
+export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/getsentry/sentry-options/schemas
 ```
 
 The snapshot must be the revision deployed with the Getsentry image. Validation
@@ -77,13 +80,13 @@ make the change:
 
 ```shell
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/sentry-options/schemas \
-  --option billing.quota-enforcement \
+  --schemas ~/dev/getsentry/sentry-options/schemas \
+  --option billing.quotas.exceeded.enabled \
   --value false
 
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/sentry-options/schemas \
-  --option billing.quota-enforcement \
+  --schemas ~/dev/getsentry/sentry-options/schemas \
+  --option billing.quotas.exceeded.enabled \
   --value false \
   --apply
 ```
@@ -97,14 +100,14 @@ incident is intentionally scoped. Region selection is explicit:
 sentry-kube --root ~/dev/ops options get \
   --region us \
   --region de \
-  --option billing.quota-enforcement
+  --option billing.quotas.exceeded.enabled
 
 # Start with the full fleet and leave out single-tenant regions.
 sentry-kube --root ~/dev/ops options set \
   --exclude-region geico \
   --exclude-region goldmansachs \
   --exclude-region ly \
-  --option billing.quota-enforcement \
+  --option billing.quotas.exceeded.enabled \
   --value false \
   --apply
 ```

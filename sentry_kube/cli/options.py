@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -21,7 +22,8 @@ import click
 from libsentrykube.cluster import Cluster, list_clusters_for_customer
 from libsentrykube.config import Config
 from libsentrykube.customer import get_region_config
-from libsentrykube.utils import ensure_kubectl
+from libsentrykube.iap import ensure_kubeconfig_context
+from libsentrykube.utils import ensure_kubectl, should_run_with_empty_context
 
 if TYPE_CHECKING:
     from sentry_options import OptionValue
@@ -472,26 +474,26 @@ Examples:
 
 \b
 # Inspect a value everywhere.
-$ sentry-kube --root ~/dev/ops options get --option billing.quota-enforcement
+$ sentry-kube --root ~/dev/ops options get --option billing.quotas.exceeded.enabled
 
 \b
 # Preview a fleet-wide emergency change (the default; no write occurs).
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/sentry-options/schemas \\
-    --option billing.quota-enforcement --value false
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option billing.quotas.exceeded.enabled --value false
 
 \b
 # Apply only to US and DE after inspecting the generated plan.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --option billing.quota-enforcement \\
-    --schemas ~/dev/sentry-options/schemas --value false --apply
+    --region us --region de --option billing.quotas.exceeded.enabled \\
+    --schemas ~/dev/getsentry/sentry-options/schemas --value false --apply
 
 \b
 # Apply to all configured regions except single tenants.
 $ sentry-kube --root ~/dev/ops options set \\
     --exclude-region geico --exclude-region goldmansachs --exclude-region ly \\
-    --schemas ~/dev/sentry-options/schemas \\
-    --option billing.quota-enforcement --value false --apply
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option billing.quotas.exceeded.enabled --value false --apply
 """
 
 
@@ -502,10 +504,11 @@ Set OPTION in every selected live sentry-options ConfigMap.
 This is an incident-only override. Before contacting a cluster, it validates
 OPTION and VALUE against the schema snapshot supplied by `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`) using the native sentry-options validator. Then
-it reads every selected ConfigMap and confirms patch access before the first
-write. Without `--apply`, it prints the exact fleet plan and makes no changes.
-Each write uses the ConfigMap resource version read during preflight, so it
-refuses to overwrite a concurrent change.
+it prepares every selected Kubernetes context with sentry-kube's standard
+credential setup, reads every selected ConfigMap, and confirms patch access
+before the first write. Without `--apply`, it prints the exact fleet plan and
+makes no changes. Each write uses the ConfigMap resource version read during
+preflight, so it refuses to overwrite a concurrent change.
 
 The snapshot proves the key and value are valid for that schema revision. It
 does not prove that revision has reached every running target; use the schema
@@ -520,20 +523,20 @@ Examples:
 \b
 # Dry run across the entire fleet.
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/sentry-options/schemas \\
-    --option sample-rate --value 0.1
+    --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option billing.quotas.exceeded.enabled --value false
 
 \b
 # Apply only to a pair of named regions.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --schemas ~/dev/sentry-options/schemas \\
-    --option sample-rate --value 0.1 --apply
+    --region us --region de --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option billing.quotas.exceeded.enabled --value false --apply
 
 \b
 # Apply everywhere except one region.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude-region geico --schemas ~/dev/sentry-options/schemas \\
-    --option sample-rate --value 0.1 --apply
+    --exclude-region geico --schemas ~/dev/getsentry/sentry-options/schemas \\
+    --option billing.quotas.exceeded.enabled --value false --apply
 """
 
 
@@ -548,13 +551,13 @@ Examples:
 
 \b
 # Read from the full fleet.
-$ sentry-kube --root ~/dev/ops options get --option sample-rate
+$ sentry-kube --root ~/dev/ops options get --option billing.quotas.exceeded.enabled
 
 \b
 # Read only the control-silo ConfigMaps in US and control.
 $ sentry-kube --root ~/dev/ops options get \\
     --region us --region control --service getsentry-control \\
-    --option sample-rate
+    --option billing.quotas.exceeded.enabled
 """
 
 
@@ -600,6 +603,41 @@ def _selected_targets(
     return _find_targets(Config(), regions, excluded_regions, selected_services)
 
 
+def _prepare_kubeconfig(targets: Iterable[ConfigMapTarget]) -> None:
+    """Prepare every target context before any ConfigMap access.
+
+    The usual sentry-kube setup selects one context and registers a global
+    Kubernetes client. A fleet operation instead passes each context directly
+    to kubectl, but still uses the same credential and DNS-endpoint setup.
+    """
+
+    if should_run_with_empty_context():
+        raise click.ClickException(
+            "sentry-kube options requires Kubernetes contexts; unset "
+            "SENTRY_KUBE_NO_CONTEXT."
+        )
+
+    kubeconfig: str | None = None
+    errors = []
+    for context in sorted({target.context for target in targets}):
+        try:
+            prepared_kubeconfig = ensure_kubeconfig_context(context)
+        except click.ClickException as exc:
+            errors.append(f"{context}: {exc.message}")
+        else:
+            kubeconfig = prepared_kubeconfig
+
+    if errors:
+        raise click.ClickException(
+            "Could not prepare every Kubernetes context; no ConfigMaps were "
+            "read or patched:\n" + "\n".join(errors)
+        )
+    if kubeconfig is None:
+        raise click.ClickException("No Kubernetes contexts were selected.")
+
+    os.environ["KUBECONFIG"] = kubeconfig
+
+
 @click.group(help=OPTIONS_HELP)
 def options() -> None:
     pass
@@ -628,7 +666,7 @@ def options() -> None:
     help=(
         "Schema snapshot root containing {namespace}/schema.json. Required unless "
         f"{SCHEMAS_ENVVAR} is set; for Getsentry use "
-        "~/dev/sentry-options/schemas."
+        "~/dev/getsentry/sentry-options/schemas."
     ),
 )
 @_target_scope_options
@@ -658,6 +696,7 @@ def set_option(
     _validate_against_schema(schemas_dir, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
+    _prepare_kubeconfig(targets)
     kubectl = str(ensure_kubectl())
     prepared = _preflight_patches(
         kubectl,
@@ -750,6 +789,7 @@ def get_option(
     """
 
     targets = _selected_targets(regions, excluded_regions, services)
+    _prepare_kubeconfig(targets)
     kubectl = str(ensure_kubectl())
     values_by_target = _read_option(
         kubectl,
