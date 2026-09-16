@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
@@ -45,8 +46,13 @@ CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
 OPTIONS_CLI_ENVVAR = "SENTRY_OPTIONS_CLI"
+OPTIONS_CLI_VERSION = "1.2.10"
 REPOS_CONFIG_URL = (
     "https://raw.githubusercontent.com/getsentry/sentry-options-automator/main/repos.json"
+)
+OPTIONS_CLI_RELEASE_URL = (
+    "https://github.com/getsentry/sentry-options/releases/download/"
+    f"{OPTIONS_CLI_VERSION}/"
 )
 
 
@@ -209,27 +215,44 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, check=False, text=True)
 
 
-def _schema_cli() -> str:
-    executable = os.environ.get(OPTIONS_CLI_ENVVAR) or shutil.which(
-        "sentry-options-cli"
+def _schema_cli() -> str | None:
+    return os.environ.get(OPTIONS_CLI_ENVVAR) or shutil.which("sentry-options-cli")
+
+
+def _schema_cli_asset() -> str:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    architecture = {
+        "amd64": "x86_64",
+        "x86_64": "x86_64",
+        "aarch64": "aarch64",
+        "arm64": "aarch64",
+    }.get(machine)
+    if system == "darwin" and architecture:
+        return f"sentry-options-cli-{architecture}-apple-darwin"
+    if system == "linux" and architecture:
+        return f"sentry-options-cli-{architecture}-unknown-linux-musl"
+    raise click.ClickException(
+        "No sentry-options-cli release is available for "
+        f"{platform.system()} {platform.machine()}; pass --schemas instead"
     )
-    if not executable:
-        local_build = (
-            Path.home()
-            / "dev"
-            / "sentry-options"
-            / "target"
-            / "release"
-            / "sentry-options-cli"
+
+
+def _download_schema_cli(destination: Path) -> str:
+    asset = _schema_cli_asset()
+    try:
+        request = Request(
+            OPTIONS_CLI_RELEASE_URL + asset,
+            headers={"User-Agent": "sentry-kube"},
         )
-        if local_build.is_file():
-            executable = str(local_build)
-    if not executable:
+        with urlopen(request, timeout=30) as response:
+            destination.write_bytes(response.read())
+        destination.chmod(0o755)
+    except (OSError, URLError) as exc:
         raise click.ClickException(
-            "sentry-options-cli is required to fetch schemas; install it or pass "
-            f"--schemas (or set {SCHEMAS_ENVVAR})"
-        )
-    return executable
+            f"Unable to download sentry-options-cli {OPTIONS_CLI_VERSION}: {exc}"
+        ) from exc
+    return str(destination)
 
 
 def _repos_config_path(explicit_path: Path | None) -> Path | None:
@@ -255,9 +278,11 @@ def _download_repos_config(destination: Path) -> None:
 
 
 def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
-    schema_cli = _schema_cli()
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         temp_path = Path(temp_dir)
+        schema_cli = _schema_cli() or _download_schema_cli(
+            temp_path / "sentry-options-cli"
+        )
         config_path = _repos_config_path(repos_config)
         if config_path is None:
             config_path = temp_path / "repos.json"
@@ -553,9 +578,11 @@ GoCD pipeline or GitHub Action. It is a dry run by default and requires
 requested JSON value with the same native validator the application uses.
 
 When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
-command fetches a fresh snapshot with `sentry-options-cli fetch-schemas`.
-It uses `--repos-config` when supplied, a nearby `repos.json` when available,
-or the automator's published `repos.json` as a last resort.
+command fetches a fresh snapshot with `sentry-options-cli fetch-schemas`,
+downloading the pinned 1.2.10 release for the current platform when the CLI is
+not already installed. It uses `--repos-config` when supplied, a nearby
+`repos.json` when available, or the automator's published `repos.json` as a
+last resort.
 
 Scope defaults to every configured Getsentry ConfigMap, including both
 control-silo ConfigMaps. Use either repeated `--include` to include only named

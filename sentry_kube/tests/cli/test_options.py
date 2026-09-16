@@ -9,6 +9,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
+import sentry_kube.cli.options as options_module
 from sentry_kube.cli import main
 from sentry_kube.cli.options import options
 
@@ -103,6 +104,24 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
     assert "--schemas" in result.output
     assert "--options-namespace" not in result.output
     assert "--kubernetes-namespace" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("system", "machine", "asset"),
+    (
+        ("Darwin", "arm64", "sentry-options-cli-aarch64-apple-darwin"),
+        ("Darwin", "x86_64", "sentry-options-cli-x86_64-apple-darwin"),
+        ("Linux", "aarch64", "sentry-options-cli-aarch64-unknown-linux-musl"),
+        ("Linux", "x86_64", "sentry-options-cli-x86_64-unknown-linux-musl"),
+    ),
+)
+def test_schema_cli_release_asset_matches_platform(
+    monkeypatch: pytest.MonkeyPatch, system: str, machine: str, asset: str
+) -> None:
+    monkeypatch.setattr(options_module.platform, "system", lambda: system)
+    monkeypatch.setattr(options_module.platform, "machine", lambda: machine)
+
+    assert options_module._schema_cli_asset() == asset
 
 
 @patch("sentry_kube.cli.options.shutil.which", return_value="sentry-options-cli")
