@@ -48,10 +48,7 @@ It discovers the relevant clusters from the current sentry-kube configuration:
 all clusters running `getsentry`, plus the control-silo ConfigMap in both the
 US and control clusters. Run it from the checkout that contains the fleet
 configuration (normally `ops`), or pass that checkout with the global
-`--root` option. Before it reads or writes, it prepares every selected
-Kubernetes context with sentry-kube's standard credential and DNS-endpoint
-setup. It requires normal Kubernetes contexts; `SENTRY_KUBE_NO_CONTEXT` is not
-supported for fleet operations.
+`--root` option.
 
 Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
 ConfigMap does not declare the option.

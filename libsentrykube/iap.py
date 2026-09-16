@@ -69,13 +69,14 @@ def _get_cluster_credentials(context: str) -> None:
     logger.debug("Successfully fetched cluster credentials")
 
 
-def ensure_kubeconfig_context(context: str) -> str:
+def ensure_iap_tunnel(ctx: click.core.Context) -> str:
     """
-    Ensure kubeconfig exists with the required Kubernetes context.
+    Ensure kubeconfig exists with the required cluster context.
 
     Creates ~/.kube directory and fetches cluster credentials via gcloud
     if needed. Returns the path to the kubeconfig file.
     """
+    context = ctx.obj.context_name
     logger.debug("Ensuring kubeconfig for context: %s", context)
     logger.debug("KUBE_CONFIG_PATH=%s", KUBE_CONFIG_PATH)
 
@@ -142,9 +143,3 @@ def ensure_kubeconfig_context(context: str) -> str:
 
     logger.debug("Returning kubeconfig path: %s", KUBE_CONFIG_PATH)
     return KUBE_CONFIG_PATH
-
-
-def ensure_iap_tunnel(ctx: click.core.Context) -> str:
-    """Ensure the kubeconfig used by a single-context sentry-kube command."""
-
-    return ensure_kubeconfig_context(ctx.obj.context_name)

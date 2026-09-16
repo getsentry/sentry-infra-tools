@@ -79,19 +79,6 @@ def mock_schema_validation() -> Generator[MagicMock, None, None]:
         yield validate
 
 
-@pytest.fixture(autouse=True)
-def mock_kubeconfig_context(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Generator[MagicMock, None, None]:
-    """Avoid gcloud credential setup while preserving the fleet call boundary."""
-    monkeypatch.delenv("KUBECONFIG", raising=False)
-    with patch(
-        "sentry_kube.cli.options.ensure_kubeconfig_context",
-        return_value="/tmp/kubeconfig",
-    ) as ensure_context:
-        yield ensure_context
-
-
 def test_options_is_available_without_selecting_one_customer() -> None:
     result = CliRunner().invoke(main, ["options", "--help"])
 
@@ -133,7 +120,6 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
     _mock_kubectl: MagicMock,
-    mock_kubeconfig_context: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
@@ -164,10 +150,6 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     assert result.output.index("control/default/getsentry-control") < result.output.index(
         "us/default/getsentry"
     )
-    assert mock_kubeconfig_context.call_args_list == [
-        call("control-context"),
-        call("us-context"),
-    ]
     access_checks = [
         invocation.args[0]
         for invocation in mock_run.call_args_list
@@ -180,75 +162,6 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
-
-
-@patch("sentry_kube.cli.options.subprocess.run")
-@patch("sentry_kube.cli.options.list_clusters_for_customer")
-@patch("sentry_kube.cli.options.Config")
-def test_context_preflight_blocks_configmap_access(
-    mock_config: MagicMock,
-    mock_list_clusters: MagicMock,
-    mock_run: MagicMock,
-    mock_kubeconfig_context: MagicMock,
-) -> None:
-    _mock_clusters(mock_config, mock_list_clusters)
-    mock_kubeconfig_context.side_effect = [
-        click.ClickException("credentials unavailable"),
-        "/tmp/kubeconfig",
-    ]
-
-    result = CliRunner().invoke(
-        options,
-        [
-            "set",
-            "--schemas",
-            "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "control-context: credentials unavailable" in result.output
-    assert mock_kubeconfig_context.call_args_list == [
-        call("control-context"),
-        call("us-context"),
-    ]
-    mock_run.assert_not_called()
-
-
-@patch("sentry_kube.cli.options.subprocess.run")
-@patch("sentry_kube.cli.options.list_clusters_for_customer")
-@patch("sentry_kube.cli.options.Config")
-def test_set_requires_kubernetes_contexts(
-    mock_config: MagicMock,
-    mock_list_clusters: MagicMock,
-    mock_run: MagicMock,
-    mock_kubeconfig_context: MagicMock,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _mock_clusters(mock_config, mock_list_clusters)
-    monkeypatch.setenv("SENTRY_KUBE_NO_CONTEXT", "1")
-
-    result = CliRunner().invoke(
-        options,
-        [
-            "set",
-            "--schemas",
-            "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "sentry-kube options requires Kubernetes contexts" in result.output
-    mock_kubeconfig_context.assert_not_called()
-    mock_run.assert_not_called()
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
