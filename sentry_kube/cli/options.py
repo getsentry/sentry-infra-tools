@@ -507,7 +507,7 @@ def _validate_against_schema(
     except ImportError as exc:
         raise click.ClickException(
             "sentry-options schema validation is unavailable; install "
-            "sentry_options>=1.2.10"
+            "sentry_options>=1.2.11"
         ) from exc
 
     try:
