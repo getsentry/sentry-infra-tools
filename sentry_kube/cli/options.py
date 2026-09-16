@@ -583,11 +583,6 @@ Without `--apply`, it prints the exact fleet plan and makes no changes.
 Each write uses the ConfigMap resource version read during preflight, so it
 refuses to overwrite a concurrent change.
 
-The snapshot proves the key and value are valid for that schema revision. It
-does not prove that revision has reached every running target; use the schema
-that was deployed with the Getsentry image and investigate a runtime schema
-mismatch before applying.
-
 VALUE must be strict JSON. Quote JSON strings (for example, `'"on"'`).
 The option and value must be valid for the supplied schema snapshot.
 

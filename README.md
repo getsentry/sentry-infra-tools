@@ -68,10 +68,7 @@ client API. It uses the nearby or published
 different repository list, or `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) to
 supply a local snapshot explicitly.
 
-The snapshot must be the revision deployed with the Getsentry image. Validation
-proves the key and value are valid for that snapshot, but cannot prove that the
-same schema revision is mounted by every running target. `--apply` is required
-to make the change:
+`--apply` is required to make the change:
 
 ```shell
 sentry-kube --root ~/dev/ops options set \
