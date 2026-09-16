@@ -214,6 +214,17 @@ def _schema_cli() -> str:
         "sentry-options-cli"
     )
     if not executable:
+        local_build = (
+            Path.home()
+            / "dev"
+            / "sentry-options"
+            / "target"
+            / "release"
+            / "sentry-options-cli"
+        )
+        if local_build.is_file():
+            executable = str(local_build)
+    if not executable:
         raise click.ClickException(
             "sentry-options-cli is required to fetch schemas; install it or pass "
             f"--schemas (or set {SCHEMAS_ENVVAR})"
