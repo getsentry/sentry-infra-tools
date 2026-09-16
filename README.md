@@ -113,9 +113,6 @@ the canonical `sentry-options` schema snapshot, and the deployed ConfigMap
 structure (including both `generated_at` timestamps). It atomically refreshes
 the ConfigMap annotation and the `values.json` timestamp.
 
-The command confirms that it can prepare the ConfigMap write; it cannot prove
-pod reload.
-
 This is intentionally temporary. The next normal `sentry-options-automator`
 deployment restores the declarative value from `option-values/`; make the
 corresponding normal change if the emergency value should remain in effect.
