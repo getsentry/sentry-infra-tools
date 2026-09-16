@@ -40,6 +40,83 @@ All commands support `--help`, so please reference this.
 sentry-kube --help
 ```
 
+## Emergency sentry-options changes
+
+`sentry-kube options` reads and makes incident-only changes directly to the
+live `sentry-options` ConfigMaps. It does not invoke GoCD or GitHub Actions.
+It discovers the relevant clusters from the current sentry-kube configuration:
+all clusters running `getsentry`, plus the control-silo ConfigMap in both the
+US and control clusters. Run it from the checkout that contains the fleet
+configuration (normally `ops`), or pass that checkout with the global
+`--root` option.
+
+Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
+ConfigMap does not declare the option.
+
+```shell
+sentry-kube --root ~/dev/ops options get \
+  billing.quotas.exceeded.enabled
+```
+
+`set` is a dry run by default. It verifies patch access and reads every
+selected ConfigMap before changing any cluster. It also validates the requested
+key and strict JSON value with the native
+`sentry_options.SchemaRegistry` used by the application. By default it fetches
+a fresh schema snapshot through the explicit `sentry_options.fetch_schemas`
+client API. It uses the nearby or published
+`sentry-options-automator/repos.json`. Use `--repos-config` to choose a
+different repository list, or `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) to
+supply a local snapshot explicitly.
+
+`--apply` is required to make the change:
+
+```shell
+sentry-kube --root ~/dev/ops options set \
+  billing.quotas.exceeded.enabled false
+
+sentry-kube --root ~/dev/ops options set \
+  billing.quotas.exceeded.enabled false \
+  --apply
+```
+
+Use `--include` (configured names and aliases are accepted) or `--service`
+(`getsentry` or `getsentry-control`) to restrict an invocation only when the
+incident is intentionally scoped. Region selection is explicit:
+
+```shell
+# Include only US and DE. Repeat --include for every included region.
+sentry-kube --root ~/dev/ops options get \
+  --include us \
+  --include de \
+  billing.quotas.exceeded.enabled
+
+# Start with the full fleet and leave out single-tenant regions.
+sentry-kube --root ~/dev/ops options set \
+  --exclude geico \
+  --exclude goldmansachs \
+  --exclude ly \
+  billing.quotas.exceeded.enabled false \
+  --apply
+```
+
+`--include` and `--exclude` are mutually exclusive. Unknown regions fail
+before any `kubectl` call. The default intentionally covers every configured
+topology target rather than applying the generic `--stage` filter: the live
+control-silo cluster is classified as `build` in the shared sentry-kube
+configuration.
+
+The tool uses a resource-version JSON Patch, so it refuses to overwrite a
+ConfigMap changed after preflight. There is no cross-cluster transaction: a
+patch failure after apply starts is reported with its exact cluster, and must
+be retried after investigating that cluster. It validates strict JSON input,
+the canonical `sentry-options` schema snapshot, and the deployed ConfigMap
+structure (including both `generated_at` timestamps). It atomically refreshes
+the ConfigMap annotation and the `values.json` timestamp.
+
+This is intentionally temporary. The next normal `sentry-options-automator`
+deployment restores the declarative value from `option-values/`; make the
+corresponding normal change if the emergency value should remain in effect.
+
 ## Environment Variables
 
 `sentry-kube` can be further configured by setting environment variables.
