@@ -62,9 +62,8 @@ sentry-kube --root ~/dev/ops options get \
 selected ConfigMap before changing any cluster. It also validates the requested
 key and strict JSON value with the native
 `sentry_options.SchemaRegistry` used by the application. By default it fetches
-a fresh schema snapshot with `sentry-options-cli fetch-schemas`, downloading
-the pinned 1.2.10 release for the current platform when the CLI is not already
-installed. It uses the nearby or published
+a fresh schema snapshot through the explicit `sentry_options.fetch_schemas`
+client API. It uses the nearby or published
 `sentry-options-automator/repos.json`. Use `--repos-config` to choose a
 different repository list, or `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) to
 supply a local snapshot explicitly.

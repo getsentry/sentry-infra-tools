@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import json
 import math
-import os
-import platform
-import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterable, Iterator
@@ -45,14 +42,8 @@ GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
-OPTIONS_CLI_ENVVAR = "SENTRY_OPTIONS_CLI"
-OPTIONS_CLI_VERSION = "1.2.10"
 REPOS_CONFIG_URL = (
     "https://raw.githubusercontent.com/getsentry/sentry-options-automator/main/repos.json"
-)
-OPTIONS_CLI_RELEASE_URL = (
-    "https://github.com/getsentry/sentry-options/releases/download/"
-    f"{OPTIONS_CLI_VERSION}/"
 )
 
 
@@ -215,44 +206,21 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, check=False, text=True)
 
 
-def _schema_cli() -> str | None:
-    return os.environ.get(OPTIONS_CLI_ENVVAR) or shutil.which("sentry-options-cli")
-
-
-def _schema_cli_asset() -> str:
-    system = platform.system().lower()
-    machine = platform.machine().lower()
-    architecture = {
-        "amd64": "x86_64",
-        "x86_64": "x86_64",
-        "aarch64": "aarch64",
-        "arm64": "aarch64",
-    }.get(machine)
-    if system == "darwin" and architecture:
-        return f"sentry-options-cli-{architecture}-apple-darwin"
-    if system == "linux" and architecture:
-        return f"sentry-options-cli-{architecture}-unknown-linux-musl"
-    raise click.ClickException(
-        "No sentry-options-cli release is available for "
-        f"{platform.system()} {platform.machine()}; pass --schemas instead"
-    )
-
-
-def _download_schema_cli(destination: Path) -> str:
-    asset = _schema_cli_asset()
+def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
     try:
-        request = Request(
-            OPTIONS_CLI_RELEASE_URL + asset,
-            headers={"User-Agent": "sentry-kube"},
-        )
-        with urlopen(request, timeout=30) as response:
-            destination.write_bytes(response.read())
-        destination.chmod(0o755)
-    except (OSError, URLError) as exc:
+        from sentry_options import OptionsError, fetch_schemas
+    except ImportError as exc:
         raise click.ClickException(
-            f"Unable to download sentry-options-cli {OPTIONS_CLI_VERSION}: {exc}"
+            "Installed sentry_options does not provide schema fetching; install a "
+            "release with fetch_schemas or pass --schemas"
         ) from exc
-    return str(destination)
+
+    try:
+        fetch_schemas(config_path, output)
+    except OptionsError as exc:
+        raise click.ClickException(
+            f"Unable to fetch sentry-options schemas: {exc}"
+        ) from exc
 
 
 def _repos_config_path(explicit_path: Path | None) -> Path | None:
@@ -278,30 +246,15 @@ def _download_repos_config(destination: Path) -> None:
 
 
 def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
-    with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
-        temp_path = Path(temp_dir)
-        schema_cli = _schema_cli() or _download_schema_cli(
-            temp_path / "sentry-options-cli"
-        )
-        config_path = _repos_config_path(repos_config)
-        if config_path is None:
-            config_path = temp_path / "repos.json"
-            _download_repos_config(config_path)
+    config_path = _repos_config_path(repos_config)
+    if config_path is not None:
+        _fetch_schemas_with_client(config_path, output)
+        return
 
-        result = _run(
-            [
-                schema_cli,
-                "--quiet",
-                "fetch-schemas",
-                "--config",
-                str(config_path),
-                "--out",
-                str(output),
-            ]
-        )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip() or "no output"
-        raise click.ClickException(f"Unable to fetch sentry-options schemas: {detail}")
+    with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
+        config_path = Path(temp_dir) / "repos.json"
+        _download_repos_config(config_path)
+        _fetch_schemas_with_client(config_path, output)
 
 
 @contextmanager
@@ -578,11 +531,9 @@ GoCD pipeline or GitHub Action. It is a dry run by default and requires
 requested JSON value with the same native validator the application uses.
 
 When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
-command fetches a fresh snapshot with `sentry-options-cli fetch-schemas`,
-downloading the pinned 1.2.10 release for the current platform when the CLI is
-not already installed. It uses `--repos-config` when supplied, a nearby
-`repos.json` when available, or the automator's published `repos.json` as a
-last resort.
+command fetches a fresh snapshot through the explicit `sentry_options` client
+API. It uses `--repos-config` when supplied, a nearby `repos.json` when
+available, or the automator's published `repos.json` as a last resort.
 
 Scope defaults to every configured Getsentry ConfigMap, including both
 control-silo ConfigMaps. Use either repeated `--include` to include only named
@@ -625,10 +576,10 @@ Set OPTION in every selected live sentry-options ConfigMap.
 This is an incident-only override. Before contacting a cluster, it validates
 OPTION and VALUE against a local snapshot supplied by `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`), or fetches one with
-`sentry-options-cli fetch-schemas` when no snapshot is supplied. It then uses
-the native sentry-options validator before it reads every selected ConfigMap
-and confirms patch access before the first write. Without `--apply`, it prints
-the exact fleet plan and makes no changes.
+the explicit `sentry_options.fetch_schemas` client API when no snapshot is
+supplied. It then uses the native sentry-options validator before it reads
+every selected ConfigMap and confirms patch access before the first write.
+Without `--apply`, it prints the exact fleet plan and makes no changes.
 Each write uses the ConfigMap resource version read during preflight, so it
 refuses to overwrite a concurrent change.
 
@@ -742,7 +693,7 @@ def options() -> None:
     envvar=SCHEMAS_ENVVAR,
     help=(
         "Optional schema snapshot root containing {namespace}/schema.json. If omitted, "
-        "fetches one with sentry-options-cli."
+        "fetches one with sentry_options."
     ),
 )
 @click.option(

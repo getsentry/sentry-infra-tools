@@ -9,7 +9,6 @@ import click
 import pytest
 from click.testing import CliRunner
 
-import sentry_kube.cli.options as options_module
 from sentry_kube.cli import main
 from sentry_kube.cli.options import options
 
@@ -106,25 +105,7 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
     assert "--kubernetes-namespace" not in result.output
 
 
-@pytest.mark.parametrize(
-    ("system", "machine", "asset"),
-    (
-        ("Darwin", "arm64", "sentry-options-cli-aarch64-apple-darwin"),
-        ("Darwin", "x86_64", "sentry-options-cli-x86_64-apple-darwin"),
-        ("Linux", "aarch64", "sentry-options-cli-aarch64-unknown-linux-musl"),
-        ("Linux", "x86_64", "sentry-options-cli-x86_64-unknown-linux-musl"),
-    ),
-)
-def test_schema_cli_release_asset_matches_platform(
-    monkeypatch: pytest.MonkeyPatch, system: str, machine: str, asset: str
-) -> None:
-    monkeypatch.setattr(options_module.platform, "system", lambda: system)
-    monkeypatch.setattr(options_module.platform, "machine", lambda: machine)
-
-    assert options_module._schema_cli_asset() == asset
-
-
-@patch("sentry_kube.cli.options.shutil.which", return_value="sentry-options-cli")
+@patch("sentry_kube.cli.options._fetch_schemas")
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
@@ -134,14 +115,13 @@ def test_set_fetches_schemas_when_no_snapshot_is_supplied(
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
     _mock_kubectl: MagicMock,
-    _mock_schema_cli: MagicMock,
+    mock_fetch_schemas: MagicMock,
     tmp_path: Path,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     repos_config = tmp_path / "repos.json"
     repos_config.write_text("{}")
     mock_run.side_effect = [
-        _success(),  # sentry-options-cli fetch-schemas
         _success("yes\n"),
         _configmap("1", {"sample-rate": 1.0}),
     ]
@@ -162,10 +142,8 @@ def test_set_fetches_schemas_when_no_snapshot_is_supplied(
     )
 
     assert result.exit_code == 0, result.output
-    fetch_command = mock_run.call_args_list[0].args[0]
-    assert fetch_command[:3] == ["sentry-options-cli", "--quiet", "fetch-schemas"]
-    assert "--config" in fetch_command
-    assert "--out" in fetch_command
+    assert mock_fetch_schemas.call_args.args[0] == repos_config
+    assert mock_fetch_schemas.call_args.args[1].name == "schemas"
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
