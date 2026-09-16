@@ -9,12 +9,18 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import shutil
 import subprocess
-from collections.abc import Callable, Iterable
+import tempfile
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import click
 
@@ -37,6 +43,11 @@ GETSENTRY_SERVICE = "getsentry"
 GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
+REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
+OPTIONS_CLI_ENVVAR = "SENTRY_OPTIONS_CLI"
+REPOS_CONFIG_URL = (
+    "https://raw.githubusercontent.com/getsentry/sentry-options-automator/main/repos.json"
+)
 
 
 @dataclass(frozen=True)
@@ -115,7 +126,7 @@ def _resolve_regions(
 ) -> set[str]:
     """Resolve the included or excluded configured region names and aliases.
 
-    Silently dropping one misspelled ``--region`` while changing every other
+    Silently dropping one misspelled ``--include`` while changing every other
     requested region is unsafe during an incident, so reject the entire
     invocation before it invokes kubectl.
     """
@@ -123,9 +134,7 @@ def _resolve_regions(
     requested_regions = set(regions)
     requested_excluded_regions = set(excluded_regions)
     if requested_regions and requested_excluded_regions:
-        raise click.UsageError(
-            "Use either --region or --exclude-region, not both."
-        )
+        raise click.UsageError("Use either --include or --exclude, not both.")
 
     if requested_regions:
         return _resolve_region_names(config, requested_regions)
@@ -198,6 +207,80 @@ def _kubectl_command(
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, check=False, text=True)
+
+
+def _schema_cli() -> str:
+    executable = os.environ.get(OPTIONS_CLI_ENVVAR) or shutil.which(
+        "sentry-options-cli"
+    )
+    if not executable:
+        raise click.ClickException(
+            "sentry-options-cli is required to fetch schemas; install it or pass "
+            f"--schemas (or set {SCHEMAS_ENVVAR})"
+        )
+    return executable
+
+
+def _repos_config_path(explicit_path: Path | None) -> Path | None:
+    if explicit_path is not None:
+        return explicit_path
+
+    candidates = (
+        Path.cwd() / "repos.json",
+        Path.home() / "dev" / "sentry-options-automator" / "repos.json",
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _download_repos_config(destination: Path) -> None:
+    try:
+        request = Request(REPOS_CONFIG_URL, headers={"User-Agent": "sentry-kube"})
+        with urlopen(request, timeout=15) as response:
+            destination.write_bytes(response.read())
+    except (OSError, URLError) as exc:
+        raise click.ClickException(
+            f"Unable to fetch the sentry-options repository list: {exc}"
+        ) from exc
+
+
+def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
+    with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
+        temp_path = Path(temp_dir)
+        config_path = _repos_config_path(repos_config)
+        if config_path is None:
+            config_path = temp_path / "repos.json"
+            _download_repos_config(config_path)
+
+        result = _run(
+            [
+                _schema_cli(),
+                "--quiet",
+                "fetch-schemas",
+                "--config",
+                str(config_path),
+                "--out",
+                str(output),
+            ]
+        )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "no output"
+        raise click.ClickException(f"Unable to fetch sentry-options schemas: {detail}")
+
+
+@contextmanager
+def _schema_directory(
+    schemas_dir: Path | None, repos_config: Path | None
+) -> Iterator[Path]:
+    """Yield a schema snapshot, fetching one when no local snapshot is supplied."""
+
+    if schemas_dir is not None:
+        yield schemas_dir
+        return
+
+    with tempfile.TemporaryDirectory(prefix="sentry-kube-schemas-") as temp_dir:
+        fetched_schemas = Path(temp_dir) / "schemas"
+        _fetch_schemas(repos_config, fetched_schemas)
+        yield fetched_schemas
 
 
 def _command_error(
@@ -414,8 +497,8 @@ def _parse_json_value(value_json: str) -> OptionValue:
         )
     except (json.JSONDecodeError, ValueError) as exc:
         raise click.BadParameter(
-            'must be valid JSON; quote strings, for example --value \'"disabled"\'',
-            param_hint="--value",
+            'must be valid JSON; quote strings, for example \'"disabled"\'',
+            param_hint="VALUE",
         ) from exc
 
 
@@ -454,14 +537,17 @@ Read deployed sentry-options values or make a temporary, incident-only update.
 
 `set` talks directly to the selected Kubernetes ConfigMaps. It never starts a
 GoCD pipeline or GitHub Action. It is a dry run by default and requires
-`--apply` after every selected ConfigMap has passed preflight. It also requires
-a local, trusted schema snapshot via `--schemas` (or
-`SENTRY_KUBE_OPTIONS_SCHEMAS`) and validates the requested JSON value with the
-same native validator the application uses.
+`--apply` after every selected ConfigMap has passed preflight. It validates the
+requested JSON value with the same native validator the application uses.
+
+When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
+command fetches a fresh snapshot with `sentry-options-cli fetch-schemas`.
+It uses `--repos-config` when supplied, a nearby `repos.json` when available,
+or the automator's published `repos.json` as a last resort.
 
 Scope defaults to every configured Getsentry ConfigMap, including both
-control-silo ConfigMaps. Use either repeated `--region` to include only named
-regions, or repeated `--exclude-region` to start with the fleet and omit named
+control-silo ConfigMaps. Use either repeated `--include` to include only named
+regions, or repeated `--exclude` to start with the fleet and omit named
 regions. Configured aliases (such as `saas` for `us`) are accepted.
 
 The target is fixed to the Getsentry values ConfigMaps in Kubernetes'
@@ -471,27 +557,25 @@ The target is fixed to the Getsentry values ConfigMaps in Kubernetes'
 Examples:
 
 \b
-# Inspect a value everywhere.
-$ sentry-kube --root ~/dev/ops options get --option billing.quotas.exceeded.enabled
+# Inspect a value everywhere. Each line includes the region and value.
+$ sentry-kube --root ~/dev/ops options get billing.quotas.exceeded.enabled
 
 \b
 # Preview a fleet-wide emergency change (the default; no write occurs).
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
-    --option billing.quotas.exceeded.enabled --value false
+    billing.quotas.exceeded.enabled false
 
 \b
 # Apply only to US and DE after inspecting the generated plan.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --option billing.quotas.exceeded.enabled \\
-    --schemas ~/dev/getsentry/sentry-options/schemas --value false --apply
+    --include us --include de billing.quotas.exceeded.enabled false \\
+    --apply
 
 \b
 # Apply to all configured regions except single tenants.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude-region geico --exclude-region goldmansachs --exclude-region ly \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
-    --option billing.quotas.exceeded.enabled --value false --apply
+    --exclude geico --exclude goldmansachs --exclude ly \\
+    billing.quotas.exceeded.enabled false --apply
 """
 
 
@@ -500,10 +584,12 @@ SET_HELP = """\
 Set OPTION in every selected live sentry-options ConfigMap.
 
 This is an incident-only override. Before contacting a cluster, it validates
-OPTION and VALUE against the schema snapshot supplied by `--schemas` (or
-`SENTRY_KUBE_OPTIONS_SCHEMAS`) using the native sentry-options validator. Then
-it reads every selected ConfigMap and confirms patch access before the first
-write. Without `--apply`, it prints the exact fleet plan and makes no changes.
+OPTION and VALUE against a local snapshot supplied by `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`), or fetches one with
+`sentry-options-cli fetch-schemas` when no snapshot is supplied. It then uses
+the native sentry-options validator before it reads every selected ConfigMap
+and confirms patch access before the first write. Without `--apply`, it prints
+the exact fleet plan and makes no changes.
 Each write uses the ConfigMap resource version read during preflight, so it
 refuses to overwrite a concurrent change.
 
@@ -512,7 +598,7 @@ does not prove that revision has reached every running target; use the schema
 that was deployed with the Getsentry image and investigate a runtime schema
 mismatch before applying.
 
-VALUE must be strict JSON. Quote JSON strings (for example, `--value '"on"'`).
+VALUE must be strict JSON. Quote JSON strings (for example, `'"on"'`).
 The option and value must be valid for the supplied schema snapshot.
 
 Examples:
@@ -520,20 +606,19 @@ Examples:
 \b
 # Dry run across the entire fleet.
 $ sentry-kube --root ~/dev/ops options set \\
-    --schemas ~/dev/getsentry/sentry-options/schemas \\
-    --option billing.quotas.exceeded.enabled --value false
+    billing.quotas.exceeded.enabled false
 
 \b
 # Apply only to a pair of named regions.
 $ sentry-kube --root ~/dev/ops options set \\
-    --region us --region de --schemas ~/dev/getsentry/sentry-options/schemas \\
-    --option billing.quotas.exceeded.enabled --value false --apply
+    --include us --include de billing.quotas.exceeded.enabled false \\
+    --apply
 
 \b
 # Apply everywhere except one region.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude-region geico --schemas ~/dev/getsentry/sentry-options/schemas \\
-    --option billing.quotas.exceeded.enabled --value false --apply
+    --exclude geico billing.quotas.exceeded.enabled false \\
+    --apply
 """
 
 
@@ -543,18 +628,20 @@ Read OPTION from every selected live sentry-options ConfigMap.
 
 `<unset>` means the ConfigMap does not declare the option. The command
 requires read access to every selected ConfigMap and does not change anything.
+Each output line starts with the region, cluster, and service, followed by the
+value found there.
 
 Examples:
 
 \b
-# Read from the full fleet.
-$ sentry-kube --root ~/dev/ops options get --option billing.quotas.exceeded.enabled
+# Read from the full fleet. Each line shows the region and value.
+$ sentry-kube --root ~/dev/ops options get billing.quotas.exceeded.enabled
 
 \b
 # Read only the control-silo ConfigMaps in US and control.
 $ sentry-kube --root ~/dev/ops options get \\
-    --region us --region control --service getsentry-control \\
-    --option billing.quotas.exceeded.enabled
+    --include us --include control --service getsentry-control \\
+    billing.quotas.exceeded.enabled
 """
 
 
@@ -573,21 +660,21 @@ def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
         ),
     )(command)
     command = click.option(
-        "--exclude-region",
+        "--exclude",
         "excluded_regions",
         multiple=True,
         help=(
             "Start with the whole fleet and omit this configured region or alias; "
-            "repeat to omit several. Cannot be combined with --region."
+            "repeat to omit several. Cannot be combined with --include."
         ),
     )(command)
     command = click.option(
-        "--region",
+        "--include",
         "regions",
         multiple=True,
         help=(
             "Include only this configured region or alias; repeat to include "
-            "several. Cannot be combined with --exclude-region."
+            "several. Cannot be combined with --exclude."
         ),
     )(command)
     return command
@@ -606,29 +693,26 @@ def options() -> None:
 
 
 @options.command("set", help=SET_HELP)
-@click.option(
-    "--option",
-    "option_key",
-    required=True,
-    callback=_validate_option_key,
-    help="Option key to set.",
-)
-@click.option(
-    "--value",
-    "value_json",
-    required=True,
-    help='Value as JSON, for example false, 10, or ' + "'\"text\"'.",
-)
+@click.argument("option_key", metavar="OPTION", callback=_validate_option_key)
+@click.argument("value_json", metavar="VALUE")
 @click.option(
     "--schemas",
     "schemas_dir",
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True, readable=True),
-    required=True,
+    required=False,
     envvar=SCHEMAS_ENVVAR,
     help=(
-        "Schema snapshot root containing {namespace}/schema.json. Required unless "
-        f"{SCHEMAS_ENVVAR} is set; for Getsentry use "
-        "~/dev/getsentry/sentry-options/schemas."
+        "Optional schema snapshot root containing {namespace}/schema.json. If omitted, "
+        "fetches one with sentry-options-cli."
+    ),
+)
+@click.option(
+    "--repos-config",
+    type=click.Path(path_type=Path, dir_okay=False, readable=True),
+    envvar=REPOS_CONFIG_ENVVAR,
+    help=(
+        "repos.json to use when fetching schemas (default: nearby or published "
+        f"automator config; ignored with --schemas)."
     ),
 )
 @_target_scope_options
@@ -640,7 +724,8 @@ def options() -> None:
 def set_option(
     option_key: str,
     value_json: str,
-    schemas_dir: Path,
+    schemas_dir: Path | None,
+    repos_config: Path | None,
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
@@ -655,7 +740,8 @@ def set_option(
     """
 
     value = _parse_json_value(value_json)
-    _validate_against_schema(schemas_dir, option_key, value)
+    with _schema_directory(schemas_dir, repos_config) as schema_path:
+        _validate_against_schema(schema_path, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
@@ -730,13 +816,7 @@ def _read_option(
 
 
 @options.command("get", help=GET_HELP)
-@click.option(
-    "--option",
-    "option_key",
-    required=True,
-    callback=_validate_option_key,
-    help="Option key to read.",
-)
+@click.argument("option_key", metavar="OPTION", callback=_validate_option_key)
 @_target_scope_options
 def get_option(
     option_key: str,

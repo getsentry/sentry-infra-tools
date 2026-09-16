@@ -94,21 +94,59 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
 
     assert result.exit_code == 0, result.output
     assert "Examples:" in result.output
-    assert "--region" in result.output
-    assert "--exclude-region" in result.output
+    assert "--include" in result.output
+    assert "--exclude" in result.output
+    assert "--region" not in result.output
+    assert "--exclude-region" not in result.output
+    assert "OPTION VALUE" in result.output
     assert "--apply" in result.output
     assert "--schemas" in result.output
     assert "--options-namespace" not in result.output
     assert "--kubernetes-namespace" not in result.output
 
 
-def test_set_requires_an_explicit_schema_snapshot() -> None:
+@patch("sentry_kube.cli.options.shutil.which", return_value="sentry-options-cli")
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_fetches_schemas_when_no_snapshot_is_supplied(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+    _mock_schema_cli: MagicMock,
+    tmp_path: Path,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    repos_config = tmp_path / "repos.json"
+    repos_config.write_text("{}")
+    mock_run.side_effect = [
+        _success(),  # sentry-options-cli fetch-schemas
+        _success("yes\n"),
+        _configmap("1", {"sample-rate": 1.0}),
+    ]
+
     result = CliRunner().invoke(
-        options, ["set", "--option", "sample-rate", "--value", "false"]
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--include",
+            "us",
+            "--service",
+            "getsentry",
+            "--repos-config",
+            str(repos_config),
+        ],
     )
 
-    assert result.exit_code != 0
-    assert "Missing option '--schemas'" in result.output
+    assert result.exit_code == 0, result.output
+    fetch_command = mock_run.call_args_list[0].args[0]
+    assert fetch_command[:3] == ["sentry-options-cli", "--quiet", "fetch-schemas"]
+    assert "--config" in fetch_command
+    assert "--out" in fetch_command
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -135,12 +173,10 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
         ],
     )
 
@@ -186,16 +222,14 @@ def test_apply_patches_after_preflight_with_resource_version(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--region",
+            "--include",
             "saas",
             "--service",
             "getsentry",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
             "--apply",
         ],
     )
@@ -247,12 +281,10 @@ def test_failed_preflight_prevents_every_patch(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
             "--apply",
         ],
     )
@@ -287,12 +319,10 @@ def test_set_rejects_non_standard_json_before_reading_any_cluster(value: str) ->
         options,
         [
             "set",
+            "sample-rate",
+            value,
             "--schemas",
             "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            value,
         ],
     )
 
@@ -312,14 +342,12 @@ def test_set_rejects_an_unknown_region_before_reading_any_cluster(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--region",
+            "--include",
             "not-a-region",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
         ],
     )
 
@@ -332,21 +360,19 @@ def test_set_rejects_combining_included_and_excluded_regions() -> None:
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--region",
+            "--include",
             "us",
-            "--exclude-region",
+            "--exclude",
             "control",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
         ],
     )
 
     assert result.exit_code != 0
-    assert "Use either --region or --exclude-region, not both" in result.output
+    assert "Use either --include or --exclude, not both" in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -369,16 +395,14 @@ def test_set_excludes_requested_regions_from_the_default_fleet_scope(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--exclude-region",
+            "--exclude",
             "control",
             "--service",
             "getsentry-control",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
         ],
     )
 
@@ -408,16 +432,14 @@ def test_set_preflight_requires_the_writer_generated_at_annotation(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--region",
+            "--include",
             "us",
             "--service",
             "getsentry",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
             "--apply",
         ],
     )
@@ -449,16 +471,14 @@ def test_set_preflight_requires_the_values_generated_at_timestamp(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--region",
+            "--include",
             "us",
             "--service",
             "getsentry",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
             "--apply",
         ],
     )
@@ -482,12 +502,10 @@ def test_set_validates_the_schema_before_discovering_targets(
         options,
         [
             "set",
+            "sample-rate",
+            "false",
             "--schemas",
             "schemas",
-            "--option",
-            "sample-rate",
-            "--value",
-            "false",
         ],
     )
 
@@ -518,12 +536,11 @@ def test_get_reads_the_option_from_each_selected_configmap(
         options,
         [
             "get",
-            "--region",
+            "sample-rate",
+            "--include",
             "us",
             "--service",
             "getsentry",
-            "--option",
-            "sample-rate",
         ],
     )
 
@@ -543,3 +560,28 @@ def test_get_reads_the_option_from_each_selected_configmap(
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_prints_each_target_region_and_value(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _configmap("1", {"sample-rate": False}),
+        _configmap("2", {"sample-rate": True}),
+        _configmap("3", {}),
+    ]
+
+    result = CliRunner().invoke(options, ["get", "sample-rate"])
+
+    assert result.exit_code == 0, result.output
+    assert "control/default/getsentry-control: false" in result.output
+    assert "us/default/getsentry: true" in result.output
+    assert "us/default/getsentry-control: <unset>" in result.output

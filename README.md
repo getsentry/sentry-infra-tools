@@ -55,61 +55,53 @@ ConfigMap does not declare the option.
 
 ```shell
 sentry-kube --root ~/dev/ops options get \
-  --option billing.quotas.exceeded.enabled
+  billing.quotas.exceeded.enabled
 ```
 
 `set` is a dry run by default. It verifies patch access and reads every
 selected ConfigMap before changing any cluster. It also validates the requested
 key and strict JSON value with the native
-`sentry_options.SchemaRegistry` used by the application. Point `--schemas` at
-the Getsentry schema snapshot, or set `SENTRY_KUBE_OPTIONS_SCHEMAS` once for
-the shell:
-
-```shell
-export SENTRY_KUBE_OPTIONS_SCHEMAS=~/dev/getsentry/sentry-options/schemas
-```
+`sentry_options.SchemaRegistry` used by the application. By default it fetches
+a fresh schema snapshot with `sentry-options-cli fetch-schemas`, using the
+nearby or published `sentry-options-automator/repos.json`. Use `--repos-config`
+to choose a different repository list, or `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
 
 The snapshot must be the revision deployed with the Getsentry image. Validation
 proves the key and value are valid for that snapshot, but cannot prove that the
-same schema revision is mounted by every running target. Pass `--schemas`
-explicitly when the shell environment is not set. `--apply` is required to
-make the change:
+same schema revision is mounted by every running target. `--apply` is required
+to make the change:
 
 ```shell
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/getsentry/sentry-options/schemas \
-  --option billing.quotas.exceeded.enabled \
-  --value false
+  billing.quotas.exceeded.enabled false
 
 sentry-kube --root ~/dev/ops options set \
-  --schemas ~/dev/getsentry/sentry-options/schemas \
-  --option billing.quotas.exceeded.enabled \
-  --value false \
+  billing.quotas.exceeded.enabled false \
   --apply
 ```
 
-Use `--region` (configured names and aliases are accepted) or `--service`
+Use `--include` (configured names and aliases are accepted) or `--service`
 (`getsentry` or `getsentry-control`) to restrict an invocation only when the
 incident is intentionally scoped. Region selection is explicit:
 
 ```shell
-# Include only US and DE. Repeat --region for every included region.
+# Include only US and DE. Repeat --include for every included region.
 sentry-kube --root ~/dev/ops options get \
-  --region us \
-  --region de \
-  --option billing.quotas.exceeded.enabled
+  --include us \
+  --include de \
+  billing.quotas.exceeded.enabled
 
 # Start with the full fleet and leave out single-tenant regions.
 sentry-kube --root ~/dev/ops options set \
-  --exclude-region geico \
-  --exclude-region goldmansachs \
-  --exclude-region ly \
-  --option billing.quotas.exceeded.enabled \
-  --value false \
+  --exclude geico \
+  --exclude goldmansachs \
+  --exclude ly \
+  billing.quotas.exceeded.enabled false \
   --apply
 ```
 
-`--region` and `--exclude-region` are mutually exclusive. Unknown regions fail
+`--include` and `--exclude` are mutually exclusive. Unknown regions fail
 before any `kubectl` call. The default intentionally covers every configured
 topology target rather than applying the generic `--stage` filter: the live
 control-silo cluster is classified as `build` in the shared sentry-kube
