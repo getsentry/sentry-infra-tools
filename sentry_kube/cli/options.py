@@ -244,6 +244,7 @@ def _download_repos_config(destination: Path) -> None:
 
 
 def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
+    schema_cli = _schema_cli()
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         temp_path = Path(temp_dir)
         config_path = _repos_config_path(repos_config)
@@ -253,7 +254,7 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
 
         result = _run(
             [
-                _schema_cli(),
+                schema_cli,
                 "--quiet",
                 "fetch-schemas",
                 "--config",
