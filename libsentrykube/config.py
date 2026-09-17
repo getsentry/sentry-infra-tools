@@ -36,6 +36,11 @@ class K8sConfig:
     materialized_manifests: str
     # Same thing as `materialized_manifests`, but for helm values
     materialized_helm_values: str
+    # Same thing as `materialized_manifests`, but for fully rendered
+    # helm manifests (`helm template` output). Kept separate from
+    # `materialized_manifests` so visibility-only output is never
+    # confused with sentry-kube apply paths.
+    materialized_helm_manifests: str
     # The kubernetes service class of the region (multi-tenant or single-tenant)
     service_class: Optional[str]
 
@@ -53,6 +58,14 @@ class K8sConfig:
                     "materialized_helm_values",
                     conf["materialized_manifests"].replace(
                         "materialized_manifests", "materialized_helm_values"
+                    ),
+                )
+            ),
+            materialized_helm_manifests=str(
+                conf.get(
+                    "materialized_helm_manifests",
+                    conf["materialized_manifests"].replace(
+                        "materialized_manifests", "materialized_helm_manifests"
                     ),
                 )
             ),
