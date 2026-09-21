@@ -51,24 +51,6 @@ def _is_configmap_patch(command: list[str]) -> bool:
     return "patch" in command and command[command.index("patch") + 1] == "configmap"
 
 
-def _by_context_and_configmap(
-    responses: dict[tuple[str, str], subprocess.CompletedProcess[str]],
-) -> Callable[..., subprocess.CompletedProcess[str]]:
-    """Build a subprocess.run side_effect keyed by (--context, configmap name).
-
-    `get` reads targets concurrently, so a positional side_effect list races
-    against thread scheduling. Keying by the actual command arguments keeps
-    the test deterministic regardless of which thread runs first.
-    """
-
-    def side_effect(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        context = command[command.index("--context") + 1]
-        configmap_name = command[command.index("configmap") + 1]
-        return responses[(context, configmap_name)]
-
-    return side_effect
-
-
 def _kubectl_side_effect(
     *,
     can_i: dict[tuple[str, str], subprocess.CompletedProcess[str]] | None = None,
@@ -690,8 +672,8 @@ def test_get_reads_the_option_from_each_selected_configmap(
     mock_gcloud_reauth: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = _by_context_and_configmap(
-        {
+    mock_run.side_effect = _kubectl_side_effect(
+        get={
             ("us-context", "sentry-options-getsentry"): _configmap(
                 "1", {"sample-rate": False}
             ),
@@ -742,8 +724,8 @@ def test_get_verbose_prints_configmap_name_and_context(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = _by_context_and_configmap(
-        {
+    mock_run.side_effect = _kubectl_side_effect(
+        get={
             ("us-context", "sentry-options-getsentry"): _configmap(
                 "1", {"sample-rate": False}
             ),
@@ -779,8 +761,8 @@ def test_get_prints_each_target_region_and_value(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = _by_context_and_configmap(
-        {
+    mock_run.side_effect = _kubectl_side_effect(
+        get={
             ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
                 "1", {"sample-rate": False}
             ),
@@ -812,8 +794,8 @@ def test_get_prints_already_read_targets_when_a_later_one_errors(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = _by_context_and_configmap(
-        {
+    mock_run.side_effect = _kubectl_side_effect(
+        get={
             ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
                 "1", {"sample-rate": False}
             ),
