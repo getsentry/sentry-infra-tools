@@ -12,6 +12,15 @@ from libsentrykube.utils import workspace_root
 
 DEFAULT_CONFIG = "cli_config/configuration.yaml"
 
+# Published by sentry-options-automator; used as a last resort to build a
+# sentry-options schema snapshot when no local repos.json is available.
+# Override per-repo with the `options_automator_repos_config_url` top-level
+# key in cli_config/configuration.yaml.
+DEFAULT_OPTIONS_AUTOMATOR_REPOS_CONFIG_URL = (
+    "https://raw.githubusercontent.com/getsentry/"
+    "sentry-options-automator/refs/heads/main/repos.json"
+)
+
 
 @dataclass(frozen=True)
 class K8sConfig:
@@ -93,7 +102,14 @@ def _load_config(config_file_name: str):
             name: SiloRegion.from_conf(conf)
             for name, conf in configuration["silo_regions"].items()
         }
-    return silo_regions, configuration.get("service_container_map", {})
+    return (
+        silo_regions,
+        configuration.get("service_container_map", {}),
+        configuration.get(
+            "options_automator_repos_config_url",
+            DEFAULT_OPTIONS_AUTOMATOR_REPOS_CONFIG_URL,
+        ),
+    )
 
 
 class Config:
@@ -102,10 +118,13 @@ class Config:
             "SENTRY_KUBE_CONFIG_FILE", workspace_root() / DEFAULT_CONFIG
         )
 
-        silo_regions, service_container_map = _load_config(str(config_file_name))
+        silo_regions, service_container_map, options_automator_repos_config_url = (
+            _load_config(str(config_file_name))
+        )
         self.silo_regions: Mapping[str, SiloRegion] = silo_regions
         # If the mapping is required for non-multi-tenant regions, we can add override support here to merge the default mapping with a silo_region override.
         self.service_container_map: Mapping[str, Dict[str, str]] = service_container_map
+        self.options_automator_repos_config_url: str = options_automator_repos_config_url
 
     @cache
     def get_regions(self, stage: Optional[str] = None) -> Sequence[str]:

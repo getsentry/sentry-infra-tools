@@ -75,6 +75,7 @@ sentry-kube --root ~/dev/ops options set \
   billing.quotas.exceeded.enabled false
 
 sentry-kube --root ~/dev/ops options set \
+  --include us \
   billing.quotas.exceeded.enabled false \
   --apply
 ```
@@ -92,9 +93,9 @@ sentry-kube --root ~/dev/ops options get \
 
 # Start with the full fleet and leave out single-tenant regions.
 sentry-kube --root ~/dev/ops options set \
-  --exclude geico \
-  --exclude goldmansachs \
-  --exclude ly \
+  --exclude st0 \
+  --exclude st1 \
+  --exclude st2 \
   billing.quotas.exceeded.enabled false \
   --apply
 ```
@@ -104,6 +105,22 @@ before any `kubectl` call. The default intentionally covers every configured
 topology target rather than applying the generic `--stage` filter: the live
 control-silo cluster is classified as `build` in the shared sentry-kube
 configuration.
+
+Because that default is the entire fleet, `--apply` refuses to run against it
+unless the invocation also narrows scope with `--include` or `--exclude`. To
+genuinely apply everywhere, confirm that intent explicitly with
+`--all-regions`:
+
+```shell
+sentry-kube --root ~/dev/ops options set \
+  billing.quotas.exceeded.enabled false \
+  --all-regions \
+  --apply
+```
+
+A dry run (no `--apply`) never requires `--all-regions`; it always previews
+the full fleet by default so you can inspect the plan before deciding how to
+scope the real change.
 
 The tool uses a resource-version JSON Patch, so it refuses to overwrite a
 ConfigMap changed after preflight. There is no cross-cluster transaction: a

@@ -350,6 +350,7 @@ def test_failed_preflight_prevents_every_patch(
             "false",
             "--schemas",
             "schemas",
+            "--all-regions",
             "--apply",
         ],
     )
@@ -467,6 +468,62 @@ def test_set_rejects_combining_included_and_excluded_regions() -> None:
 
     assert result.exit_code != 0
     assert "Use either --include or --exclude, not both" in result.output
+
+
+def test_set_apply_without_scope_requires_all_regions_confirmation() -> None:
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--schemas",
+            "schemas",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--all-regions" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_all_regions_flag_confirms_a_fleet_wide_apply(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    targets = (
+        ("control-context", "sentry-options-getsentry-control-silo"),
+        ("us-context", "sentry-options-getsentry"),
+        ("us-context", "sentry-options-getsentry-control-silo"),
+    )
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={key: _success("yes\n") for key in targets},
+        get={key: _configmap(str(i), {"sample-rate": 1.0}) for i, key in enumerate(targets)},
+        patch={key: _success() for key in targets},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--schemas",
+            "schemas",
+            "--all-regions",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "APPLIED: set sample-rate=false in 3 ConfigMaps" in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
