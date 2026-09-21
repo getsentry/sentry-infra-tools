@@ -7,8 +7,10 @@ the next normal deployment reconciles them back to the declarative values.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -262,42 +264,135 @@ def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
         ) from exc
 
 
-def _repos_config_path(explicit_path: Path | None) -> Path | None:
-    if explicit_path is not None:
-        return explicit_path
-
-    candidates = (
-        Path.cwd() / "repos.json",
-        Path.home() / "dev" / "sentry-options-automator" / "repos.json",
-    )
-    return next((path for path in candidates if path.is_file()), None)
-
-
-def _download_repos_config(destination: Path, url: str) -> None:
+def _download_repos_config_bytes(url: str) -> bytes:
     try:
         request = Request(url, headers={"User-Agent": "sentry-kube"})
         with urlopen(request, timeout=15) as response:
-            destination.write_bytes(response.read())
+            return response.read()
     except (OSError, URLError) as exc:
         raise click.ClickException(
             f"Unable to fetch the sentry-options repository list: {exc}"
         ) from exc
 
 
-def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
-    config_path = _repos_config_path(repos_config)
-    if config_path is not None:
-        _report(f"Using repos.json at {config_path}")
-        _fetch_schemas_with_client(config_path, output)
-        return
+def _repos_config_bytes(repos_config: Path | None) -> tuple[bytes, str]:
+    """Return repos.json's bytes and a human-readable description of their source."""
+
+    if repos_config is not None:
+        return repos_config.read_bytes(), f"--repos-config {repos_config}"
 
     # Published repos.json URL, overridable per-repo via
     # `options_automator_repos_config_url` in cli_config/configuration.yaml.
     url = Config().options_automator_repos_config_url
+    return _download_repos_config_bytes(url), f"published repos.json ({url})"
+
+
+def _options_cache_root() -> Path:
+    return Path.home() / ".cache" / "sentry-kube" / "options-schemas"
+
+
+def _cache_entry_dir(cache_root: Path, checksum: str) -> Path:
+    return cache_root / "by-checksum" / checksum
+
+
+def _read_latest_cached_checksum(cache_root: Path) -> str | None:
+    latest_path = cache_root / "latest.json"
+    if not latest_path.is_file():
+        return None
+    try:
+        return json.loads(latest_path.read_text())["checksum"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _cache_schema_snapshot(cache_root: Path, checksum: str, schemas_dir: Path) -> None:
+    entry_dir = _cache_entry_dir(cache_root, checksum)
+    if entry_dir.exists():
+        shutil.rmtree(entry_dir)
+    entry_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(schemas_dir, entry_dir / "snapshot")
+    meta = {
+        "checksum": checksum,
+        "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    (entry_dir / "meta.json").write_text(json.dumps(meta))
+    (cache_root / "latest.json").write_text(json.dumps({"checksum": checksum}))
+
+
+def _use_cached_schemas(cache_root: Path, checksum: str | None, output: Path) -> bool:
+    """Copy a cached schema snapshot into `output`. Returns whether one was used."""
+
+    candidates: list[tuple[str, bool]] = []
+    if checksum is not None:
+        candidates.append((checksum, True))
+    latest_checksum = _read_latest_cached_checksum(cache_root)
+    if latest_checksum is not None and latest_checksum != checksum:
+        candidates.append((latest_checksum, False))
+
+    for candidate_checksum, matches_current in candidates:
+        entry_dir = _cache_entry_dir(cache_root, candidate_checksum)
+        snapshot_dir = entry_dir / "snapshot"
+        if not snapshot_dir.is_dir():
+            continue
+
+        meta_path = entry_dir / "meta.json"
+        try:
+            meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
+        except (OSError, ValueError):
+            meta = {}
+        fetched_at = meta.get("fetched_at", "an unknown time")
+        qualifier = "" if matches_current else " (fetched for a different repos.json)"
+
+        try:
+            shutil.copytree(snapshot_dir, output)
+        except OSError as exc:
+            _report(f"Cached snapshot at {entry_dir} is unusable: {exc}")
+            continue
+
+        _report(
+            f"Falling back to cached schema snapshot from {fetched_at}, "
+            f"checksum {candidate_checksum[:12]}{qualifier}."
+        )
+        return True
+
+    return False
+
+
+def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
+    cache_root = _options_cache_root()
+
+    try:
+        repos_bytes, source = _repos_config_bytes(repos_config)
+    except (click.ClickException, OSError) as exc:
+        _report(f"Unable to read repos.json: {exc}")
+        if _use_cached_schemas(cache_root, checksum=None, output=output):
+            return
+        raise click.ClickException(
+            "Unable to read repos.json and no cached schema snapshot is "
+            "available. Check network connectivity or pass --schemas with a "
+            "local snapshot."
+        ) from exc
+
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         config_path = Path(temp_dir) / "repos.json"
-        _download_repos_config(config_path, url)
-        _fetch_schemas_with_client(config_path, output)
+        config_path.write_bytes(repos_bytes)
+        _report(f"Fetching latest sentry-options schemas from {source}...")
+        try:
+            _fetch_schemas_with_client(config_path, output)
+        except click.ClickException as exc:
+            _report(f"Fetch failed: {exc}")
+            if _use_cached_schemas(cache_root, checksum, output):
+                return
+            raise click.ClickException(
+                "Unable to fetch sentry-options schemas and no cached "
+                "snapshot is available. Check network connectivity or pass "
+                "--schemas with a local snapshot."
+            ) from exc
+
+    _cache_schema_snapshot(cache_root, checksum, output)
+    _report(f"Fetched and cached fresh schema snapshot (checksum {checksum[:12]}).")
 
 
 @contextmanager
@@ -628,9 +723,14 @@ GoCD pipeline or GitHub Action. It is a dry run by default and requires
 requested JSON value with the same native validator the application uses.
 
 When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
-command fetches a fresh snapshot through the explicit `sentry_options` client
-API. It uses `--repos-config` when supplied, a nearby `repos.json` when
-available, or the automator's published `repos.json` as a last resort.
+command always attempts a fresh snapshot through the explicit `sentry_options`
+client API first, using `--repos-config` when supplied or the automator's
+published `repos.json` otherwise. Every successful fetch is cached under
+`~/.cache/sentry-kube/options-schemas/`, keyed by a checksum of the
+`repos.json` used. If the fetch fails (network down, timeout, etc.), the
+cached snapshot for that checksum is used instead, falling back further to the
+most recently cached snapshot if needed; each case is reported on stderr so
+it's clear whether the validation used fresh or cached schemas.
 
 Scope defaults to every configured Getsentry ConfigMap, including both
 control-silo ConfigMaps. Use either repeated `--include` to include only named
@@ -826,8 +926,8 @@ def options() -> None:
     type=click.Path(path_type=Path, dir_okay=False, readable=True),
     envvar=REPOS_CONFIG_ENVVAR,
     help=(
-        "repos.json to use when fetching schemas (default: nearby or published "
-        "automator config; ignored with --schemas)."
+        "repos.json to use when fetching schemas (default: published automator "
+        "config; ignored with --schemas)."
     ),
 )
 @_target_scope_options
