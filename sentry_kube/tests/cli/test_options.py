@@ -555,20 +555,35 @@ def test_set_excludes_requested_regions_from_the_default_fleet_scope(
     assert "control/default/getsentry-control" not in result.output
 
 
+@pytest.mark.parametrize(
+    ("configmap_kwargs", "expected_error"),
+    [
+        (
+            {"include_generated_at_annotation": False},
+            "has no generated_at annotation",
+        ),
+        (
+            {"include_generated_at_value": False},
+            "values.json has no generated_at timestamp",
+        ),
+    ],
+)
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
 @patch("sentry_kube.cli.options.Config")
-def test_set_preflight_requires_the_writer_generated_at_annotation(
+def test_set_preflight_requires_generated_at_fields(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
     _mock_kubectl: MagicMock,
+    configmap_kwargs: dict[str, bool],
+    expected_error: str,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = [
         _success("yes\n"),
-        _configmap("1", {"sample-rate": 1.0}, include_generated_at_annotation=False),
+        _configmap("1", {"sample-rate": 1.0}, **configmap_kwargs),
     ]
 
     result = CliRunner().invoke(
@@ -588,46 +603,7 @@ def test_set_preflight_requires_the_writer_generated_at_annotation(
     )
 
     assert result.exit_code != 0
-    assert "has no generated_at annotation" in result.output
-    assert not any(
-        _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
-    )
-
-
-@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
-@patch("sentry_kube.cli.options.subprocess.run")
-@patch("sentry_kube.cli.options.list_clusters_for_customer")
-@patch("sentry_kube.cli.options.Config")
-def test_set_preflight_requires_the_values_generated_at_timestamp(
-    mock_config: MagicMock,
-    mock_list_clusters: MagicMock,
-    mock_run: MagicMock,
-    _mock_kubectl: MagicMock,
-) -> None:
-    _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _success("yes\n"),
-        _configmap("1", {"sample-rate": 1.0}, include_generated_at_value=False),
-    ]
-
-    result = CliRunner().invoke(
-        options,
-        [
-            "set",
-            "sample-rate",
-            "false",
-            "--schemas",
-            "schemas",
-            "--include",
-            "us",
-            "--service",
-            "getsentry",
-            "--apply",
-        ],
-    )
-
-    assert result.exit_code != 0
-    assert "values.json has no generated_at timestamp" in result.output
+    assert expected_error in result.output
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
