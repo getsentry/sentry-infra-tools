@@ -328,6 +328,32 @@ def test_set_rejects_non_standard_json_before_reading_any_cluster(value: str) ->
 
 
 @patch("sentry_kube.cli.options.Config")
+def test_set_treats_unquoted_text_as_a_json_string(
+    mock_config: MagicMock, mock_schema_validation: MagicMock
+) -> None:
+    mock_schema_validation.side_effect = click.ClickException(
+        "schema validation failed; no clusters were contacted"
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "foo",
+            "--schemas",
+            "schemas",
+        ],
+    )
+
+    assert result.exit_code != 0
+    mock_schema_validation.assert_called_once_with(
+        Path("schemas"), "sample-rate", "foo"
+    )
+    mock_config.assert_not_called()
+
+
+@patch("sentry_kube.cli.options.Config")
 def test_set_rejects_an_unknown_region_before_reading_any_cluster(
     mock_config: MagicMock,
 ) -> None:
