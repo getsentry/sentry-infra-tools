@@ -834,7 +834,7 @@ def options() -> None:
     envvar=REPOS_CONFIG_ENVVAR,
     help=(
         "repos.json to use when fetching schemas (default: nearby or published "
-        f"automator config; ignored with --schemas)."
+        "automator config; ignored with --schemas)."
     ),
 )
 @_target_scope_options
