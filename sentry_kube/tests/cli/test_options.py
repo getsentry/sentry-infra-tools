@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 from collections.abc import Callable, Generator
@@ -9,6 +10,7 @@ import click
 import pytest
 from click.testing import CliRunner
 
+import sentry_kube.cli.options as options_module
 from sentry_kube.cli import main
 from sentry_kube.cli.options import options
 
@@ -790,3 +792,122 @@ def test_get_prints_already_read_targets_when_a_later_one_errors(
     assert "control/control-silo: false" in result.output
     assert "us/control-silo: <unset>" in result.output
     assert "Could not read every selected ConfigMap" in result.output
+
+
+def _write_fake_schema(schemas_dir: Path) -> None:
+    namespace_dir = schemas_dir / "getsentry"
+    namespace_dir.mkdir(parents=True)
+    (namespace_dir / "schema.json").write_text("{}")
+
+
+def test_fetch_schemas_caches_a_fresh_snapshot(tmp_path: Path) -> None:
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+    repos_bytes = b'{"repos": {}}'
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(repos_bytes, "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=lambda _config, out: _write_fake_schema(out),
+        ),
+    ):
+        options_module._fetch_schemas(None, output)
+
+    assert (output / "getsentry" / "schema.json").is_file()
+
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+    cached_snapshot = cache_root / "by-checksum" / checksum / "snapshot"
+    assert (cached_snapshot / "getsentry" / "schema.json").is_file()
+    assert json.loads((cache_root / "latest.json").read_text())["checksum"] == checksum
+
+
+def test_fetch_schemas_falls_back_to_matching_cached_checksum_on_failure(
+    tmp_path: Path,
+) -> None:
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+    repos_bytes = b'{"repos": {}}'
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+
+    entry_dir = cache_root / "by-checksum" / checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    (entry_dir / "meta.json").write_text(
+        json.dumps({"checksum": checksum, "fetched_at": "2020-01-01T00:00:00+00:00"})
+    )
+    (cache_root / "latest.json").write_text(json.dumps({"checksum": checksum}))
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(repos_bytes, "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=click.ClickException("network unreachable"),
+        ),
+    ):
+        options_module._fetch_schemas(None, output)
+
+    assert (output / "getsentry" / "schema.json").is_file()
+
+
+def test_fetch_schemas_falls_back_to_latest_cache_when_repos_json_unavailable(
+    tmp_path: Path,
+) -> None:
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+    other_checksum = "deadbeef" * 8
+
+    entry_dir = cache_root / "by-checksum" / other_checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    (entry_dir / "meta.json").write_text(
+        json.dumps(
+            {"checksum": other_checksum, "fetched_at": "2020-01-01T00:00:00+00:00"}
+        )
+    )
+    (cache_root / "latest.json").write_text(json.dumps({"checksum": other_checksum}))
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            side_effect=click.ClickException("no network"),
+        ),
+    ):
+        options_module._fetch_schemas(None, output)
+
+    assert (output / "getsentry" / "schema.json").is_file()
+
+
+def test_fetch_schemas_raises_when_fetch_fails_and_no_cache_exists(
+    tmp_path: Path,
+) -> None:
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(b'{"repos": {}}', "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=click.ClickException("network unreachable"),
+        ),
+    ):
+        with pytest.raises(click.ClickException):
+            options_module._fetch_schemas(None, output)
