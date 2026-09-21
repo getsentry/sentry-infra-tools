@@ -337,6 +337,11 @@ def _use_cached_schemas(cache_root: Path, checksum: str | None, output: Path) ->
         qualifier = "" if matches_current else " (fetched for a different repos.json)"
 
         try:
+            # `output` may already exist and be partially populated by a
+            # failed fetch attempt; copytree refuses to write into an
+            # existing directory, so clear it first.
+            if output.exists():
+                shutil.rmtree(output)
             shutil.copytree(snapshot_dir, output)
         except OSError as exc:
             _report(f"Cached snapshot at {entry_dir} is unusable: {exc}")
@@ -384,8 +389,14 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
                 "--schemas with a local snapshot."
             ) from exc
 
-    _cache_schema_snapshot(cache_root, checksum, output)
-    _report(f"Fetched and cached fresh schema snapshot (checksum {checksum[:12]}).")
+    try:
+        _cache_schema_snapshot(cache_root, checksum, output)
+    except OSError as exc:
+        # Caching is an optimization; a failure here shouldn't discard an
+        # otherwise-successful fetch that's already sitting in `output`.
+        _report(f"Fetched fresh schemas, but failed to cache them: {exc}")
+    else:
+        _report(f"Fetched and cached fresh schema snapshot (checksum {checksum[:12]}).")
 
 
 @contextmanager
