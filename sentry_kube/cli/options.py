@@ -470,6 +470,16 @@ def _validate_option_key(
 
 
 def _parse_json_value(value_json: str) -> OptionValue:
+    """Parse VALUE as JSON, treating unquoted text as a string.
+
+    `foo` is accepted as shorthand for the JSON string `"foo"` so callers
+    do not need to shell-quote plain strings. Anything that parses as JSON
+    (numbers, booleans, null, quoted strings, objects, arrays) keeps its
+    JSON meaning; only text that fails to parse falls back to being a
+    literal string. Schema validation still rejects it if the option
+    expects a different type.
+    """
+
     def reject_nonstandard_constant(constant: str) -> None:
         raise ValueError(f"{constant} is not valid JSON")
 
@@ -485,7 +495,14 @@ def _parse_json_value(value_json: str) -> OptionValue:
             parse_constant=reject_nonstandard_constant,
             parse_float=parse_finite_float,
         )
-    except (json.JSONDecodeError, ValueError) as exc:
+    except json.JSONDecodeError:
+        # Not JSON-shaped at all (for example `foo` or `on`): treat the raw
+        # text as a JSON string so callers do not have to shell-quote it.
+        return value_json
+    except ValueError as exc:
+        # JSON-shaped but explicitly disallowed (NaN, Infinity, overflow):
+        # this is almost certainly a mistake, so reject it rather than
+        # silently turning it into a string.
         raise click.BadParameter(
             'must be valid JSON; quote strings, for example \'"disabled"\'',
             param_hint="VALUE",
@@ -583,8 +600,10 @@ Without `--apply`, it prints the exact fleet plan and makes no changes.
 Each write uses the ConfigMap resource version read during preflight, so it
 refuses to overwrite a concurrent change.
 
-VALUE must be strict JSON. Quote JSON strings (for example, `'"on"'`).
-The option and value must be valid for the supplied schema snapshot.
+VALUE is parsed as JSON when possible (numbers, `true`/`false`/`null`,
+quoted strings, objects, arrays). Anything else, such as `on`, is treated
+as a plain string, equivalent to `'"on"'`. The option and value must be
+valid for the supplied schema snapshot.
 
 Examples:
 
