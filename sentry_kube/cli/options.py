@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -218,6 +219,7 @@ def _kubectl_command(
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
+    _report(f"+ {shlex.join(command)}")
     return subprocess.run(command, capture_output=True, check=False, text=True)
 
 
@@ -775,11 +777,13 @@ OPTION and VALUE against a local snapshot supplied by `--schemas` (or
 the explicit `sentry_options.fetch_schemas` client API when no snapshot is
 supplied. It then uses the native sentry-options validator before it reads
 every selected ConfigMap and confirms patch access before the first write.
-Without `--apply`, it prints the exact fleet plan and makes no changes. If
-neither `--include` nor `--exclude` narrows the scope, `--apply` also
-requires `--all-regions` to confirm the fleet-wide blast radius; a dry run
-never requires it. Each write uses the ConfigMap resource version read during
-preflight, so it refuses to overwrite a concurrent change.
+Without `--apply`, it announces the dry run up front, prints the exact fleet
+plan, and makes no changes. If neither `--include` nor `--exclude` narrows the
+scope, `--apply` also requires `--all-regions` to confirm the fleet-wide blast
+radius; a dry run never requires it. Each write uses the ConfigMap resource
+version read during preflight, so it refuses to overwrite a concurrent
+change. Every kubectl invocation (preflight and apply alike) is echoed to
+stderr as it runs, prefixed with `+`.
 
 VALUE is parsed as JSON when possible (numbers, `true`/`false`/`null`,
 quoted strings, objects, arrays). Anything else, such as `on`, is treated
@@ -822,7 +826,8 @@ Each output line is `<region>: <value>` (for example `de: 42`). A
 control-silo ConfigMap adds a `/control-silo` suffix to the region to tell it
 apart from the regional ConfigMap in the same region (for example
 `us/control-silo: 0`). Pass `--verbose` to also print each line's ConfigMap
-name and kubectl context.
+name and kubectl context. Every kubectl invocation is echoed to stderr as it
+runs, prefixed with `+`.
 
 Examples:
 
@@ -953,6 +958,9 @@ def set_option(
             "--include or --exclude to scope the change, or pass --all-regions "
             "to confirm applying everywhere."
         )
+
+    if not apply:
+        _report("dry-run; no changes will be made (pass --apply to apply)")
 
     value = _parse_json_value(value_json)
     with _schema_directory(schemas_dir, repos_config) as schema_path:

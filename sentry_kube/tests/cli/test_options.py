@@ -252,6 +252,120 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
 @patch("sentry_kube.cli.options.Config")
+def test_dry_run_announces_that_no_changes_will_be_made(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={("us-context", "sentry-options-getsentry"): _success("yes\n")},
+        get={("us-context", "sentry-options-getsentry"): _configmap("1", {})},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--schemas",
+            "schemas",
+            "--include",
+            "us",
+            "--service",
+            "getsentry",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "dry-run; no changes will be made" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_apply_does_not_announce_a_dry_run(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={("us-context", "sentry-options-getsentry"): _success("yes\n")},
+        get={("us-context", "sentry-options-getsentry"): _configmap("1", {})},
+        patch={("us-context", "sentry-options-getsentry"): _success()},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--schemas",
+            "schemas",
+            "--include",
+            "us",
+            "--service",
+            "getsentry",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "dry-run" not in result.output.lower()
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_echoes_the_exact_kubectl_commands_it_runs(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={("us-context", "sentry-options-getsentry"): _success("yes\n")},
+        get={("us-context", "sentry-options-getsentry"): _configmap("1", {})},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "false",
+            "--schemas",
+            "schemas",
+            "--include",
+            "us",
+            "--service",
+            "getsentry",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert (
+        "+ kubectl --context us-context --namespace default auth can-i patch "
+        "configmap/sentry-options-getsentry"
+    ) in result.output
+    assert (
+        "+ kubectl --context us-context --namespace default get configmap "
+        "sentry-options-getsentry --output=json"
+    ) in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
 def test_apply_patches_after_preflight_with_resource_version(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
