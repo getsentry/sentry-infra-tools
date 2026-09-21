@@ -12,7 +12,6 @@ import math
 import subprocess
 import tempfile
 import threading
-import time
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
@@ -246,18 +245,6 @@ def _report(message: str) -> None:
     click.echo(message, err=True)
 
 
-@contextmanager
-def _timed_step(label: str) -> Iterator[None]:
-    """Report a step's start, then how long it took, regardless of outcome."""
-
-    _report(f"{label}...")
-    start = time.monotonic()
-    try:
-        yield
-    finally:
-        _report(f"{label}: {time.monotonic() - start:.1f}s")
-
-
 def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
     try:
         from sentry_options import OptionsError, fetch_schemas
@@ -268,10 +255,7 @@ def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
         ) from exc
 
     try:
-        with _timed_step(
-            f"Fetching sentry-options schemas (using {config_path})"
-        ):
-            fetch_schemas(config_path, output)
+        fetch_schemas(config_path, output)
     except OptionsError as exc:
         raise click.ClickException(
             f"Unable to fetch sentry-options schemas: {exc}"
@@ -291,10 +275,9 @@ def _repos_config_path(explicit_path: Path | None) -> Path | None:
 
 def _download_repos_config(destination: Path, url: str) -> None:
     try:
-        with _timed_step(f"Downloading repos.json from {url}"):
-            request = Request(url, headers={"User-Agent": "sentry-kube"})
-            with urlopen(request, timeout=15) as response:
-                destination.write_bytes(response.read())
+        request = Request(url, headers={"User-Agent": "sentry-kube"})
+        with urlopen(request, timeout=15) as response:
+            destination.write_bytes(response.read())
     except (OSError, URLError) as exc:
         raise click.ClickException(
             f"Unable to fetch the sentry-options repository list: {exc}"
@@ -504,18 +487,12 @@ def _apply_patches(kubectl: str, prepared: list[PreparedPatch]) -> None:
     errors: list[str] = []
 
     def apply_one(patch: PreparedPatch) -> None:
-        start = time.monotonic()
         try:
             _apply_patch(kubectl, patch)
         except click.ClickException as exc:
             with report_lock:
                 errors.append(exc.message)
-                _report(
-                    f"Apply {patch.target.name}: failed ({time.monotonic() - start:.1f}s)"
-                )
             return
-        with report_lock:
-            _report(f"Apply {patch.target.name}: ok ({time.monotonic() - start:.1f}s)")
 
     _fan_out(prepared, apply_one)
 
@@ -546,19 +523,14 @@ def _preflight_patches(
     errors: list[str] = []
 
     def preflight_one(target: ConfigMapTarget) -> None:
-        start = time.monotonic()
         try:
             patch = _prepare_patch(kubectl, target, option, value)
         except click.ClickException as exc:
             with report_lock:
                 errors.append(exc.message)
-                _report(
-                    f"Preflight {target.name}: failed ({time.monotonic() - start:.1f}s)"
-                )
             return
         with report_lock:
             results[target] = patch
-            _report(f"Preflight {target.name}: ok ({time.monotonic() - start:.1f}s)")
 
     _fan_out(targets, preflight_one)
 
@@ -636,9 +608,8 @@ def _validate_against_schema(
         ) from exc
 
     try:
-        with _timed_step(f"Validating {DEFAULT_OPTIONS_NAMESPACE}.{option_key} against schema"):
-            registry = SchemaRegistry.from_directory(schemas_dir)
-            registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
+        registry = SchemaRegistry.from_directory(schemas_dir)
+        registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
     except OptionsError as exc:
         raise click.ClickException(
             "Schema validation failed for "
@@ -827,8 +798,7 @@ def _ensure_cluster_access() -> str:
     """
 
     kubectl = str(ensure_kubectl())
-    with _timed_step("Ensuring gcloud is authenticated"):
-        ensure_gcloud_reauthed()
+    ensure_gcloud_reauthed()
     return kubectl
 
 
