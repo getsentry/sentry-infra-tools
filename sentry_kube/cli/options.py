@@ -21,14 +21,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 import click
 
 from libsentrykube.cluster import Cluster, list_clusters_for_customer
 from libsentrykube.config import Config
 from libsentrykube.customer import get_region_config
+from libsentrykube.github import GithubFetchError, fetch_raw_file
 from libsentrykube.utils import ensure_gcloud_reauthed, ensure_kubectl
 
 if TYPE_CHECKING:
@@ -264,17 +263,6 @@ def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
         ) from exc
 
 
-def _download_repos_config_bytes(url: str) -> bytes:
-    try:
-        request = Request(url, headers={"User-Agent": "sentry-kube"})
-        with urlopen(request, timeout=15) as response:
-            return response.read()
-    except (OSError, URLError) as exc:
-        raise click.ClickException(
-            f"Unable to fetch the sentry-options repository list: {exc}"
-        ) from exc
-
-
 def _repos_config_bytes(repos_config: Path | None) -> tuple[bytes, str]:
     """Return repos.json's bytes and a human-readable description of their source."""
 
@@ -284,7 +272,10 @@ def _repos_config_bytes(repos_config: Path | None) -> tuple[bytes, str]:
     # Published repos.json URL, overridable per-repo via
     # `options_automator_repos_config_url` in cli_config/configuration.yaml.
     url = Config().options_automator_repos_config_url
-    return _download_repos_config_bytes(url), f"published repos.json ({url})"
+    try:
+        return fetch_raw_file(url), f"published repos.json ({url})"
+    except GithubFetchError as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 def _options_cache_root() -> Path:
