@@ -886,14 +886,6 @@ def set_option(
     apply: bool,
     all_regions: bool,
 ) -> None:
-    """Set OPTION in every selected live ConfigMap.
-
-    The command fully preflights every selected ConfigMap before it issues the
-    first mutation. If another writer changes a ConfigMap after preflight, the
-    resource-version assertion rejects that individual patch rather than
-    replacing an unseen change.
-    """
-
     if apply and not regions and not excluded_regions and not all_regions:
         raise click.UsageError(
             "Refusing to apply to the entire fleet without confirmation. Pass "
@@ -1008,11 +1000,6 @@ def get_option(
     services: tuple[str, ...],
     verbose: bool,
 ) -> None:
-    """Read OPTION from every selected live ConfigMap.
-
-    ``<unset>`` means the ConfigMap does not declare the option.
-    """
-
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = _ensure_cluster_access()
     _report(f"Reading {len(targets)} ConfigMap target(s)")
