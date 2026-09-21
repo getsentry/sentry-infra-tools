@@ -28,7 +28,7 @@ import click
 from libsentrykube.cluster import Cluster, list_clusters_for_customer
 from libsentrykube.config import Config
 from libsentrykube.customer import get_region_config
-from libsentrykube.utils import ensure_kubectl
+from libsentrykube.utils import ensure_gcloud_reauthed, ensure_kubectl
 
 if TYPE_CHECKING:
     from sentry_options import OptionValue
@@ -885,6 +885,8 @@ def set_option(
     targets = _selected_targets(regions, excluded_regions, services)
     _report(f"Preflighting {len(targets)} ConfigMap target(s)")
     kubectl = str(ensure_kubectl())
+    with _timed_step("Ensuring gcloud is authenticated"):
+        ensure_gcloud_reauthed()
     prepared = _preflight_patches(
         kubectl,
         targets,
@@ -1005,4 +1007,6 @@ def get_option(
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
+    with _timed_step("Ensuring gcloud is authenticated"):
+        ensure_gcloud_reauthed()
     _read_and_print_option(kubectl, targets, option_key, verbose)

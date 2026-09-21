@@ -132,6 +132,13 @@ def mock_schema_validation() -> Generator[MagicMock, None, None]:
         yield validate
 
 
+@pytest.fixture(autouse=True)
+def mock_gcloud_reauth() -> Generator[MagicMock, None, None]:
+    """Never shell out to the real gcloud CLI from a test."""
+    with patch("sentry_kube.cli.options.ensure_gcloud_reauthed") as reauth:
+        yield reauth
+
+
 def test_options_is_available_without_selecting_one_customer() -> None:
     result = CliRunner().invoke(main, ["options", "--help"])
 
@@ -496,6 +503,7 @@ def test_set_all_regions_flag_confirms_a_fleet_wide_apply(
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
     _mock_kubectl: MagicMock,
+    mock_gcloud_reauth: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     targets = (
@@ -524,6 +532,8 @@ def test_set_all_regions_flag_confirms_a_fleet_wide_apply(
 
     assert result.exit_code == 0, result.output
     assert "APPLIED: set sample-rate=false in 3 ConfigMaps" in result.output
+    # One reauth up front covers both the preflight and apply fan-outs.
+    mock_gcloud_reauth.assert_called_once()
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -677,6 +687,7 @@ def test_get_reads_the_option_from_each_selected_configmap(
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
     _mock_kubectl: MagicMock,
+    mock_gcloud_reauth: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_run.side_effect = _by_context_and_configmap(
@@ -701,6 +712,9 @@ def test_get_reads_the_option_from_each_selected_configmap(
 
     assert result.exit_code == 0, result.output
     assert "us: false" in result.output
+    # A single synchronous reauth happens before the concurrent fan-out, so
+    # parallel kubectl calls never race on gcloud's token cache.
+    mock_gcloud_reauth.assert_called_once()
     assert mock_run.call_args.args[0] == [
         "kubectl",
         "--context",
