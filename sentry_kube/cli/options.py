@@ -11,7 +11,10 @@ import json
 import math
 import subprocess
 import tempfile
+import threading
+import time
 from collections.abc import Callable, Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -60,6 +63,21 @@ class ConfigMapTarget:
     @property
     def name(self) -> str:
         return f"{self.region}/{self.cluster}/{self.service}"
+
+    @property
+    def short_label(self) -> str:
+        """The region, plus a `/control-silo` suffix only when needed.
+
+        The cluster is always named `default` and the service is implied by
+        the suffix, so neither adds information in the common case: a bare
+        region name (`de`) is enough to identify a getsentry ConfigMap. The
+        control-silo ConfigMap needs the suffix to disambiguate it from the
+        regional one in the same region.
+        """
+
+        if self.service == GETSENTRY_SERVICE:
+            return self.region
+        return f"{self.region}/{CONTROL_SILO_CONFIGMAP_SUFFIX}"
 
 
 @dataclass(frozen=True)
@@ -206,6 +224,24 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, check=False, text=True)
 
 
+def _report(message: str) -> None:
+    """Print a progress line to stderr, out of the way of plan/data on stdout."""
+
+    click.echo(message, err=True)
+
+
+@contextmanager
+def _timed_step(label: str) -> Iterator[None]:
+    """Report a step's start, then how long it took, regardless of outcome."""
+
+    _report(f"{label}...")
+    start = time.monotonic()
+    try:
+        yield
+    finally:
+        _report(f"{label}: {time.monotonic() - start:.1f}s")
+
+
 def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
     try:
         from sentry_options import OptionsError, fetch_schemas
@@ -216,7 +252,10 @@ def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
         ) from exc
 
     try:
-        fetch_schemas(config_path, output)
+        with _timed_step(
+            f"Fetching sentry-options schemas (using {config_path})"
+        ):
+            fetch_schemas(config_path, output)
     except OptionsError as exc:
         raise click.ClickException(
             f"Unable to fetch sentry-options schemas: {exc}"
@@ -236,9 +275,10 @@ def _repos_config_path(explicit_path: Path | None) -> Path | None:
 
 def _download_repos_config(destination: Path) -> None:
     try:
-        request = Request(REPOS_CONFIG_URL, headers={"User-Agent": "sentry-kube"})
-        with urlopen(request, timeout=15) as response:
-            destination.write_bytes(response.read())
+        with _timed_step(f"Downloading repos.json from {REPOS_CONFIG_URL}"):
+            request = Request(REPOS_CONFIG_URL, headers={"User-Agent": "sentry-kube"})
+            with urlopen(request, timeout=15) as response:
+                destination.write_bytes(response.read())
     except (OSError, URLError) as exc:
         raise click.ClickException(
             f"Unable to fetch the sentry-options repository list: {exc}"
@@ -248,6 +288,7 @@ def _download_repos_config(destination: Path) -> None:
 def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
     config_path = _repos_config_path(repos_config)
     if config_path is not None:
+        _report(f"Using repos.json at {config_path}")
         _fetch_schemas_with_client(config_path, output)
         return
 
@@ -264,6 +305,7 @@ def _schema_directory(
     """Yield a schema snapshot, fetching one when no local snapshot is supplied."""
 
     if schemas_dir is not None:
+        _report(f"Using local schema snapshot at {schemas_dir}")
         yield schemas_dir
         return
 
@@ -431,34 +473,91 @@ def _apply_patch(kubectl: str, prepared: PreparedPatch) -> None:
         )
 
 
+def _apply_patches(kubectl: str, prepared: list[PreparedPatch]) -> None:
+    """Apply every prepared patch in parallel, reporting all failures together.
+
+    Each patch's `test` op is scoped to its own ConfigMap's resourceVersion,
+    so one target's write can never affect another's; applying them
+    concurrently is as safe as applying them one at a time, just faster.
+    """
+
+    report_lock = threading.Lock()
+    errors: list[str] = []
+
+    def apply_one(patch: PreparedPatch) -> None:
+        start = time.monotonic()
+        try:
+            _apply_patch(kubectl, patch)
+        except click.ClickException as exc:
+            with report_lock:
+                errors.append(exc.message)
+                _report(
+                    f"Apply {patch.target.name}: failed ({time.monotonic() - start:.1f}s)"
+                )
+            return
+        with report_lock:
+            _report(f"Apply {patch.target.name}: ok ({time.monotonic() - start:.1f}s)")
+
+    with ThreadPoolExecutor(
+        max_workers=len(prepared) or 1
+    ) as executor:
+        futures = [executor.submit(apply_one, patch) for patch in prepared]
+        for future in as_completed(futures):
+            future.result()
+
+    if errors:
+        raise click.ClickException(
+            "Some ConfigMaps were not patched:\n" + "\n".join(errors)
+        )
+
+
 def _preflight_patches(
     kubectl: str,
     targets: Iterable[ConfigMapTarget],
     option: str,
     value: OptionValue,
 ) -> list[PreparedPatch]:
-    """Prepare every patch, reporting all inaccessible or invalid targets together."""
+    """Prepare every patch in parallel, reporting all failures together.
 
-    prepared: list[PreparedPatch] = []
-    errors = []
-    for target in targets:
+    Each target's preflight (permission check + read) only touches that
+    target's own ConfigMap, so targets are independent and safe to run
+    concurrently. Results are collected keyed by target and replayed in the
+    original, sorted target order, so the returned list (and the plan it
+    drives) stays deterministic even though the work ran out of order.
+    """
+
+    targets = list(targets)
+    report_lock = threading.Lock()
+    results: dict[ConfigMapTarget, PreparedPatch] = {}
+    errors: list[str] = []
+
+    def preflight_one(target: ConfigMapTarget) -> None:
+        start = time.monotonic()
         try:
-            prepared.append(
-                _prepare_patch(
-                    kubectl,
-                    target,
-                    option,
-                    value,
-                )
-            )
+            patch = _prepare_patch(kubectl, target, option, value)
         except click.ClickException as exc:
-            errors.append(exc.message)
+            with report_lock:
+                errors.append(exc.message)
+                _report(
+                    f"Preflight {target.name}: failed ({time.monotonic() - start:.1f}s)"
+                )
+            return
+        with report_lock:
+            results[target] = patch
+            _report(f"Preflight {target.name}: ok ({time.monotonic() - start:.1f}s)")
+
+    with ThreadPoolExecutor(
+        max_workers=len(targets) or 1
+    ) as executor:
+        futures = [executor.submit(preflight_one, target) for target in targets]
+        for future in as_completed(futures):
+            future.result()
 
     if errors:
         raise click.ClickException(
             "Preflight failed; no ConfigMaps were patched:\n" + "\n".join(errors)
         )
-    return prepared
+    return [results[target] for target in targets]
 
 
 def _validate_option_key(
@@ -528,8 +627,9 @@ def _validate_against_schema(
         ) from exc
 
     try:
-        registry = SchemaRegistry.from_directory(schemas_dir)
-        registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
+        with _timed_step(f"Validating {DEFAULT_OPTIONS_NAMESPACE}.{option_key} against schema"):
+            registry = SchemaRegistry.from_directory(schemas_dir)
+            registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
     except OptionsError as exc:
         raise click.ClickException(
             "Schema validation failed for "
@@ -632,8 +732,11 @@ Read OPTION from every selected live sentry-options ConfigMap.
 
 `<unset>` means the ConfigMap does not declare the option. The command
 requires read access to every selected ConfigMap and does not change anything.
-Each output line starts with the region, cluster, and service, followed by the
-value found there.
+Each output line is `<region>: <value>` (for example `de: 42`). A
+control-silo ConfigMap adds a `/control-silo` suffix to the region to tell it
+apart from the regional ConfigMap in the same region (for example
+`us/control-silo: 0`). Pass `--verbose` to also print each line's ConfigMap
+name and kubectl context.
 
 Examples:
 
@@ -748,6 +851,7 @@ def set_option(
         _validate_against_schema(schema_path, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
+    _report(f"Preflighting {len(targets)} ConfigMap target(s)")
     kubectl = str(ensure_kubectl())
     prepared = _preflight_patches(
         kubectl,
@@ -771,52 +875,74 @@ def set_option(
     if not apply:
         return
 
-    errors = []
-    for patch in prepared:
-        try:
-            _apply_patch(kubectl, patch)
-        except click.ClickException as exc:
-            errors.append(exc.message)
-    if errors:
-        raise click.ClickException(
-            "Some ConfigMaps were not patched:\n" + "\n".join(errors)
-        )
+    _apply_patches(kubectl, prepared)
     click.echo(
         f"APPLIED: set {option_key}={value_description} in {configmap_count}"
     )
+
+
+def _read_one_option(
+    kubectl: str, target: ConfigMapTarget, option_key: str, verbose: bool
+) -> tuple[ConfigMapTarget, str, str | None]:
+    """Read one option from one target.
+
+    Returns ``(target, line, error)``: ``line`` is the ready-to-print result
+    line, or empty when ``error`` is set.
+    """
+
+    configmap_name = _configmap_name(target)
+    try:
+        _, values, _ = _read_values(kubectl, target, configmap_name)
+    except click.ClickException as exc:
+        return target, "", exc.message
+
+    configured = option_key in values["options"]
+    value_description = (
+        json.dumps(
+            values["options"].get(option_key), separators=(",", ":"), ensure_ascii=False
+        )
+        if configured
+        else "<unset>"
+    )
+    if verbose:
+        line = f"{target.name}: {value_description} ({configmap_name}; {target.context})"
+    else:
+        line = f"{target.short_label}: {value_description}"
+    return target, line, None
 
 
 def _read_and_print_option(
     kubectl: str,
     targets: Iterable[ConfigMapTarget],
     option_key: str,
+    verbose: bool,
 ) -> None:
-    """Read and print one option from every target as it is read.
+    """Read one option from every target in parallel, printing as results land.
 
-    Each target is printed the moment it is successfully read, so a later
-    failure never hides ConfigMaps that were already read successfully.
+    Each target is printed as soon as it is read, so slow or failing targets
+    never hold up or hide results from targets that finished first. Printing
+    is serialized with a lock so concurrent worker threads never interleave
+    partial lines.
     """
 
-    errors = []
-    for target in targets:
-        configmap_name = _configmap_name(target)
-        try:
-            _, values, _ = _read_values(kubectl, target, configmap_name)
-        except click.ClickException as exc:
-            errors.append(exc.message)
-            continue
+    targets = list(targets)
+    print_lock = threading.Lock()
+    errors: list[str] = []
 
-        configured = option_key in values["options"]
-        value_description = (
-            json.dumps(
-                values["options"].get(option_key), separators=(",", ":"), ensure_ascii=False
-            )
-            if configured
-            else "<unset>"
-        )
-        click.echo(
-            f"{target.name}: {value_description} ({configmap_name}; {target.context})"
-        )
+    with ThreadPoolExecutor(
+        max_workers=len(targets) or 1
+    ) as executor:
+        futures = [
+            executor.submit(_read_one_option, kubectl, target, option_key, verbose)
+            for target in targets
+        ]
+        for future in as_completed(futures):
+            _, line, error = future.result()
+            with print_lock:
+                if error is not None:
+                    errors.append(error)
+                else:
+                    click.echo(line)
 
     if errors:
         raise click.ClickException(
@@ -827,11 +953,18 @@ def _read_and_print_option(
 @options.command("get", help=GET_HELP)
 @click.argument("option_key", metavar="OPTION", callback=_validate_option_key)
 @_target_scope_options
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Also print each target's ConfigMap name and kubectl context.",
+)
 def get_option(
     option_key: str,
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
+    verbose: bool,
 ) -> None:
     """Read OPTION from every selected live ConfigMap.
 
@@ -840,4 +973,4 @@ def get_option(
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
-    _read_and_print_option(kubectl, targets, option_key)
+    _read_and_print_option(kubectl, targets, option_key, verbose)

@@ -1,6 +1,6 @@
 import json
 import subprocess
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -49,6 +49,59 @@ def _configmap(
 
 def _is_configmap_patch(command: list[str]) -> bool:
     return "patch" in command and command[command.index("patch") + 1] == "configmap"
+
+
+def _by_context_and_configmap(
+    responses: dict[tuple[str, str], subprocess.CompletedProcess[str]],
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """Build a subprocess.run side_effect keyed by (--context, configmap name).
+
+    `get` reads targets concurrently, so a positional side_effect list races
+    against thread scheduling. Keying by the actual command arguments keeps
+    the test deterministic regardless of which thread runs first.
+    """
+
+    def side_effect(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        context = command[command.index("--context") + 1]
+        configmap_name = command[command.index("configmap") + 1]
+        return responses[(context, configmap_name)]
+
+    return side_effect
+
+
+def _kubectl_side_effect(
+    *,
+    can_i: dict[tuple[str, str], subprocess.CompletedProcess[str]] | None = None,
+    get: dict[tuple[str, str], subprocess.CompletedProcess[str]] | None = None,
+    patch: dict[tuple[str, str], subprocess.CompletedProcess[str]] | None = None,
+) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """Build a subprocess.run side_effect for `set`'s preflight/apply, keyed
+    by (--context, configmap name) per verb.
+
+    `set` now preflights and applies every target concurrently, so a
+    positional side_effect list races against thread scheduling. Keying by
+    the actual command arguments keeps the test deterministic regardless of
+    which thread runs first.
+    """
+
+    can_i = can_i or {}
+    get = get or {}
+    patch = patch or {}
+
+    def side_effect(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        context = command[command.index("--context") + 1]
+        if "can-i" in command:
+            configmap_name = next(
+                arg.split("/", 1)[1] for arg in command if arg.startswith("configmap/")
+            )
+            return can_i[(context, configmap_name)]
+        if _is_configmap_patch(command):
+            configmap_name = command[command.index("configmap") + 1]
+            return patch[(context, configmap_name)]
+        configmap_name = command[command.index("configmap") + 1]
+        return get[(context, configmap_name)]
+
+    return side_effect
 
 
 def _mock_clusters(mock_config: MagicMock, mock_list_clusters: MagicMock) -> None:
@@ -157,14 +210,18 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _success("yes\n"),
-        _configmap("1", {"sample-rate": 1.0}),
-        _success("yes\n"),
-        _configmap("2", {"sample-rate": 1.0}),
-        _success("yes\n"),
-        _configmap("3", {"sample-rate": 1.0}),
-    ]
+    targets = (
+        ("control-context", "sentry-options-getsentry-control-silo", "1"),
+        ("us-context", "sentry-options-getsentry", "2"),
+        ("us-context", "sentry-options-getsentry-control-silo", "3"),
+    )
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={(context, configmap): _success("yes\n") for context, configmap, _ in targets},
+        get={
+            (context, configmap): _configmap(version, {"sample-rate": 1.0})
+            for context, configmap, version in targets
+        },
+    )
 
     result = CliRunner().invoke(
         options,
@@ -180,7 +237,10 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     assert result.exit_code == 0, result.output
     assert "DRY RUN: would set sample-rate=false in 3 ConfigMaps" in result.output
     assert "sentry-options-getsentry-control-silo" in result.output
-    assert result.output.index("control/default/getsentry-control") < result.output.index(
+    # The final plan section lists targets in a fixed, sorted order even
+    # though preflight itself ran them concurrently.
+    plan = result.output.split("DRY RUN:", 1)[1]
+    assert plan.index("control/default/getsentry-control") < plan.index(
         "us/default/getsentry"
     )
     access_checks = [
@@ -266,13 +326,21 @@ def test_failed_preflight_prevents_every_patch(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _success("yes\n"),
-        _configmap("1", {"sample-rate": 1.0}),
-        _success("no\n"),
-        _success("yes\n"),
-        _configmap("3", {"sample-rate": 1.0}),
-    ]
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={
+            ("control-context", "sentry-options-getsentry-control-silo"): _success("yes\n"),
+            ("us-context", "sentry-options-getsentry"): _success("no\n"),
+            ("us-context", "sentry-options-getsentry-control-silo"): _success("yes\n"),
+        },
+        get={
+            ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "1", {"sample-rate": 1.0}
+            ),
+            ("us-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "3", {"sample-rate": 1.0}
+            ),
+        },
+    )
 
     result = CliRunner().invoke(
         options,
@@ -291,8 +359,11 @@ def test_failed_preflight_prevents_every_patch(
     assert not any(
         _is_configmap_patch(args.args[0]) for args in mock_run.call_args_list
     )
+    # us/getsentry's denied "can-i" short-circuits before any "get", so 5
+    # total calls: 2 can-i + 1 can-i-denied + 2 get. Order is not guaranteed
+    # since preflight now runs every target concurrently.
     assert mock_run.call_count == 5
-    assert mock_run.call_args_list[-1] == call(
+    assert call(
         [
             "kubectl",
             "--context",
@@ -307,7 +378,7 @@ def test_failed_preflight_prevents_every_patch(
         capture_output=True,
         check=False,
         text=True,
-    )
+    ) in mock_run.call_args_list
 
 
 @pytest.mark.parametrize("value", ("NaN", "1e999"))
@@ -551,9 +622,13 @@ def test_get_reads_the_option_from_each_selected_configmap(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _configmap("1", {"sample-rate": False}),
-    ]
+    mock_run.side_effect = _by_context_and_configmap(
+        {
+            ("us-context", "sentry-options-getsentry"): _configmap(
+                "1", {"sample-rate": False}
+            ),
+        }
+    )
 
     result = CliRunner().invoke(
         options,
@@ -568,7 +643,7 @@ def test_get_reads_the_option_from_each_selected_configmap(
     )
 
     assert result.exit_code == 0, result.output
-    assert "us/default/getsentry: false" in result.output
+    assert "us: false" in result.output
     assert mock_run.call_args.args[0] == [
         "kubectl",
         "--context",
@@ -589,6 +664,43 @@ def test_get_reads_the_option_from_each_selected_configmap(
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
 @patch("sentry_kube.cli.options.Config")
+def test_get_verbose_prints_configmap_name_and_context(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _by_context_and_configmap(
+        {
+            ("us-context", "sentry-options-getsentry"): _configmap(
+                "1", {"sample-rate": False}
+            ),
+        }
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "get",
+            "sample-rate",
+            "--include",
+            "us",
+            "--service",
+            "getsentry",
+            "--verbose",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "us/default/getsentry: false" in result.output
+    assert "sentry-options-getsentry; us-context" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
 def test_get_prints_each_target_region_and_value(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
@@ -596,18 +708,26 @@ def test_get_prints_each_target_region_and_value(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _configmap("1", {"sample-rate": False}),
-        _configmap("2", {"sample-rate": True}),
-        _configmap("3", {}),
-    ]
+    mock_run.side_effect = _by_context_and_configmap(
+        {
+            ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "1", {"sample-rate": False}
+            ),
+            ("us-context", "sentry-options-getsentry"): _configmap(
+                "2", {"sample-rate": True}
+            ),
+            ("us-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "3", {}
+            ),
+        }
+    )
 
     result = CliRunner().invoke(options, ["get", "sample-rate"])
 
     assert result.exit_code == 0, result.output
-    assert "control/default/getsentry-control: false" in result.output
-    assert "us/default/getsentry: true" in result.output
-    assert "us/default/getsentry-control: <unset>" in result.output
+    assert "control/control-silo: false" in result.output
+    assert "us: true" in result.output
+    assert "us/control-silo: <unset>" in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -621,15 +741,23 @@ def test_get_prints_already_read_targets_when_a_later_one_errors(
     _mock_kubectl: MagicMock,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
-    mock_run.side_effect = [
-        _configmap("1", {"sample-rate": False}),
-        subprocess.CompletedProcess([], 1, "", "error: context does not exist"),
-        _configmap("3", {}),
-    ]
+    mock_run.side_effect = _by_context_and_configmap(
+        {
+            ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "1", {"sample-rate": False}
+            ),
+            ("us-context", "sentry-options-getsentry"): subprocess.CompletedProcess(
+                [], 1, "", "error: context does not exist"
+            ),
+            ("us-context", "sentry-options-getsentry-control-silo"): _configmap(
+                "3", {}
+            ),
+        }
+    )
 
     result = CliRunner().invoke(options, ["get", "sample-rate"])
 
     assert result.exit_code != 0
-    assert "control/default/getsentry-control: false" in result.output
-    assert "us/default/getsentry-control: <unset>" in result.output
+    assert "control/control-silo: false" in result.output
+    assert "us/control-silo: <unset>" in result.output
     assert "Could not read every selected ConfigMap" in result.output
