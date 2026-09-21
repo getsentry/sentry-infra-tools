@@ -942,6 +942,38 @@ def test_fetch_schemas_caches_a_fresh_snapshot(tmp_path: Path) -> None:
     assert json.loads((cache_root / "latest.json").read_text())["checksum"] == checksum
 
 
+def test_fetch_schemas_keeps_fresh_schemas_when_caching_fails(tmp_path: Path) -> None:
+    """Caching is an optimization; a write failure there shouldn't discard an
+    otherwise-successful fetch already sitting in `output`.
+    """
+
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+    repos_bytes = b'{"repos": {}}'
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(repos_bytes, "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=lambda _config, out: _write_fake_schema(out),
+        ),
+        patch.object(
+            options_module,
+            "_cache_schema_snapshot",
+            side_effect=OSError("disk full"),
+        ),
+    ):
+        options_module._fetch_schemas(None, output)
+
+    assert (output / "getsentry" / "schema.json").is_file()
+
+
 def test_fetch_schemas_falls_back_to_matching_cached_checksum_on_failure(
     tmp_path: Path,
 ) -> None:
@@ -973,6 +1005,50 @@ def test_fetch_schemas_falls_back_to_matching_cached_checksum_on_failure(
         options_module._fetch_schemas(None, output)
 
     assert (output / "getsentry" / "schema.json").is_file()
+
+
+def test_fetch_schemas_falls_back_to_cache_when_failed_fetch_left_partial_output(
+    tmp_path: Path,
+) -> None:
+    """A failed fetch can leave `output` partially populated (the client
+    writes namespaces as it goes); the cache fallback must still work even
+    though `output` already exists.
+    """
+
+    cache_root = tmp_path / "cache"
+    output = tmp_path / "output"
+    repos_bytes = b'{"repos": {}}'
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+
+    entry_dir = cache_root / "by-checksum" / checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    (entry_dir / "meta.json").write_text(
+        json.dumps({"checksum": checksum, "fetched_at": "2020-01-01T00:00:00+00:00"})
+    )
+    (cache_root / "latest.json").write_text(json.dumps({"checksum": checksum}))
+
+    def _fail_after_partial_write(_config: Path, out: Path) -> None:
+        out.mkdir(parents=True)
+        (out / "partial-namespace").mkdir()
+        raise click.ClickException("network unreachable")
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(repos_bytes, "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=_fail_after_partial_write,
+        ),
+    ):
+        options_module._fetch_schemas(None, output)
+
+    assert (output / "getsentry" / "schema.json").is_file()
+    assert not (output / "partial-namespace").exists()
 
 
 def test_fetch_schemas_falls_back_to_latest_cache_when_repos_json_unavailable(
