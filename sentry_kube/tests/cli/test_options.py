@@ -582,3 +582,28 @@ def test_get_prints_each_target_region_and_value(
     assert "control/default/getsentry-control: false" in result.output
     assert "us/default/getsentry: true" in result.output
     assert "us/default/getsentry-control: <unset>" in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_prints_already_read_targets_when_a_later_one_errors(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = [
+        _configmap("1", {"sample-rate": False}),
+        subprocess.CompletedProcess([], 1, "", "error: context does not exist"),
+        _configmap("3", {}),
+    ]
+
+    result = CliRunner().invoke(options, ["get", "sample-rate"])
+
+    assert result.exit_code != 0
+    assert "control/default/getsentry-control: false" in result.output
+    assert "us/default/getsentry-control: <unset>" in result.output
+    assert "Could not read every selected ConfigMap" in result.output

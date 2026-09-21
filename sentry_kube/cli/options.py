@@ -767,14 +767,17 @@ def set_option(
     )
 
 
-def _read_option(
+def _read_and_print_option(
     kubectl: str,
     targets: Iterable[ConfigMapTarget],
     option_key: str,
-) -> list[tuple[ConfigMapTarget, str, bool, Any]]:
-    """Read one option from every target, failing rather than hiding gaps."""
+) -> None:
+    """Read and print one option from every target as it is read.
 
-    values_by_target = []
+    Each target is printed the moment it is successfully read, so a later
+    failure never hides ConfigMaps that were already read successfully.
+    """
+
     errors = []
     for target in targets:
         configmap_name = _configmap_name(target)
@@ -782,22 +785,24 @@ def _read_option(
             _, values, _ = _read_values(kubectl, target, configmap_name)
         except click.ClickException as exc:
             errors.append(exc.message)
-        else:
-            configured = option_key in values["options"]
-            values_by_target.append(
-                (
-                    target,
-                    configmap_name,
-                    configured,
-                    values["options"].get(option_key),
-                )
+            continue
+
+        configured = option_key in values["options"]
+        value_description = (
+            json.dumps(
+                values["options"].get(option_key), separators=(",", ":"), ensure_ascii=False
             )
+            if configured
+            else "<unset>"
+        )
+        click.echo(
+            f"{target.name}: {value_description} ({configmap_name}; {target.context})"
+        )
 
     if errors:
         raise click.ClickException(
             "Could not read every selected ConfigMap:\n" + "\n".join(errors)
         )
-    return values_by_target
 
 
 @options.command("get", help=GET_HELP)
@@ -816,18 +821,4 @@ def get_option(
 
     targets = _selected_targets(regions, excluded_regions, services)
     kubectl = str(ensure_kubectl())
-    values_by_target = _read_option(
-        kubectl,
-        targets,
-        option_key,
-    )
-
-    for target, configmap_name, configured, value in values_by_target:
-        value_description = (
-            json.dumps(value, separators=(",", ":"), ensure_ascii=False)
-            if configured
-            else "<unset>"
-        )
-        click.echo(
-            f"{target.name}: {value_description} ({configmap_name}; {target.context})"
-        )
+    _read_and_print_option(kubectl, targets, option_key)
