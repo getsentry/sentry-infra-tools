@@ -19,7 +19,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -219,6 +219,25 @@ def _kubectl_command(
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, check=False, text=True)
+
+
+_T = TypeVar("_T")
+
+
+def _fan_out(items: Iterable[_T], work: Callable[[_T], None]) -> None:
+    """Run `work(item)` for every item concurrently, one thread per item.
+
+    `work` owns its own success/failure handling and reporting (typically
+    catching `click.ClickException` and recording it under a lock); this only
+    manages the thread pool and re-raises anything that escapes a worker
+    unexpectedly.
+    """
+
+    items = list(items)
+    with ThreadPoolExecutor(max_workers=len(items) or 1) as executor:
+        futures = [executor.submit(work, item) for item in items]
+        for future in as_completed(futures):
+            future.result()
 
 
 def _report(message: str) -> None:
@@ -498,12 +517,7 @@ def _apply_patches(kubectl: str, prepared: list[PreparedPatch]) -> None:
         with report_lock:
             _report(f"Apply {patch.target.name}: ok ({time.monotonic() - start:.1f}s)")
 
-    with ThreadPoolExecutor(
-        max_workers=len(prepared) or 1
-    ) as executor:
-        futures = [executor.submit(apply_one, patch) for patch in prepared]
-        for future in as_completed(futures):
-            future.result()
+    _fan_out(prepared, apply_one)
 
     if errors:
         raise click.ClickException(
@@ -546,12 +560,7 @@ def _preflight_patches(
             results[target] = patch
             _report(f"Preflight {target.name}: ok ({time.monotonic() - start:.1f}s)")
 
-    with ThreadPoolExecutor(
-        max_workers=len(targets) or 1
-    ) as executor:
-        futures = [executor.submit(preflight_one, target) for target in targets]
-        for future in as_completed(futures):
-            future.result()
+    _fan_out(targets, preflight_one)
 
     if errors:
         raise click.ClickException(
@@ -809,6 +818,20 @@ def _selected_targets(
     return _find_targets(Config(), regions, excluded_regions, selected_services)
 
 
+def _ensure_cluster_access() -> str:
+    """Resolve kubectl and warm gcloud auth once, before any concurrent work.
+
+    Fanning out kubectl calls across many threads without warming auth first
+    could have every worker trigger its own gcloud token refresh at once,
+    racing on gcloud's local credential cache.
+    """
+
+    kubectl = str(ensure_kubectl())
+    with _timed_step("Ensuring gcloud is authenticated"):
+        ensure_gcloud_reauthed()
+    return kubectl
+
+
 @click.group(help=OPTIONS_HELP)
 def options() -> None:
     pass
@@ -883,10 +906,8 @@ def set_option(
         _validate_against_schema(schema_path, option_key, value)
 
     targets = _selected_targets(regions, excluded_regions, services)
+    kubectl = _ensure_cluster_access()
     _report(f"Preflighting {len(targets)} ConfigMap target(s)")
-    kubectl = str(ensure_kubectl())
-    with _timed_step("Ensuring gcloud is authenticated"):
-        ensure_gcloud_reauthed()
     prepared = _preflight_patches(
         kubectl,
         targets,
@@ -917,18 +938,11 @@ def set_option(
 
 def _read_one_option(
     kubectl: str, target: ConfigMapTarget, option_key: str, verbose: bool
-) -> tuple[ConfigMapTarget, str, str | None]:
-    """Read one option from one target.
-
-    Returns ``(target, line, error)``: ``line`` is the ready-to-print result
-    line, or empty when ``error`` is set.
-    """
+) -> str:
+    """Read one option from one target and format it as a ready-to-print line."""
 
     configmap_name = _configmap_name(target)
-    try:
-        _, values, _ = _read_values(kubectl, target, configmap_name)
-    except click.ClickException as exc:
-        return target, "", exc.message
+    _, values, _ = _read_values(kubectl, target, configmap_name)
 
     configured = option_key in values["options"]
     value_description = (
@@ -939,10 +953,8 @@ def _read_one_option(
         else "<unset>"
     )
     if verbose:
-        line = f"{target.name}: {value_description} ({configmap_name}; {target.context})"
-    else:
-        line = f"{target.short_label}: {value_description}"
-    return target, line, None
+        return f"{target.name}: {value_description} ({configmap_name}; {target.context})"
+    return f"{target.short_label}: {value_description}"
 
 
 def _read_and_print_option(
@@ -959,24 +971,20 @@ def _read_and_print_option(
     partial lines.
     """
 
-    targets = list(targets)
     print_lock = threading.Lock()
     errors: list[str] = []
 
-    with ThreadPoolExecutor(
-        max_workers=len(targets) or 1
-    ) as executor:
-        futures = [
-            executor.submit(_read_one_option, kubectl, target, option_key, verbose)
-            for target in targets
-        ]
-        for future in as_completed(futures):
-            _, line, error = future.result()
+    def read_one(target: ConfigMapTarget) -> None:
+        try:
+            line = _read_one_option(kubectl, target, option_key, verbose)
+        except click.ClickException as exc:
             with print_lock:
-                if error is not None:
-                    errors.append(error)
-                else:
-                    click.echo(line)
+                errors.append(exc.message)
+            return
+        with print_lock:
+            click.echo(line)
+
+    _fan_out(targets, read_one)
 
     if errors:
         raise click.ClickException(
@@ -1006,7 +1014,6 @@ def get_option(
     """
 
     targets = _selected_targets(regions, excluded_regions, services)
-    kubectl = str(ensure_kubectl())
-    with _timed_step("Ensuring gcloud is authenticated"):
-        ensure_gcloud_reauthed()
+    kubectl = _ensure_cluster_access()
+    _report(f"Reading {len(targets)} ConfigMap target(s)")
     _read_and_print_option(kubectl, targets, option_key, verbose)
