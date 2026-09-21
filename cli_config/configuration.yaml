@@ -1,5 +1,10 @@
 # This file contains the parameters that are needed to use sentry-kube
 # for each silo-region (region or single tenant).
+#
+# Optional: override the published sentry-options-automator repos.json URL
+# that `sentry-kube options set` falls back to when no local repos.json is
+# found. Defaults to the getsentry/sentry-options-automator main branch.
+# options_automator_repos_config_url: https://example.invalid/repos.json
 silo_regions:
   saas:
     aliases: [saasalias]

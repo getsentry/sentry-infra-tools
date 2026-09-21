@@ -45,9 +45,6 @@ GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
-REPOS_CONFIG_URL = (
-    "https://raw.githubusercontent.com/getsentry/sentry-options-automator/main/repos.json"
-)
 
 
 @dataclass(frozen=True)
@@ -273,10 +270,10 @@ def _repos_config_path(explicit_path: Path | None) -> Path | None:
     return next((path for path in candidates if path.is_file()), None)
 
 
-def _download_repos_config(destination: Path) -> None:
+def _download_repos_config(destination: Path, url: str) -> None:
     try:
-        with _timed_step(f"Downloading repos.json from {REPOS_CONFIG_URL}"):
-            request = Request(REPOS_CONFIG_URL, headers={"User-Agent": "sentry-kube"})
+        with _timed_step(f"Downloading repos.json from {url}"):
+            request = Request(url, headers={"User-Agent": "sentry-kube"})
             with urlopen(request, timeout=15) as response:
                 destination.write_bytes(response.read())
     except (OSError, URLError) as exc:
@@ -292,9 +289,12 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
         _fetch_schemas_with_client(config_path, output)
         return
 
+    # Published repos.json URL, overridable per-repo via
+    # `options_automator_repos_config_url` in cli_config/configuration.yaml.
+    url = Config().options_automator_repos_config_url
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         config_path = Path(temp_dir) / "repos.json"
-        _download_repos_config(config_path)
+        _download_repos_config(config_path, url)
         _fetch_schemas_with_client(config_path, output)
 
 
@@ -655,7 +655,10 @@ available, or the automator's published `repos.json` as a last resort.
 Scope defaults to every configured Getsentry ConfigMap, including both
 control-silo ConfigMaps. Use either repeated `--include` to include only named
 regions, or repeated `--exclude` to start with the fleet and omit named
-regions. Configured aliases (such as `saas` for `us`) are accepted.
+regions. Configured aliases (such as `saas` for `us`) are accepted. A dry run
+always previews this default fleet-wide scope, but `set --apply` refuses to
+run against it unless `--include`, `--exclude`, or the explicit
+`--all-regions` confirmation flag is also given.
 
 The target is fixed to the Getsentry values ConfigMaps in Kubernetes'
 `default` namespace: `sentry-options-getsentry`, plus
@@ -679,10 +682,15 @@ $ sentry-kube --root ~/dev/ops options set \\
     --apply
 
 \b
-# Apply to all configured regions except single tenants.
+# Apply to all configured regions except a few single tenants.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude geico --exclude goldmansachs --exclude ly \\
+    --exclude st0 --exclude st1 --exclude st2 \\
     billing.quotas.exceeded.enabled false --apply
+
+\b
+# Apply to the entire fleet; --all-regions confirms the wide blast radius.
+$ sentry-kube --root ~/dev/ops options set \\
+    billing.quotas.exceeded.enabled false --all-regions --apply
 """
 
 
@@ -696,9 +704,11 @@ OPTION and VALUE against a local snapshot supplied by `--schemas` (or
 the explicit `sentry_options.fetch_schemas` client API when no snapshot is
 supplied. It then uses the native sentry-options validator before it reads
 every selected ConfigMap and confirms patch access before the first write.
-Without `--apply`, it prints the exact fleet plan and makes no changes.
-Each write uses the ConfigMap resource version read during preflight, so it
-refuses to overwrite a concurrent change.
+Without `--apply`, it prints the exact fleet plan and makes no changes. If
+neither `--include` nor `--exclude` narrows the scope, `--apply` also
+requires `--all-regions` to confirm the fleet-wide blast radius; a dry run
+never requires it. Each write uses the ConfigMap resource version read during
+preflight, so it refuses to overwrite a concurrent change.
 
 VALUE is parsed as JSON when possible (numbers, `true`/`false`/`null`,
 quoted strings, objects, arrays). Anything else, such as `on`, is treated
@@ -721,8 +731,13 @@ $ sentry-kube --root ~/dev/ops options set \\
 \b
 # Apply everywhere except one region.
 $ sentry-kube --root ~/dev/ops options set \\
-    --exclude geico billing.quotas.exceeded.enabled false \\
+    --exclude st0 billing.quotas.exceeded.enabled false \\
     --apply
+
+\b
+# Apply to the entire fleet; --all-regions confirms the wide blast radius.
+$ sentry-kube --root ~/dev/ops options set \\
+    billing.quotas.exceeded.enabled false --all-regions --apply
 """
 
 
@@ -828,6 +843,15 @@ def options() -> None:
     is_flag=True,
     help="Apply the patches. Without this flag, only preflight and show the plan.",
 )
+@click.option(
+    "--all-regions",
+    is_flag=True,
+    help=(
+        "Confirm applying to the entire fleet when neither --include nor "
+        "--exclude is given. Required together with --apply in that case; a "
+        "dry run (no --apply) always previews the full fleet without it."
+    ),
+)
 def set_option(
     option_key: str,
     value_json: str,
@@ -837,6 +861,7 @@ def set_option(
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
     apply: bool,
+    all_regions: bool,
 ) -> None:
     """Set OPTION in every selected live ConfigMap.
 
@@ -845,6 +870,13 @@ def set_option(
     resource-version assertion rejects that individual patch rather than
     replacing an unseen change.
     """
+
+    if apply and not regions and not excluded_regions and not all_regions:
+        raise click.UsageError(
+            "Refusing to apply to the entire fleet without confirmation. Pass "
+            "--include or --exclude to scope the change, or pass --all-regions "
+            "to confirm applying everywhere."
+        )
 
     value = _parse_json_value(value_json)
     with _schema_directory(schemas_dir, repos_config) as schema_path:
