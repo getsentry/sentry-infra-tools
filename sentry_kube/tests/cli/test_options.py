@@ -1,6 +1,7 @@
 import hashlib
 import json
 import subprocess
+import threading
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
@@ -750,6 +751,40 @@ def test_set_validates_the_schema_before_discovering_targets(
         Path("schemas"), "sample-rate", False
     )
     mock_config.assert_not_called()
+
+
+def test_set_fetches_schemas_and_warms_cluster_access_concurrently(
+    mock_schema_validation: MagicMock,
+) -> None:
+    """`set` overlaps the schema fetch/validate with the kubectl/gcloud
+    warmup rather than running them serially. A `Barrier` proves this: each
+    side only proceeds once both have started, so a regression to running
+    them one after another deadlocks (and times out) instead of passing.
+    """
+
+    barrier = threading.Barrier(2, timeout=2)
+
+    def _validate(*_args: object, **_kwargs: object) -> None:
+        barrier.wait()
+
+    def _warm_cluster_access() -> str:
+        barrier.wait()
+        return "kubectl"
+
+    mock_schema_validation.side_effect = _validate
+
+    with (
+        patch.object(
+            options_module, "_ensure_cluster_access", side_effect=_warm_cluster_access
+        ),
+        patch.object(options_module, "_selected_targets", return_value=[]),
+    ):
+        result = CliRunner().invoke(
+            options,
+            ["set", "sample-rate", "false", "--schemas", "schemas"],
+        )
+
+    assert result.exit_code == 0, result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
