@@ -974,11 +974,24 @@ def set_option(
         _report("dry-run; no changes will be made (pass --apply to apply)")
 
     value = _parse_json_value(value_json)
-    with _schema_directory(schemas_dir, repos_config) as schema_path:
-        _validate_against_schema(schema_path, option_key, value)
+
+    def _fetch_and_validate_schema() -> None:
+        with _schema_directory(schemas_dir, repos_config) as schema_path:
+            _validate_against_schema(schema_path, option_key, value)
+
+    # Fetching schemas (network) and warming cluster access (kubectl/gcloud,
+    # also network) are independent; run them side by side. Cluster access
+    # only resolves local credentials and never touches a cluster itself, so
+    # this still validates, and never resolves targets from config, before
+    # any ConfigMap is read or patched.
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        schema_future = executor.submit(_fetch_and_validate_schema)
+        access_future = executor.submit(_ensure_cluster_access)
+        schema_future.result()
+        kubectl = access_future.result()
 
     targets = _selected_targets(regions, excluded_regions, services)
-    kubectl = _ensure_cluster_access()
+
     _report(f"Preflighting {len(targets)} ConfigMap target(s)")
     prepared = _preflight_patches(
         kubectl,
