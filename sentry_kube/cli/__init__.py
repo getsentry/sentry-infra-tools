@@ -114,6 +114,7 @@ Get kubed.
         set_workspace_root_start(root)
 
     if ctx.invoked_subcommand in (
+        "options",
         "datadog-log-terragrunt",
         "datadog-log",
         "get-regions",
