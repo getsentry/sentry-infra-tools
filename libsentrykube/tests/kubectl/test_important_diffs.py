@@ -67,6 +67,17 @@ spec:
       terminationGracePeriodSeconds: 30
 """
 
+TEST_CONFIGMAP_DATA = """\
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multiline-config
+data:
+  config: |
+    first line with trailing spaces{trailing_spaces}
+    second line
+""".format(trailing_spaces="  ")
+
 
 def test_process_data() -> None:
     input_stream = io.StringIO(TEST_DEPLOYMENT_DATA)
@@ -104,3 +115,18 @@ def test_process_data() -> None:
         "image" not in container
         for container in data["spec"]["template"]["spec"]["containers"]
     ), "image should be ignored"
+
+
+def test_process_data_keeps_multiline_strings_readable() -> None:
+    output_stream = io.StringIO()
+
+    important_diffs.process_file(
+        "/tmp/configmap.yaml",
+        io.StringIO(TEST_CONFIGMAP_DATA),
+        output_stream,
+    )
+
+    output = output_stream.getvalue()
+    assert yaml.safe_load(output) == yaml.safe_load(TEST_CONFIGMAP_DATA)
+    assert "  config: |\n" in output
+    assert "    first line with trailing spaces  \n" in output
