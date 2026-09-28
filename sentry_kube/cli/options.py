@@ -518,13 +518,12 @@ def _prepare_patch(
     values["options"][option] = value
     # Mounted ConfigMap updates trigger a reload by mtime. Keeping generated_at
     # current also lets the client report meaningful propagation delay.
-    generated_at = _generated_at()
-    values["generated_at"] = generated_at
+    values["generated_at"] = _generated_at()
     return PreparedPatch(
         target=target,
         configmap_name=configmap_name,
         resource_version=resource_version,
-        generated_at=generated_at,
+        generated_at=values["generated_at"],
         values_json=json.dumps(values, separators=(",", ":"), ensure_ascii=False),
     )
 
