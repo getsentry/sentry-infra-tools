@@ -58,15 +58,19 @@ sentry-kube --root ~/dev/ops options get \
   billing.quotas.exceeded.enabled
 ```
 
-`set` is a dry run by default. It verifies patch access and reads every
-selected ConfigMap before changing any cluster. It also validates the requested
-key and strict JSON value with the native
-`sentry_options.SchemaRegistry` used by the application. By default it fetches
-a fresh schema snapshot through the explicit `sentry_options.fetch_schemas`
-client API. It uses the nearby or published
-`sentry-options-automator/repos.json`. Use `--repos-config` to choose a
-different repository list, or `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) to
-supply a local snapshot explicitly.
+`set` needs permission to patch the `sentry-options` ConfigMaps in every
+selected cluster (normally obtained through a Sentry Sudo escalation). It is a
+dry run by default: it verifies patch access and reads every selected ConfigMap
+before changing any cluster. It also validates the requested key and strict
+JSON value with the native `sentry_options.SchemaRegistry` used by the
+application. By default it fetches a fresh schema snapshot through the explicit
+`sentry_options.fetch_schemas` client API, using the published
+`sentry-options-automator/repos.json` (override the URL with
+`options_automator_repos_config_url` in `cli_config/configuration.yaml`). Each
+successful fetch is cached under `~/.cache/sentry-kube/options-schemas/`; if a
+later fetch fails, the cached snapshot is used and stderr says so. Use
+`--repos-config` to choose a different repository list, or `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
 
 `--apply` is required to make the change:
 

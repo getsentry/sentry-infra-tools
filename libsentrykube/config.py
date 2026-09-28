@@ -12,8 +12,8 @@ from libsentrykube.utils import workspace_root
 
 DEFAULT_CONFIG = "cli_config/configuration.yaml"
 
-# Published by sentry-options-automator; used as a last resort to build a
-# sentry-options schema snapshot when no local repos.json is available.
+# Published by sentry-options-automator; used to build a sentry-options schema
+# snapshot unless `sentry-kube options set --repos-config` is given.
 # Override per-repo with the `options_automator_repos_config_url` top-level
 # key in cli_config/configuration.yaml.
 DEFAULT_OPTIONS_AUTOMATOR_REPOS_CONFIG_URL = (
