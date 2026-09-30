@@ -4,6 +4,7 @@ import subprocess
 import threading
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -190,6 +191,7 @@ def test_options_targets_exclude_retired_us2_unless_explicitly_included(
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
 @patch("sentry_kube.cli.options.Config")
+@pytest.mark.parametrize("refresh", [False, True])
 def test_set_fetches_schemas_when_no_snapshot_is_supplied(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
@@ -197,6 +199,7 @@ def test_set_fetches_schemas_when_no_snapshot_is_supplied(
     _mock_kubectl: MagicMock,
     mock_fetch_schemas: MagicMock,
     tmp_path: Path,
+    refresh: bool,
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     repos_config = tmp_path / "repos.json"
@@ -218,12 +221,14 @@ def test_set_fetches_schemas_when_no_snapshot_is_supplied(
             "getsentry",
             "--repos-config",
             str(repos_config),
+            *(["--refresh"] if refresh else []),
         ],
     )
 
     assert result.exit_code == 0, result.output
     assert mock_fetch_schemas.call_args.args[0] == repos_config
     assert mock_fetch_schemas.call_args.args[1].name == "schemas"
+    assert mock_fetch_schemas.call_args.kwargs == {"refresh": refresh}
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -1026,6 +1031,204 @@ def test_fetch_schemas_caches_a_fresh_snapshot(
     assert "checksum" not in capsys.readouterr().err
 
 
+def test_fetch_schemas_reuses_snapshot_on_repeated_calls(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cache_root = tmp_path / "cache"
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(b'{"repos": {}}', "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=lambda _config, out: _write_fake_schema(out),
+        ) as fetch,
+    ):
+        options_module._fetch_schemas(None, tmp_path / "first")
+        capsys.readouterr()
+        options_module._fetch_schemas(None, tmp_path / "second")
+
+    fetch.assert_called_once()
+    assert (tmp_path / "second" / "getsentry" / "schema.json").is_file()
+    assert "Using cached schema snapshot" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("seconds", "description"),
+    [
+        (0, "just now"),
+        (1, "1 second ago"),
+        (90, "1 minute ago"),
+        (120, "2 minutes ago"),
+        (3600, "1 hour ago"),
+        (172800, "2 days ago"),
+    ],
+)
+def test_cached_schema_message_reports_age_and_refresh_hint(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], seconds: int, description: str
+) -> None:
+    checksum = "test-checksum"
+    entry_dir = tmp_path / "by-checksum" / checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    now = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    fetched_at = (now - timedelta(seconds=seconds)).isoformat()
+    (entry_dir / "meta.json").write_text(json.dumps({"fetched_at": fetched_at}))
+    fresh = seconds < 3600
+    with patch.object(options_module, "datetime") as clock:
+        clock.now.return_value = now
+        clock.fromisoformat.side_effect = datetime.fromisoformat
+        assert options_module._use_cached_schemas(
+            tmp_path, checksum, tmp_path / "output", fresh_only=fresh
+        )
+
+    message = capsys.readouterr().err
+    assert description in message
+    assert fetched_at not in message
+    assert ("Pass --refresh" in message) == fresh
+
+
+@pytest.mark.parametrize("color", [False, True])
+def test_options_output_colors_include_commands_from_worker_threads(color: bool) -> None:
+    @click.command()
+    def command() -> None:
+        options_module._report("dry-run; no changes will be made (pass --apply to apply)")
+        options_module._report("Fetch failed: offline", fg="red")
+        options_module._report("Fetched and cached fresh schema snapshot.", fg="green")
+        with patch.object(options_module.subprocess, "run", return_value=_success()):
+            options_module._fan_out(["one"], lambda _: options_module._run(["kubectl"]))
+
+    result = CliRunner().invoke(command, color=color)
+    assert result.exit_code == 0, result.output
+    for message, fg in [
+        ("dry-run; no changes will be made (pass --apply to apply)", "yellow"),
+        ("Fetch failed: offline", "red"),
+        ("Fetched and cached fresh schema snapshot.", "green"),
+        ("+ kubectl", "bright_black"),
+    ]:
+        assert (click.style(message, fg=fg) if color else message) in result.output
+    if not color:
+        assert "\x1b[" not in result.output
+
+
+@pytest.mark.parametrize("color", [False, True])
+def test_options_usage_errors_are_red_and_keep_parameter_details(color: bool) -> None:
+    result = CliRunner().invoke(options, ["set", " ", "1"], color=color)
+    assert result.exit_code == 2
+    message = "Invalid value for 'OPTION': must not be blank or have surrounding whitespace"
+    assert (click.style(message, fg="red") if color else message) in result.output
+    assert "Usage:" in result.output
+    if not color:
+        assert "\x1b[" not in result.output
+
+
+@pytest.mark.parametrize("color", [False, True])
+def test_options_errors_are_red(color: bool, mock_schema_validation: MagicMock) -> None:
+    mock_schema_validation.side_effect = click.ClickException("invalid schema")
+    result = CliRunner().invoke(
+        options, ["set", "test", "1", "--schemas", "schemas"], color=color
+    )
+    assert result.exit_code == 1
+    error = "Error: invalid schema"
+    assert (click.style(error, fg="red") if color else error) in result.output
+    if not color:
+        assert "\x1b[" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("age_seconds", "refresh", "changed_config", "should_fetch"),
+    [
+        (3599, False, False, False),
+        (3600, False, False, True),
+        (-60, False, False, True),
+        (0, True, False, True),
+        (0, False, True, True),
+    ],
+)
+def test_fetch_schemas_cache_expiry_and_bypass(
+    tmp_path: Path,
+    age_seconds: int,
+    refresh: bool,
+    changed_config: bool,
+    should_fetch: bool,
+) -> None:
+    cache_root = tmp_path / "cache"
+    repos_bytes = b'{"repos": {}}'
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+    now = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    entry_dir = cache_root / "by-checksum" / checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    (entry_dir / "meta.json").write_text(
+        json.dumps({"fetched_at": (now - timedelta(seconds=age_seconds)).isoformat()})
+    )
+    (cache_root / "latest.json").write_text(json.dumps({"checksum": checksum}))
+    output = tmp_path / "output"
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(b"{}" if changed_config else repos_bytes, "test source"),
+        ),
+        patch.object(options_module, "datetime") as clock,
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=lambda _config, out: _write_fake_schema(out),
+        ) as fetch,
+    ):
+        clock.now.return_value = now
+        clock.fromisoformat.side_effect = datetime.fromisoformat
+        options_module._fetch_schemas(None, output, refresh=refresh)
+
+    assert fetch.call_count == int(should_fetch)
+    assert (output / "getsentry" / "schema.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        None,
+        "{}",
+        "[]",
+        '{"fetched_at": "bad"}',
+        '{"fetched_at": null}',
+        '{"fetched_at": "2026-09-30T00:00:00"}',
+    ],
+)
+def test_fetch_schemas_refreshes_when_cache_age_is_unknown(
+    tmp_path: Path, metadata: str | None
+) -> None:
+    cache_root = tmp_path / "cache"
+    repos_bytes = b'{"repos": {}}'
+    checksum = hashlib.sha256(repos_bytes).hexdigest()
+    entry_dir = cache_root / "by-checksum" / checksum
+    _write_fake_schema(entry_dir / "snapshot")
+    if metadata is not None:
+        (entry_dir / "meta.json").write_text(metadata)
+
+    with (
+        patch.object(options_module, "_options_cache_root", return_value=cache_root),
+        patch.object(
+            options_module,
+            "_repos_config_bytes",
+            return_value=(repos_bytes, "test source"),
+        ),
+        patch.object(
+            options_module,
+            "_fetch_schemas_with_client",
+            side_effect=lambda _config, out: _write_fake_schema(out),
+        ) as fetch,
+    ):
+        options_module._fetch_schemas(None, tmp_path / "output")
+
+    fetch.assert_called_once()
+
+
 def test_fetch_schemas_keeps_fresh_schemas_when_caching_fails(tmp_path: Path) -> None:
     """Caching is an optimization; a write failure there shouldn't discard an
     otherwise-successful fetch already sitting in `output`.
@@ -1058,8 +1261,9 @@ def test_fetch_schemas_keeps_fresh_schemas_when_caching_fails(tmp_path: Path) ->
     assert (output / "getsentry" / "schema.json").is_file()
 
 
+@pytest.mark.parametrize("refresh", [False, True])
 def test_fetch_schemas_falls_back_to_matching_cached_checksum_on_failure(
-    tmp_path: Path,
+    tmp_path: Path, refresh: bool,
 ) -> None:
     cache_root = tmp_path / "cache"
     output = tmp_path / "output"
@@ -1086,9 +1290,17 @@ def test_fetch_schemas_falls_back_to_matching_cached_checksum_on_failure(
             side_effect=click.ClickException("network unreachable"),
         ),
     ):
-        options_module._fetch_schemas(None, output)
+        options_module._fetch_schemas(None, output, refresh=refresh)
 
     assert (output / "getsentry" / "schema.json").is_file()
+
+
+def test_schema_directory_uses_local_snapshot_even_with_refresh(tmp_path: Path) -> None:
+    with patch.object(options_module, "_fetch_schemas") as fetch:
+        with options_module._schema_directory(tmp_path, None, refresh=True) as snapshot:
+            assert snapshot == tmp_path
+
+    fetch.assert_not_called()
 
 
 def test_fetch_schemas_falls_back_to_cache_when_failed_fetch_left_partial_output(

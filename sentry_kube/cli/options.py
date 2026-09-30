@@ -19,9 +19,9 @@ from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TextIO, TypeVar
 
 import click
 
@@ -46,6 +46,7 @@ GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
+SCHEMA_CACHE_MAX_AGE = timedelta(hours=1)
 # Retired regions may remain in topology files; require explicit inclusion.
 DEFAULT_EXCLUDED_REGIONS = frozenset({"us2"})
 
@@ -222,7 +223,7 @@ def _kubectl_command(
 
 
 def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
-    _report(f"+ {shlex.join(command)}")
+    _report(f"+ {shlex.join(command)}", fg="bright_black")
     return subprocess.run(command, capture_output=True, check=False, text=True)
 
 
@@ -239,16 +240,69 @@ def _fan_out(items: Iterable[_T], work: Callable[[_T], None]) -> None:
     """
 
     items = list(items)
+    context = click.get_current_context(silent=True)
+
+    def run_one(item: _T) -> None:
+        if context is None:
+            work(item)
+            return
+        # Click contexts are local to a thread. Give each worker its own
+        # context so explicit color settings also govern concurrent output.
+        with click.Context(context.command, color=context.color):
+            work(item)
+
     with ThreadPoolExecutor(max_workers=len(items) or 1) as executor:
-        futures = [executor.submit(work, item) for item in items]
+        futures = [executor.submit(run_one, item) for item in items]
         for future in as_completed(futures):
             future.result()
 
 
-def _report(message: str) -> None:
+def _report(message: str, *, fg: str = "yellow") -> None:
     """Print a progress line to stderr, out of the way of plan/data on stdout."""
 
-    click.echo(message, err=True)
+    click.secho(message, fg=fg, err=True)
+
+
+class _OptionsError(click.ClickException):
+    """Render command failures in red while retaining Click's exit behavior."""
+
+    def show(self, file: TextIO | None = None) -> None:
+        click.secho(
+            f"Error: {self.format_message()}",
+            fg="red",
+            err=True,
+            file=file,
+            color=self.show_color,
+        )
+
+
+class _OptionsUsageError(click.UsageError):
+    def format_message(self) -> str:
+        return click.style(super().format_message(), fg="red")
+
+
+class _OptionsCommand(click.Command):
+    def make_context(
+        self,
+        info_name: str | None,
+        args: list[str],
+        parent: click.Context | None = None,
+        **extra: Any,
+    ) -> click.Context:
+        try:
+            return super().make_context(info_name, args, parent=parent, **extra)
+        except click.UsageError as exc:
+            raise _OptionsUsageError(exc.format_message(), ctx=exc.ctx) from exc
+
+    def invoke(self, ctx: click.Context) -> Any:
+        try:
+            return super().invoke(ctx)
+        except click.UsageError as exc:
+            raise _OptionsUsageError(exc.format_message(), ctx=exc.ctx) from exc
+        except click.ClickException as exc:
+            error = _OptionsError(exc.format_message())
+            error.exit_code = exc.exit_code
+            raise error from exc
 
 
 def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
@@ -315,13 +369,38 @@ def _cache_schema_snapshot(cache_root: Path, checksum: str, schemas_dir: Path) -
     (cache_root / "latest.json").write_text(json.dumps({"checksum": checksum}))
 
 
-def _use_cached_schemas(cache_root: Path, checksum: str | None, output: Path) -> bool:
+def _schema_snapshot_age(fetched_at: object) -> timedelta | None:
+    if not isinstance(fetched_at, str):
+        return None
+    try:
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(fetched_at)
+    except (TypeError, ValueError):
+        return None
+    return age if age >= timedelta(0) else None
+
+
+def _describe_schema_age(age: timedelta | None) -> str:
+    if age is None:
+        return "of unknown age"
+    seconds = int(age.total_seconds())
+    if seconds == 0:
+        return "fetched just now"
+    for size, unit in ((86400, "day"), (3600, "hour"), (60, "minute")):
+        count = seconds // size
+        if count:
+            return f"fetched {count} {unit}{'s' if count != 1 else ''} ago"
+    return f"fetched {seconds} second{'s' if seconds != 1 else ''} ago"
+
+
+def _use_cached_schemas(
+    cache_root: Path, checksum: str | None, output: Path, *, fresh_only: bool = False
+) -> bool:
     """Copy a cached schema snapshot into `output`. Returns whether one was used."""
 
     candidates: list[tuple[str, bool]] = []
     if checksum is not None:
         candidates.append((checksum, True))
-    latest_checksum = _read_latest_cached_checksum(cache_root)
+    latest_checksum = None if fresh_only else _read_latest_cached_checksum(cache_root)
     if latest_checksum is not None and latest_checksum != checksum:
         candidates.append((latest_checksum, False))
 
@@ -336,7 +415,15 @@ def _use_cached_schemas(cache_root: Path, checksum: str | None, output: Path) ->
             meta = json.loads(meta_path.read_text()) if meta_path.is_file() else {}
         except (OSError, ValueError):
             meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
         fetched_at = meta.get("fetched_at", "an unknown time")
+        age = _schema_snapshot_age(fetched_at)
+        if fresh_only:
+            # Repository refs can move without changing repos.json; bound the
+            # snapshot's age even when its configuration checksum still matches.
+            if age is None or age >= SCHEMA_CACHE_MAX_AGE:
+                continue
         qualifier = "" if matches_current else " (fetched for a different repos.json)"
 
         try:
@@ -347,24 +434,28 @@ def _use_cached_schemas(cache_root: Path, checksum: str | None, output: Path) ->
                 shutil.rmtree(output)
             shutil.copytree(snapshot_dir, output)
         except OSError as exc:
-            _report(f"Cached snapshot at {entry_dir} is unusable: {exc}")
+            _report(f"Cached snapshot at {entry_dir} is unusable: {exc}", fg="red")
             continue
 
+        action = "Using" if fresh_only else "Falling back to"
+        hint = " Pass --refresh to fetch fresh schemas." if fresh_only else ""
         _report(
-            f"Falling back to cached schema snapshot from {fetched_at}{qualifier}."
+            f"{action} cached schema snapshot {_describe_schema_age(age)}{qualifier}.{hint}"
         )
         return True
 
     return False
 
 
-def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
+def _fetch_schemas(
+    repos_config: Path | None, output: Path, *, refresh: bool = False
+) -> None:
     cache_root = _options_cache_root()
 
     try:
         repos_bytes, source = _repos_config_bytes(repos_config)
     except (click.ClickException, OSError) as exc:
-        _report(f"Unable to read repos.json: {exc}")
+        _report(f"Unable to read repos.json: {exc}", fg="red")
         if _use_cached_schemas(cache_root, checksum=None, output=output):
             return
         raise click.ClickException(
@@ -374,6 +465,8 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
         ) from exc
 
     checksum = hashlib.sha256(repos_bytes).hexdigest()
+    if not refresh and _use_cached_schemas(cache_root, checksum, output, fresh_only=True):
+        return
 
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         config_path = Path(temp_dir) / "repos.json"
@@ -382,7 +475,7 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
         try:
             _fetch_schemas_with_client(config_path, output)
         except click.ClickException as exc:
-            _report(f"Fetch failed: {exc}")
+            _report(f"Fetch failed: {exc}", fg="red")
             if _use_cached_schemas(cache_root, checksum, output):
                 return
             raise click.ClickException(
@@ -396,14 +489,14 @@ def _fetch_schemas(repos_config: Path | None, output: Path) -> None:
     except OSError as exc:
         # Caching is an optimization; a failure here shouldn't discard an
         # otherwise-successful fetch that's already sitting in `output`.
-        _report(f"Fetched fresh schemas, but failed to cache them: {exc}")
+        _report(f"Fetched fresh schemas, but failed to cache them: {exc}", fg="red")
     else:
-        _report("Fetched and cached fresh schema snapshot.")
+        _report("Fetched and cached fresh schema snapshot.", fg="green")
 
 
 @contextmanager
 def _schema_directory(
-    schemas_dir: Path | None, repos_config: Path | None
+    schemas_dir: Path | None, repos_config: Path | None, *, refresh: bool = False
 ) -> Iterator[Path]:
     """Yield a schema snapshot, fetching one when no local snapshot is supplied."""
 
@@ -414,7 +507,7 @@ def _schema_directory(
 
     with tempfile.TemporaryDirectory(prefix="sentry-kube-schemas-") as temp_dir:
         fetched_schemas = Path(temp_dir) / "schemas"
-        _fetch_schemas(repos_config, fetched_schemas)
+        _fetch_schemas(repos_config, fetched_schemas, refresh=refresh)
         yield fetched_schemas
 
 
@@ -792,9 +885,10 @@ before contacting clusters, prints the expected type, and previews the current
 and proposed values for each region when the value is valid.
 
 When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
-command always attempts a fresh snapshot through the explicit `sentry_options`
-client API first, using `--repos-config` when supplied or the automator's
-published `repos.json` otherwise. Every successful fetch is cached under
+command reads `--repos-config` when supplied or the automator's published
+`repos.json` otherwise. A matching cached snapshot less than one hour old is
+reused; otherwise it fetches through the explicit `sentry_options` client API.
+Pass `--refresh` to force a fetch. Every successful fetch is cached under
 `~/.cache/sentry-kube/options-schemas/`, keyed by a checksum of the
 `repos.json` used. If the fetch fails (network down, timeout, etc.), the
 cached snapshot for that checksum is used instead, falling back further to the
@@ -989,7 +1083,7 @@ def options() -> None:
     pass
 
 
-@options.command("set", help=SET_HELP)
+@options.command("set", help=SET_HELP, cls=_OptionsCommand)
 @click.argument("option_key", metavar="OPTION", callback=_validate_option_key)
 @click.argument("value_json", metavar="VALUE")
 @click.option(
@@ -1000,7 +1094,7 @@ def options() -> None:
     envvar=SCHEMAS_ENVVAR,
     help=(
         "Optional schema snapshot root containing {namespace}/schema.json. If omitted, "
-        "fetches one with sentry_options."
+        "uses a snapshot cached for up to one hour or fetches one with sentry_options."
     ),
 )
 @click.option(
@@ -1010,6 +1104,14 @@ def options() -> None:
     help=(
         "repos.json to use when fetching schemas (default: published automator "
         "config; ignored with --schemas)."
+    ),
+)
+@click.option(
+    "--refresh",
+    is_flag=True,
+    help=(
+        "Bypass the one-hour schema cache and fetch a fresh snapshot "
+        "(ignored with --schemas). Failed fetches still fall back to cached schemas."
     ),
 )
 @_target_scope_options
@@ -1032,6 +1134,7 @@ def set_option(
     value_json: str,
     schemas_dir: Path | None,
     repos_config: Path | None,
+    refresh: bool,
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
@@ -1051,7 +1154,7 @@ def set_option(
     value = _parse_json_value(value_json)
 
     # Invalid values should fail before cluster access or ConfigMap reads.
-    with _schema_directory(schemas_dir, repos_config) as schema_path:
+    with _schema_directory(schemas_dir, repos_config, refresh=refresh) as schema_path:
         _validate_against_schema(schema_path, option_key, value)
 
     kubectl = _ensure_cluster_access()
@@ -1069,8 +1172,9 @@ def set_option(
     configmap_count = f"{len(prepared)} ConfigMap{'s' if len(prepared) != 1 else ''}"
     mode = "APPLYING" if apply else "DRY RUN"
     verb = "will set" if apply else "would set"
-    click.echo(
-        f"{mode}: {verb} {option_key}={value_description} in {configmap_count}"
+    click.secho(
+        f"{mode}: {verb} {option_key}={value_description} in {configmap_count}",
+        fg="yellow",
     )
     for patch in prepared:
         click.echo(
@@ -1083,8 +1187,8 @@ def set_option(
         return
 
     _apply_patches(kubectl, prepared)
-    click.echo(
-        f"APPLIED: set {option_key}={value_description} in {configmap_count}"
+    click.secho(
+        f"APPLIED: set {option_key}={value_description} in {configmap_count}", fg="green"
     )
 
 
@@ -1137,7 +1241,7 @@ def _read_and_print_option(
         )
 
 
-@options.command("get", help=GET_HELP)
+@options.command("get", help=GET_HELP, cls=_OptionsCommand)
 @click.argument("option_key", metavar="OPTION", callback=_validate_option_key)
 @_target_scope_options
 @click.option(

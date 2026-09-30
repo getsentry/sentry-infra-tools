@@ -63,14 +63,24 @@ selected cluster (normally obtained through a Sentry Sudo escalation). It is a
 dry run by default: it verifies patch access and reads every selected ConfigMap
 before changing any cluster. It also validates the requested key and strict
 JSON value with the native `sentry_options.SchemaRegistry` used by the
-application. By default it fetches a fresh schema snapshot through the explicit
+application. By default it reuses a matching schema snapshot for one hour,
+then fetches a fresh snapshot through the explicit
 `sentry_options.fetch_schemas` client API, using the published
 `sentry-options-automator/repos.json` (override the URL with
 `options_automator_repos_config_url` in `cli_config/configuration.yaml`). Each
-successful fetch is cached under `~/.cache/sentry-kube/options-schemas/`; if a
-later fetch fails, the cached snapshot is used and stderr says so. Use
+successful fetch is cached under `~/.cache/sentry-kube/options-schemas/`, keyed
+by the repository configuration checksum. The repository configuration is read
+on every run; a changed configuration triggers a fresh schema fetch immediately.
+Pass `--refresh` to bypass the one-hour cache. If a fetch fails, even with
+`--refresh`, the cached snapshot is used and stderr says so. Use
 `--repos-config` to choose a different repository list, or `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
+
+Cached snapshot messages show their age (for example, "fetched 12 minutes ago")
+and remind you to pass `--refresh`. The options commands use gray for echoed
+commands, yellow for progress and dry-run notices, red for errors, and green
+for successful fetches and applies. Color follows terminal detection and the
+`FORCE_COLOR` setting (`1` to enable, `0` to disable).
 
 For custom raw GitHub URLs, the ref must occupy a single URL segment. Encode
 slashes in branch or tag names as `%2F`, for example
