@@ -13,7 +13,7 @@ from click.testing import CliRunner
 
 import sentry_kube.cli.options as options_module
 from sentry_kube.cli import main
-from sentry_kube.cli.options import options
+from sentry_kube.cli.options import _validate_against_schema, options
 
 
 @dataclass
@@ -229,6 +229,7 @@ def test_dry_run_preflights_every_relevant_configmap_without_patching(
     assert result.exit_code == 0, result.output
     assert "DRY RUN: would set sample-rate=false in 3 ConfigMaps" in result.output
     assert "sentry-options-getsentry-control-silo" in result.output
+    assert result.output.count("sample-rate 1.0 -> false") == 3
     # The final plan section lists targets in a fixed, sorted order even
     # though preflight itself ran them concurrently.
     plan = result.output.split("DRY RUN:", 1)[1]
@@ -319,6 +320,7 @@ def test_apply_does_not_announce_a_dry_run(
 
     assert result.exit_code == 0, result.output
     assert "dry-run" not in result.output.lower()
+    assert "us: sample-rate <unset> -> false" in result.output
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -727,7 +729,7 @@ def test_set_preflight_requires_generated_at_fields(
 
 
 @patch("sentry_kube.cli.options.Config")
-def test_set_validates_the_schema_before_discovering_targets(
+def test_set_schema_loading_failure_stops_before_discovering_targets(
     mock_config: MagicMock, mock_schema_validation: MagicMock
 ) -> None:
     mock_schema_validation.side_effect = click.ClickException(
@@ -949,7 +951,9 @@ def _write_fake_schema(schemas_dir: Path) -> None:
     (namespace_dir / "schema.json").write_text("{}")
 
 
-def test_fetch_schemas_caches_a_fresh_snapshot(tmp_path: Path) -> None:
+def test_fetch_schemas_caches_a_fresh_snapshot(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     cache_root = tmp_path / "cache"
     output = tmp_path / "output"
     repos_bytes = b'{"repos": {}}'
@@ -975,6 +979,7 @@ def test_fetch_schemas_caches_a_fresh_snapshot(tmp_path: Path) -> None:
     cached_snapshot = cache_root / "by-checksum" / checksum / "snapshot"
     assert (cached_snapshot / "getsentry" / "schema.json").is_file()
     assert json.loads((cache_root / "latest.json").read_text())["checksum"] == checksum
+    assert "checksum" not in capsys.readouterr().err
 
 
 def test_fetch_schemas_keeps_fresh_schemas_when_caching_fails(tmp_path: Path) -> None:
@@ -1136,3 +1141,105 @@ def test_fetch_schemas_raises_when_fetch_fails_and_no_cache_exists(
     ):
         with pytest.raises(click.ClickException):
             options_module._fetch_schemas(None, output)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_invalid_value_shows_type_and_region_diffs_without_patching(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+    mock_schema_validation: MagicMock,
+    tmp_path: Path,
+    apply: bool,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    namespace = tmp_path / "getsentry"
+    namespace.mkdir()
+    option_key = "getsentry.options-dual-read-test"
+    (namespace / "schema.json").write_text(
+        json.dumps({
+            "version": "1.0",
+            "type": "object",
+            "properties": {
+                option_key: {"type": "integer", "default": 42, "description": ""},
+            },
+        })
+    )
+    mock_schema_validation.side_effect = _validate_against_schema
+    mock_run.side_effect = _kubectl_side_effect(get={
+        ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
+            "1", {option_key: 42}
+        ),
+        ("us-context", "sentry-options-getsentry"): _configmap("2", {option_key: 7}),
+        ("us-context", "sentry-options-getsentry-control-silo"): _configmap("3", {}),
+    })
+    arguments = ["set", option_key, "false", "--schemas", str(tmp_path)]
+    if apply:
+        arguments += ["--apply", "--all-regions"]
+    result = CliRunner().invoke(options, arguments)
+
+    assert result.exit_code != 0
+    assert f"{option_key} (type: integer)" in result.output
+    assert f"control/control-silo: {option_key} 42 -> false" in result.output
+    assert f"us: {option_key} 7 -> false" in result.output
+    assert f"us/control-silo: {option_key} <unset> -> false" in result.output
+    assert "No ConfigMaps were patched" in result.output
+    assert "getsentry.getsentry.options-dual-read-test" not in result.output
+    assert len(mock_run.call_args_list) == 3
+    assert all("get" in invocation.args[0] for invocation in mock_run.call_args_list)
+
+
+def test_set_validates_on_the_main_thread(mock_schema_validation: MagicMock) -> None:
+    validation_threads: list[threading.Thread] = []
+
+    def record_thread(*_args: object) -> None:
+        validation_threads.append(threading.current_thread())
+
+    mock_schema_validation.side_effect = record_thread
+    with (
+        patch.object(options_module, "_ensure_cluster_access", return_value="kubectl"),
+        patch.object(options_module, "_selected_targets", return_value=[]),
+    ):
+        result = CliRunner().invoke(
+            options, ["set", "sample-rate", "false", "--schemas", "schemas"]
+        )
+    assert result.exit_code == 0, result.output
+    assert validation_threads == [threading.main_thread()]
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        ({}, "<unset>"),
+        ({"option": None}, "null"),
+        ({"option": "false"}, '"false"'),
+        ({"option": {"enabled": True}}, '{"enabled":true}'),
+    ],
+)
+def test_describe_option_preserves_json_types(
+    values: dict[str, object], expected: str
+) -> None:
+    assert options_module._describe_option(values, "option") == expected
+
+
+def test_validate_against_schema_reports_type_for_valid_value(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    namespace = tmp_path / "getsentry"
+    namespace.mkdir()
+    (namespace / "schema.json").write_text(json.dumps({
+        "version": "1.0", "type": "object", "properties": {
+            "option": {"type": "integer", "default": 42, "description": ""},
+        },
+    }))
+    _validate_against_schema(tmp_path, "option", 7)
+    assert capsys.readouterr().out == "option (type: integer)\n"
+    with pytest.raises(click.ClickException, match="No clusters were contacted"):
+        _validate_against_schema(tmp_path, "unknown", 7)
+    with pytest.raises(click.ClickException, match="No clusters were contacted"):
+        _validate_against_schema(tmp_path / "missing", "option", 7)
