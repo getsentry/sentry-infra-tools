@@ -72,6 +72,12 @@ later fetch fails, the cached snapshot is used and stderr says so. Use
 `--repos-config` to choose a different repository list, or `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
 
+For custom raw GitHub URLs, the ref must occupy a single URL segment. Encode
+slashes in branch or tag names as `%2F`, for example
+`https://raw.githubusercontent.com/owner/repo/refs/heads/feature%2Fbranch/repos.json`.
+`libsentrykube.github.fetch_raw_file` decodes that segment for the GitHub contents
+API; an unencoded slash is interpreted as the start of the file path.
+
 For a valid value, the command prints the option's expected type and a diff for
 each region:
 
@@ -148,6 +154,9 @@ be retried after investigating that cluster. It validates strict JSON input,
 the canonical `sentry-options` schema snapshot, and the deployed ConfigMap
 structure (including both `generated_at` timestamps). It atomically refreshes
 the ConfigMap annotation and the `values.json` timestamp.
+Patch payloads are passed to kubectl through temporary files, avoiding command
+argument size limits. Each file is removed after its write attempt completes;
+local file or process errors are included in the per-target failure summary.
 
 This is intentionally temporary. The next normal `sentry-options-automator`
 deployment restores the declarative value from `option-values/`; make the

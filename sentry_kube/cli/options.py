@@ -559,18 +559,29 @@ def _apply_patch(kubectl: str, prepared: PreparedPatch) -> None:
         ],
         separators=(",", ":"),
     )
-    result = _run(
-        _kubectl_command(
-            kubectl,
-            prepared.target,
-            "patch",
-            "configmap",
-            prepared.configmap_name,
-            "--type=json",
-            "--patch",
-            patch,
-        )
-    )
+    # ConfigMap payloads can exceed the OS limit for a single argv entry.
+    # Each concurrent write owns its file until kubectl finishes reading it.
+    try:
+        with tempfile.TemporaryDirectory(prefix="sentry-kube-options-patch-") as tmp:
+            patch_path = Path(tmp) / "patch.json"
+            patch_path.write_text(patch, encoding="utf-8")
+            result = _run(
+                _kubectl_command(
+                    kubectl,
+                    prepared.target,
+                    "patch",
+                    "configmap",
+                    prepared.configmap_name,
+                    "--type=json",
+                    "--patch-file",
+                    str(patch_path),
+                )
+            )
+    except OSError as exc:
+        raise click.ClickException(
+            f"{prepared.target.name}: cannot patch ConfigMap "
+            f"{prepared.configmap_name}: {exc}"
+        ) from exc
     if result.returncode != 0:
         raise _command_error(
             prepared.target, f"patch ConfigMap {prepared.configmap_name}", result

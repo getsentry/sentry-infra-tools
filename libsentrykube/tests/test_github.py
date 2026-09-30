@@ -72,6 +72,10 @@ def test_resolve_github_token_none_when_gh_auth_fails(
     [
         (REPOS_JSON_URL, ("getsentry", "sentry-options-automator", "main", "repos.json")),
         (
+            "https://raw.githubusercontent.com/getsentry/getsentry/refs/heads/feature%2Fmy-branch/repos.json",
+            ("getsentry", "getsentry", "feature/my-branch", "repos.json"),
+        ),
+        (
             "https://raw.githubusercontent.com/getsentry/getsentry/deadbeef/sentry-options/schemas/getsentry/schema.json",
             (
                 "getsentry",
@@ -112,6 +116,25 @@ def test_fetch_via_gh_api_raises_when_gh_missing() -> None:
     with patch("libsentrykube.github.shutil.which", return_value=None):
         with pytest.raises(GithubFetchError):
             _fetch_via_gh_api("getsentry", "sentry-options-automator", "main", "repos.json")
+
+
+def test_fetch_raw_file_encodes_slashes_in_ref_for_gh_api() -> None:
+    url = (
+        "https://raw.githubusercontent.com/getsentry/getsentry/"
+        "refs/heads/feature%2Fmy-branch/repos.json"
+    )
+    with (
+        patch("libsentrykube.github.shutil.which", return_value="/usr/bin/gh"),
+        patch(
+            "libsentrykube.github.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, b"file bytes", b""),
+        ) as mock_run,
+    ):
+        assert fetch_raw_file(url) == b"file bytes"
+
+    assert mock_run.call_args.args[0][2] == (
+        "repos/getsentry/getsentry/contents/repos.json?ref=feature%2Fmy-branch"
+    )
 
 
 def test_fetch_via_gh_api_raises_on_nonzero_exit() -> None:

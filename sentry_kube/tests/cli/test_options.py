@@ -412,11 +412,21 @@ def test_apply_patches_after_preflight_with_resource_version(
 ) -> None:
     _mock_clusters(mock_config, mock_list_clusters)
     mock_config.return_value.silo_regions["us"].aliases = ["saas"]
-    mock_run.side_effect = [
+    patch_data: list[dict[str, object]] = []
+
+    preflight_results = iter([
         _success("yes\n"),
         _configmap("7", {"sample-rate": 1.0, "unrelated-option": "preserved"}),
-        _success(),
-    ]
+    ])
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if _is_configmap_patch(command):
+            patch_path = Path(command[command.index("--patch-file") + 1])
+            patch_data.extend(json.loads(patch_path.read_text()))
+            return _success()
+        return next(preflight_results)
+
+    mock_run.side_effect = run
 
     result = CliRunner().invoke(
         options,
@@ -438,7 +448,7 @@ def test_apply_patches_after_preflight_with_resource_version(
     assert "APPLIED: set sample-rate=false in 1 ConfigMap" in result.output
     patch_command = mock_run.call_args_list[-1].args[0]
     assert patch_command[patch_command.index("patch") + 1] == "configmap"
-    patch_data = json.loads(patch_command[patch_command.index("--patch") + 1])
+    assert "--patch-file" in patch_command
     assert patch_data[0] == {
         "op": "test",
         "path": "/metadata/resourceVersion",
@@ -1269,3 +1279,85 @@ def test_validate_against_schema_reports_type_for_valid_value(
         _validate_against_schema(tmp_path, "unknown", 7)
     with pytest.raises(click.ClickException, match="No clusters were contacted"):
         _validate_against_schema(tmp_path / "missing", "option", 7)
+
+
+def test_apply_patch_passes_large_payload_via_temporary_file() -> None:
+    target = options_module.ConfigMapTarget("us", "default", "getsentry", "us-context")
+    values_json = json.dumps({"options": {"large": '"' * 140_000}})
+    prepared = options_module.PreparedPatch(
+        target, "sentry-options-getsentry", "7", "now", values_json, "<unset>"
+    )
+    patch_paths: list[Path] = []
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert "--patch" not in command
+        assert max(len(arg.encode()) for arg in command) < 128 * 1024
+        path = Path(command[command.index("--patch-file") + 1])
+        patch_paths.append(path)
+        patch_data = json.loads(path.read_text())
+        assert patch_data == [
+            {"op": "test", "path": "/metadata/resourceVersion", "value": "7"},
+            {"op": "replace", "path": "/data/values.json", "value": values_json},
+            {"op": "replace", "path": "/metadata/annotations/generated_at", "value": "now"},
+        ]
+        return _success()
+
+    with patch.object(options_module.subprocess, "run", side_effect=run):
+        options_module._apply_patch("kubectl", prepared)
+
+    assert len(patch_paths) == 1
+    assert not patch_paths[0].exists()
+
+
+def test_apply_patches_reports_os_errors_and_finishes_other_targets() -> None:
+    prepared = [
+        options_module.PreparedPatch(
+            options_module.ConfigMapTarget(region, "default", "getsentry", f"{region}-context"),
+            "sentry-options-getsentry", "7", "now", "{}", "<unset>",
+        )
+        for region in ("us", "de")
+    ]
+    completed: list[str] = []
+    patch_paths: list[Path] = []
+
+    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "--patch-file" in command:
+            patch_paths.append(Path(command[command.index("--patch-file") + 1]))
+        context = command[command.index("--context") + 1]
+        if context == "us-context":
+            raise OSError("cannot start kubectl")
+        completed.append(context)
+        return _success()
+
+    with patch.object(options_module.subprocess, "run", side_effect=run):
+        with pytest.raises(click.ClickException, match="Some ConfigMaps were not patched") as error:
+            options_module._apply_patches("kubectl", prepared)
+
+    assert "us/default/getsentry" in str(error.value)
+    assert "cannot start kubectl" in str(error.value)
+    assert completed == ["de-context"]
+    assert all(not path.exists() for path in patch_paths)
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"version": "1.0", "type": "object"},
+        {
+            "version": "1.0", "type": "object", "properties": {
+                "option": {"$ref": "#/$defs/missing", "default": 42, "description": ""},
+            },
+        },
+    ],
+    ids=["missing-properties", "invalid-reference"],
+)
+def test_validate_against_schema_rejects_malformed_snapshot_before_type_reporting(
+    schema: dict[str, object], tmp_path: Path,
+) -> None:
+    namespace = tmp_path / "getsentry"
+    namespace.mkdir()
+    (namespace / "schema.json").write_text(json.dumps(schema))
+    with patch.object(options_module, "_report_option_type") as report_type:
+        with pytest.raises(click.ClickException, match="No clusters were contacted"):
+            _validate_against_schema(tmp_path, "option", False)
+    report_type.assert_not_called()

@@ -12,7 +12,7 @@ import os
 import shutil
 import subprocess
 from urllib.error import URLError
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 
@@ -51,8 +51,11 @@ def _parse_raw_githubusercontent_url(url: str) -> tuple[str, str, str, str] | No
     """Best-effort split of a raw.githubusercontent.com URL into
     (owner, repo, ref, path), for use with the `gh api` contents endpoint.
 
-    Returns None if the URL isn't a raw.githubusercontent.com URL, or its
-    ref/path can't be split unambiguously.
+    The ref occupies one URL segment, optionally after refs/heads or refs/tags.
+    Encode slashes within branch/tag names as %2F; literal slashes cannot be
+    distinguished from file path separators without querying repository refs.
+    Returns None if the URL isn't a raw.githubusercontent.com URL or lacks
+    a ref and file path.
     """
 
     parsed = urlparse(url)
@@ -69,7 +72,7 @@ def _parse_raw_githubusercontent_url(url: str) -> tuple[str, str, str, str] | No
     if len(rest) < 2:
         return None
     ref, *path_segments = rest
-    return owner, repo, ref, "/".join(path_segments)
+    return owner, repo, unquote(ref), "/".join(path_segments)
 
 
 def _fetch_via_gh_api(owner: str, repo: str, ref: str, path: str) -> bytes:
