@@ -72,19 +72,20 @@ later fetch fails, the cached snapshot is used and stderr says so. Use
 `--repos-config` to choose a different repository list, or `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
 
-The command prints the option's expected type and a diff for each region:
+For a valid value, the command prints the option's expected type and a diff for
+each region:
 
 ```text
 getsentry.options-dual-read-test (type: integer)
-us: getsentry.options-dual-read-test 42 -> false
+us: getsentry.options-dual-read-test 42 -> 43
 ```
 
 `<unset>` means the deployed ConfigMap does not declare the option; `null`
-is an explicit JSON value. An invalid proposed value still gets a read-only
-preview, then fails validation without checking patch access or writing any
-ConfigMaps. In this example, `false` is rejected because the schema requires
-an integer. Unknown options and invalid schema snapshots fail before cluster
-reads. Fresh and cached snapshot messages omit checksums.
+is an explicit JSON value. An invalid proposed value fails schema validation
+before cluster access or ConfigMap reads. For example, `false` is rejected
+because this option requires an integer, so no region diff is printed. Unknown
+options and invalid schema snapshots also fail before cluster reads. Fresh and
+cached snapshot messages omit checksums.
 
 `--apply` is required to make the change:
 

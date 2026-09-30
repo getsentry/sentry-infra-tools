@@ -790,23 +790,21 @@ def test_set_schema_loading_failure_stops_before_discovering_targets(
     mock_config.assert_not_called()
 
 
-def test_set_fetches_schemas_and_warms_cluster_access_concurrently(
+def test_set_validates_before_warming_cluster_access(
     mock_schema_validation: MagicMock,
 ) -> None:
-    """`set` overlaps the schema fetch/validate with the kubectl/gcloud
-    warmup rather than running them serially. A `Barrier` proves this: each
-    side only proceeds once both have started, so a regression to running
-    them one after another deadlocks (and times out) instead of passing.
-    """
-
-    barrier = threading.Barrier(2, timeout=2)
+    events: list[str] = []
 
     def _validate(*_args: object, **_kwargs: object) -> None:
-        barrier.wait()
+        events.append("validate")
 
     def _warm_cluster_access() -> str:
-        barrier.wait()
+        events.append("access")
         return "kubectl"
+
+    def _select_targets(*_args: object, **_kwargs: object) -> list[object]:
+        events.append("targets")
+        return []
 
     mock_schema_validation.side_effect = _validate
 
@@ -814,7 +812,7 @@ def test_set_fetches_schemas_and_warms_cluster_access_concurrently(
         patch.object(
             options_module, "_ensure_cluster_access", side_effect=_warm_cluster_access
         ),
-        patch.object(options_module, "_selected_targets", return_value=[]),
+        patch.object(options_module, "_selected_targets", side_effect=_select_targets),
     ):
         result = CliRunner().invoke(
             options,
@@ -822,6 +820,7 @@ def test_set_fetches_schemas_and_warms_cluster_access_concurrently(
         )
 
     assert result.exit_code == 0, result.output
+    assert events == ["validate", "access", "targets"]
 
 
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
@@ -1183,7 +1182,7 @@ def test_fetch_schemas_raises_when_fetch_fails_and_no_cache_exists(
 @patch("sentry_kube.cli.options.subprocess.run")
 @patch("sentry_kube.cli.options.list_clusters_for_customer")
 @patch("sentry_kube.cli.options.Config")
-def test_set_invalid_value_shows_type_and_region_diffs_without_patching(
+def test_set_invalid_value_fails_before_cluster_access(
     mock_config: MagicMock,
     mock_list_clusters: MagicMock,
     mock_run: MagicMock,
@@ -1192,7 +1191,6 @@ def test_set_invalid_value_shows_type_and_region_diffs_without_patching(
     tmp_path: Path,
     apply: bool,
 ) -> None:
-    _mock_clusters(mock_config, mock_list_clusters)
     namespace = tmp_path / "getsentry"
     namespace.mkdir()
     option_key = "getsentry.options-dual-read-test"
@@ -1206,13 +1204,6 @@ def test_set_invalid_value_shows_type_and_region_diffs_without_patching(
         })
     )
     mock_schema_validation.side_effect = _validate_against_schema
-    mock_run.side_effect = _kubectl_side_effect(get={
-        ("control-context", "sentry-options-getsentry-control-silo"): _configmap(
-            "1", {option_key: 42}
-        ),
-        ("us-context", "sentry-options-getsentry"): _configmap("2", {option_key: 7}),
-        ("us-context", "sentry-options-getsentry-control-silo"): _configmap("3", {}),
-    })
     arguments = ["set", option_key, "false", "--schemas", str(tmp_path)]
     if apply:
         arguments += ["--apply", "--all-regions"]
@@ -1220,13 +1211,13 @@ def test_set_invalid_value_shows_type_and_region_diffs_without_patching(
 
     assert result.exit_code != 0
     assert f"{option_key} (type: integer)" in result.output
-    assert f"control/control-silo: {option_key} 42 -> false" in result.output
-    assert f"us: {option_key} 7 -> false" in result.output
-    assert f"us/control-silo: {option_key} <unset> -> false" in result.output
-    assert "No ConfigMaps were patched" in result.output
-    assert "getsentry.getsentry.options-dual-read-test" not in result.output
-    assert len(mock_run.call_args_list) == 3
-    assert all("get" in invocation.args[0] for invocation in mock_run.call_args_list)
+    assert 'is not of type "integer"' in result.output
+    assert "No ConfigMaps were read or patched" in result.output
+    assert " -> false" not in result.output
+    assert mock_run.call_args_list == []
+    _mock_kubectl.assert_not_called()
+    mock_config.assert_not_called()
+    mock_list_clusters.assert_not_called()
 
 
 def test_set_validates_on_the_main_thread(mock_schema_validation: MagicMock) -> None:

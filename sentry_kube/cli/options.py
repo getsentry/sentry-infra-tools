@@ -691,10 +691,6 @@ def _parse_json_value(value_json: str) -> OptionValue:
         ) from exc
 
 
-class InvalidOptionValue(click.ClickException):
-    """A known option has an invalid proposed value; reads can still preview it."""
-
-
 def _describe_option(values: dict[str, Any], option_key: str) -> str:
     if option_key not in values:
         return "<unset>"
@@ -756,9 +752,9 @@ def _validate_against_schema(
         registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
     except SchemaError as exc:
         _report_option_type(schemas_dir, option_key)
-        raise InvalidOptionValue(
+        raise click.ClickException(
             f"Schema validation failed for {option_key}: {exc}. "
-            "No ConfigMaps were patched."
+            "No ConfigMaps were read or patched."
         ) from exc
     except OptionsError as exc:
         raise click.ClickException(
@@ -780,9 +776,9 @@ Read deployed sentry-options values or make a temporary, incident-only update.
 `set` talks directly to the selected Kubernetes ConfigMaps. It never starts a
 GoCD pipeline or GitHub Action. It is a dry run by default and requires
 `--apply` after every selected ConfigMap has passed preflight. It validates the
-requested JSON value with the same native validator the application uses,
-prints the expected type, and previews the current and proposed values for
-each region. Invalid values receive a read-only preview and cannot be applied.
+requested JSON value with the same native validator the application uses
+before contacting clusters, prints the expected type, and previews the current
+and proposed values for each region when the value is valid.
 
 When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
 command always attempts a fresh snapshot through the explicit `sentry_options`
@@ -849,10 +845,9 @@ OPTION and VALUE against a local snapshot supplied by `--schemas` (or
 `SENTRY_KUBE_OPTIONS_SCHEMAS`), or fetches one with
 the explicit `sentry_options.fetch_schemas` client API when no snapshot is
 supplied. It prints the expected type and uses the native sentry-options
-validator. For valid values, it reads every selected ConfigMap and confirms
-patch access before the first write. For invalid values, it reads the current
-values to preview the diff, then exits with a validation error without writing.
-Unknown options or invalid schema snapshots fail before contacting a cluster.
+validator. Invalid values, unknown options, and invalid schema snapshots fail
+before cluster access or ConfigMap reads. For valid values, it reads every
+selected ConfigMap and confirms patch access before the first write.
 Without `--apply`, it announces the dry run up front, prints each region's
 OPTION old -> new diff (`<unset>` means absent), and makes no changes. If neither `--include` nor `--exclude` narrows the
 scope, `--apply` also requires `--all-regions` to confirm the fleet-wide blast
@@ -1044,24 +1039,13 @@ def set_option(
 
     value = _parse_json_value(value_json)
 
-    validation_error: InvalidOptionValue | None = None
-    # Keep the native registry and its exception tracebacks on the main thread:
-    # the registry cannot be destroyed by a different thread. Network fetching
-    # still overlaps credential warmup, before any cluster is contacted.
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        access_future = executor.submit(_ensure_cluster_access)
-        with _schema_directory(schemas_dir, repos_config) as schema_path:
-            try:
-                _validate_against_schema(schema_path, option_key, value)
-            except InvalidOptionValue as exc:
-                validation_error = exc
-        kubectl = access_future.result()
+    # Invalid values should fail before cluster access or ConfigMap reads.
+    with _schema_directory(schemas_dir, repos_config) as schema_path:
+        _validate_against_schema(schema_path, option_key, value)
 
+    kubectl = _ensure_cluster_access()
     targets = _selected_targets(regions, excluded_regions, services)
     value_description = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
-    if validation_error is not None:
-        _preview_invalid_change(kubectl, targets, option_key, value_description)
-        raise validation_error
 
     _report(f"Preflighting {len(targets)} ConfigMap target(s)")
     prepared = _preflight_patches(
@@ -1091,32 +1075,6 @@ def set_option(
     click.echo(
         f"APPLIED: set {option_key}={value_description} in {configmap_count}"
     )
-
-
-def _preview_invalid_change(
-    kubectl: str,
-    targets: list[ConfigMapTarget],
-    option_key: str,
-    value_description: str,
-) -> None:
-    errors: list[str] = []
-    report_lock = threading.Lock()
-
-    def preview(target: ConfigMapTarget) -> None:
-        try:
-            _, values, _ = _read_values(kubectl, target, _configmap_name(target))
-            previous = _describe_option(values["options"], option_key)
-            with report_lock:
-                click.echo(
-                    f"{target.short_label}: {option_key} {previous} -> {value_description}"
-                )
-        except click.ClickException as exc:
-            with report_lock:
-                errors.append(exc.message)
-
-    _fan_out(targets, preview)
-    for error in sorted(errors):
-        _report(error)
 
 
 def _read_one_option(
