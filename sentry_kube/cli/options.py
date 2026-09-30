@@ -49,6 +49,7 @@ REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
 SCHEMA_CACHE_MAX_AGE = timedelta(hours=1)
 # Retired regions may remain in topology files; require explicit inclusion.
 DEFAULT_EXCLUDED_REGIONS = frozenset({"us2"})
+_OUTPUT_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -257,10 +258,23 @@ def _fan_out(items: Iterable[_T], work: Callable[[_T], None]) -> None:
             future.result()
 
 
+def _echo(message: str, *, fg: str | None = None, err: bool = False) -> None:
+    """Write a complete, reset-safe line using the active command's color setting."""
+
+    context = click.get_current_context(silent=True)
+    color = context.color if context is not None else None
+    if fg is not None:
+        message = click.style(message, fg=fg)
+    if color is not False:
+        message = click.style("", reset=True) + message
+    with _OUTPUT_LOCK:
+        click.echo(message, err=err, color=color)
+
+
 def _report(message: str, *, fg: str = "yellow") -> None:
     """Print a progress line to stderr, out of the way of plan/data on stdout."""
 
-    click.secho(message, fg=fg, err=True)
+    _echo(message, fg=fg, err=True)
 
 
 class _OptionsError(click.ClickException):
@@ -844,7 +858,7 @@ def _report_option_type(schemas_dir: Path, option_key: str) -> None:
     expected_type = property_schema.get("type", "schema-defined")
     if isinstance(expected_type, list):
         expected_type = " | ".join(expected_type)
-    click.echo(f"{option_key} (type: {expected_type})")
+    _echo(f"{option_key} (type: {expected_type})")
 
 
 def _validate_against_schema(
@@ -1197,14 +1211,21 @@ def set_option(
     configmap_count = f"{len(prepared)} ConfigMap{'s' if len(prepared) != 1 else ''}"
     mode = "APPLYING" if apply else "DRY RUN"
     verb = "will set" if apply else "would set"
-    click.secho(
+    _echo(
         f"{mode}: {verb} {option_key}={value_description} in {configmap_count}",
         fg="yellow",
     )
     for patch in prepared:
-        click.echo(
-            f"  {patch.target.short_label}: {option_key} "
-            f"{patch.previous_value_description} -> {value_description} "
+        if patch.previous_value_description == value_description:
+            change = "no changes"
+        else:
+            previous = click.style(
+                patch.previous_value_description, fg="red", bold=True
+            )
+            proposed = click.style(value_description, fg="green", bold=True)
+            change = f"{previous} -> {proposed}"
+        _echo(
+            f"  {patch.target.short_label}: {option_key} {change} "
             f"({patch.target.name}; {patch.configmap_name}; {patch.target.context})"
         )
 
@@ -1212,8 +1233,9 @@ def set_option(
         return
 
     _apply_patches(kubectl, prepared)
-    click.secho(
-        f"APPLIED: set {option_key}={value_description} in {configmap_count}", fg="green"
+    _echo(
+        f"APPLIED: set {option_key}={value_description} in {configmap_count}",
+        fg="green",
     )
 
 
@@ -1255,8 +1277,7 @@ def _read_and_print_option(
             with print_lock:
                 errors.append(exc.message)
             return
-        with print_lock:
-            click.echo(line)
+        _echo(line)
 
     _fan_out(targets, read_one)
 
