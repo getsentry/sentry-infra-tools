@@ -71,6 +71,8 @@ then fetches a fresh snapshot through the explicit
 successful fetch is cached under `~/.cache/sentry-kube/options-schemas/`, keyed
 by the repository configuration checksum. The repository configuration is read
 on every run; a changed configuration triggers a fresh schema fetch immediately.
+GitHub HTTPS clone URLs in `repos.json` are rewritten to SSH for schema fetches,
+so engineers need a GitHub SSH key with access to each listed repository.
 Pass `--refresh` to bypass the one-hour cache. If a fetch fails, even with
 `--refresh`, the cached snapshot is used and stderr says so. Use
 `--repos-config` to choose a different repository list, or `--schemas` (or

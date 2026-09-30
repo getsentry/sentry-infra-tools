@@ -322,6 +322,26 @@ def _fetch_schemas_with_client(config_path: Path, output: Path) -> None:
         ) from exc
 
 
+def _repos_config_for_ssh(repos_bytes: bytes) -> bytes:
+    """Rewrite GitHub HTTPS clone URLs to SSH for the native schema fetcher."""
+
+    try:
+        config = json.loads(repos_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return repos_bytes
+
+    if not isinstance(config, dict) or not isinstance(config.get("repos"), dict):
+        return repos_bytes
+
+    for repo in config["repos"].values():
+        if isinstance(repo, dict) and isinstance(repo.get("url"), str):
+            repo["url"] = repo["url"].replace(
+                "https://github.com/", "git@github.com:", 1
+            )
+
+    return json.dumps(config).encode()
+
+
 def _repos_config_bytes(repos_config: Path | None) -> tuple[bytes, str]:
     """Return repos.json's bytes and a human-readable description of their source."""
 
@@ -470,9 +490,11 @@ def _fetch_schemas(
 
     with tempfile.TemporaryDirectory(prefix="sentry-kube-options-") as temp_dir:
         config_path = Path(temp_dir) / "repos.json"
-        config_path.write_bytes(repos_bytes)
-        _report(f"Fetching latest sentry-options schemas from {source}...")
         try:
+            config_path.write_bytes(_repos_config_for_ssh(repos_bytes))
+            _report(
+                f"Fetching latest sentry-options schemas over SSH from {source}..."
+            )
             _fetch_schemas_with_client(config_path, output)
         except click.ClickException as exc:
             _report(f"Fetch failed: {exc}", fg="red")
@@ -888,6 +910,9 @@ When `--schemas` (or `SENTRY_KUBE_OPTIONS_SCHEMAS`) is not supplied, the
 command reads `--repos-config` when supplied or the automator's published
 `repos.json` otherwise. A matching cached snapshot less than one hour old is
 reused; otherwise it fetches through the explicit `sentry_options` client API.
+GitHub HTTPS repository URLs in `repos.json` are rewritten to SSH for this
+fetch, so the engineer running the command must have a GitHub SSH key with
+access to each repository.
 Pass `--refresh` to force a fetch. Every successful fetch is cached under
 `~/.cache/sentry-kube/options-schemas/`, keyed by a checksum of the
 `repos.json` used. If the fetch fails (network down, timeout, etc.), the
