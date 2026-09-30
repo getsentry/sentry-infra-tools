@@ -259,16 +259,15 @@ def _fan_out(items: Iterable[_T], work: Callable[[_T], None]) -> None:
 
 
 def _echo(message: str, *, fg: str | None = None, err: bool = False) -> None:
-    """Write a complete, reset-safe line using the active command's color setting."""
+    """Write one line using Click's styles and the active command's color setting."""
 
     context = click.get_current_context(silent=True)
     color = context.color if context is not None else None
-    if fg is not None:
-        message = click.style(message, fg=fg)
-    if color is not False:
-        message = click.style("", reset=True) + message
     with _OUTPUT_LOCK:
-        click.echo(message, err=err, color=color)
+        if fg is None:
+            click.echo(message, err=err, color=color)
+        else:
+            click.secho(message, fg=fg, err=err, color=color)
 
 
 def _report(message: str, *, fg: str = "yellow") -> None:
