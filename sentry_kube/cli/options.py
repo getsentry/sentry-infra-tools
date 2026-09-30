@@ -46,6 +46,8 @@ GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
 SCHEMAS_ENVVAR = "SENTRY_KUBE_OPTIONS_SCHEMAS"
 REPOS_CONFIG_ENVVAR = "SENTRY_KUBE_OPTIONS_REPOS_CONFIG"
+# Retired regions may remain in topology files; require explicit inclusion.
+DEFAULT_EXCLUDED_REGIONS = frozenset({"us2"})
 
 
 @dataclass(frozen=True)
@@ -153,7 +155,7 @@ def _resolve_regions(
     if requested_regions:
         return _resolve_region_names(config, requested_regions)
 
-    selected_regions = set(config.silo_regions)
+    selected_regions = set(config.silo_regions) - DEFAULT_EXCLUDED_REGIONS
     if requested_excluded_regions:
         selected_regions.difference_update(
             _resolve_region_names(config, requested_excluded_regions)
@@ -792,8 +794,9 @@ cached snapshot for that checksum is used instead, falling back further to the
 most recently cached snapshot if needed; each case is reported on stderr so
 it's clear whether the validation used fresh or cached schemas.
 
-Scope defaults to every configured Getsentry ConfigMap, including both
-control-silo ConfigMaps. Use either repeated `--include` to include only named
+Scope defaults to every configured Getsentry ConfigMap except retired `us2`,
+including both control-silo ConfigMaps. Explicit `--include us2` overrides
+that default exclusion. Use either repeated `--include` to include only named
 regions, or repeated `--exclude` to start with the fleet and omit named
 regions. Configured aliases (such as `saas` for `us`) are accepted. A dry run
 always previews this default fleet-wide scope, but `set --apply` refuses to
@@ -837,6 +840,9 @@ $ sentry-kube --root ~/dev/ops options set \\
 SET_HELP = """\
 \b
 Set OPTION in every selected live sentry-options ConfigMap.
+
+Retired `us2` is excluded by default, including with `--all-regions`.
+Explicit `--include us2` overrides that default exclusion.
 
 This is an incident-only override. Before contacting a cluster, it validates
 OPTION and VALUE against a local snapshot supplied by `--schemas` (or
@@ -890,6 +896,9 @@ GET_HELP = """\
 \b
 Read OPTION from every selected live sentry-options ConfigMap.
 
+Retired `us2` is excluded by default. Explicit `--include us2` overrides
+that default exclusion.
+
 `<unset>` means the ConfigMap does not declare the option. The command
 requires read access to every selected ConfigMap and does not change anything.
 Each output line is `<region>: <value>` (for example `de: 42`). A
@@ -932,7 +941,8 @@ def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
         "excluded_regions",
         multiple=True,
         help=(
-            "Start with the whole fleet and omit this configured region or alias; "
+            "Start with the default fleet (excluding retired us2) and omit this "
+            "configured region or alias; "
             "repeat to omit several. Cannot be combined with --include."
         ),
     )(command)

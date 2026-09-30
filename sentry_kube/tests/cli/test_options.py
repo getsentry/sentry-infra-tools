@@ -150,6 +150,41 @@ def test_set_help_explains_fleet_and_region_scoping() -> None:
     assert "--kubernetes-namespace" not in result.output
 
 
+@pytest.mark.parametrize(
+    ("included", "excluded", "expected_regions"),
+    [
+        ((), (), {"us", "control"}),
+        ((), ("control",), {"us"}),
+        ((), ("us2",), {"us", "control"}),
+        (("us2",), (), {"us2"}),
+        (("us", "us2"), (), {"us", "us2"}),
+    ],
+)
+def test_options_targets_exclude_retired_us2_unless_explicitly_included(
+    included: tuple[str, ...],
+    excluded: tuple[str, ...],
+    expected_regions: set[str],
+) -> None:
+    config = MagicMock()
+    config.silo_regions = {
+        region: MagicMock(k8s_config=f"{region}-config", aliases=[])
+        for region in ("us", "control", "us2")
+    }
+    with patch("sentry_kube.cli.options.list_clusters_for_customer") as list_clusters:
+        list_clusters.side_effect = lambda k8s_config: [
+            FakeCluster("default", ["getsentry"], {"context": k8s_config})
+        ]
+
+        targets = options_module._find_targets(
+            config, included, excluded, ("getsentry",)
+        )
+
+    assert {target.region for target in targets} == expected_regions
+    assert {entry.args[0] for entry in list_clusters.call_args_list} == {
+        f"{region}-config" for region in expected_regions
+    }
+
+
 @patch("sentry_kube.cli.options._fetch_schemas")
 @patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
 @patch("sentry_kube.cli.options.subprocess.run")
