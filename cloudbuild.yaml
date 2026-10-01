@@ -1,4 +1,5 @@
 substitutions:
+  _SENTRY_KUBE_VERSION: "1.34.1"
   _KUBECTL_VERSION_1_22: "1.22.15"
   _KUBECTL_VERSION_1_23: "1.23.14"
   _KUBECTL_VERSION_1_24: "1.24.8"
@@ -16,6 +17,8 @@ steps:
     args:
       [
         "build",
+        "--build-arg",
+        "SENTRY_KUBE_VERSION=${_SENTRY_KUBE_VERSION}",
         "--build-arg",
         "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_22}",
         "-t",
@@ -35,6 +38,8 @@ steps:
       [
         "build",
         "--build-arg",
+        "SENTRY_KUBE_VERSION=${_SENTRY_KUBE_VERSION}",
+        "--build-arg",
         "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_23}",
         "-t",
         "us.gcr.io/${PROJECT_ID}/sentry-kube:buildcache",
@@ -52,6 +57,8 @@ steps:
     args:
       [
         "build",
+        "--build-arg",
+        "SENTRY_KUBE_VERSION=${_SENTRY_KUBE_VERSION}",
         "--build-arg",
         "SENTRY_KUBE_KUBECTL_VERSION=${_KUBECTL_VERSION_1_24}",
         "-t",

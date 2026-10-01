@@ -1,4 +1,5 @@
 ### Build arguments:
+# SENTRY_KUBE_VERSION -- sentry-infra-tools package version to install
 # SENTRY_KUBE_KUBECTL_VERSION -- kubectl version that sentry-kube will download
 FROM python:3.12
 
