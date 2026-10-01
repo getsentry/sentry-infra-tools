@@ -40,6 +40,140 @@ All commands support `--help`, so please reference this.
 sentry-kube --help
 ```
 
+## Emergency sentry-options changes
+
+`sentry-kube options` reads and makes incident-only changes directly to the
+live `sentry-options` ConfigMaps. It does not invoke GoCD or GitHub Actions.
+It discovers the relevant clusters from the current sentry-kube configuration:
+all clusters running `getsentry`, plus the control-silo ConfigMap in both the
+US and control clusters. Run it from the checkout that contains the fleet
+configuration (normally `ops`), or pass that checkout with the global
+`--root` option.
+
+Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
+ConfigMap does not declare the option.
+
+```shell
+sentry-kube --root ~/dev/ops options get \
+  billing.quotas.exceeded.enabled
+```
+
+`set` needs permission to patch the `sentry-options` ConfigMaps in every
+selected cluster (normally obtained through a Sentry Sudo escalation). It is a
+dry run by default: it verifies patch access and reads every selected ConfigMap
+before changing any cluster. It also validates the requested key and strict
+JSON value with the native `sentry_options.SchemaRegistry` used by the
+application. By default it reuses a matching schema snapshot for one hour,
+then fetches a fresh snapshot through the explicit
+`sentry_options.fetch_schemas` client API, using the published
+`sentry-options-automator/repos.json` (override the URL with
+`options_automator_repos_config_url` in `cli_config/configuration.yaml`). Each
+successful fetch is cached under `~/.cache/sentry-kube/options-schemas/`, keyed
+by the repository configuration checksum. The repository configuration is read
+on every run; a changed configuration triggers a fresh schema fetch immediately.
+GitHub HTTPS clone URLs in `repos.json` are rewritten to SSH for schema fetches,
+so engineers need a GitHub SSH key with access to each listed repository.
+Pass `--refresh` to bypass the one-hour cache. If a fetch fails, even with
+`--refresh`, the cached snapshot is used and stderr says so. Use
+`--repos-config` to choose a different repository list, or `--schemas` (or
+`SENTRY_KUBE_OPTIONS_SCHEMAS`) to supply a local snapshot explicitly.
+
+Cached snapshot messages show their age (for example, "fetched 12 minutes ago")
+and remind you to pass `--refresh`. The options commands use gray for echoed
+commands, yellow for progress and dry-run notices, red for errors, and green
+for successful fetches and applies. Color follows terminal detection and the
+`FORCE_COLOR` setting (`1` to enable, `0` to disable).
+
+For custom raw GitHub URLs, the ref must occupy a single URL segment. Encode
+slashes in branch or tag names as `%2F`, for example
+`https://raw.githubusercontent.com/owner/repo/refs/heads/feature%2Fbranch/repos.json`.
+`libsentrykube.github.fetch_raw_file` decodes that segment for the GitHub contents
+API; an unencoded slash is interpreted as the start of the file path.
+
+For a valid value, the command prints the option's expected type and a diff for
+each region:
+
+```text
+getsentry.options-dual-read-test (type: integer)
+us: getsentry.options-dual-read-test 42 -> 43
+```
+
+`<unset>` means the deployed ConfigMap does not declare the option; `null`
+is an explicit JSON value. An invalid proposed value fails schema validation
+before cluster access or ConfigMap reads. For example, `false` is rejected
+because this option requires an integer, so no region diff is printed. Unknown
+options and invalid schema snapshots also fail before cluster reads. Fresh and
+cached snapshot messages omit checksums.
+
+`--apply` is required to make the change:
+
+```shell
+sentry-kube --root ~/dev/ops options set \
+  billing.quotas.exceeded.enabled false
+
+sentry-kube --root ~/dev/ops options set \
+  --include us \
+  billing.quotas.exceeded.enabled false \
+  --apply
+```
+
+Use `--include` (configured names and aliases are accepted) or `--service`
+(`getsentry` or `getsentry-control`) to restrict an invocation only when the
+incident is intentionally scoped. Region selection is explicit:
+
+```shell
+# Include only US and DE. Repeat --include for every included region.
+sentry-kube --root ~/dev/ops options get \
+  --include us \
+  --include de \
+  billing.quotas.exceeded.enabled
+
+# Start with the full fleet and leave out single-tenant regions.
+sentry-kube --root ~/dev/ops options set \
+  --exclude st0 \
+  --exclude st1 \
+  --exclude st2 \
+  billing.quotas.exceeded.enabled false \
+  --apply
+```
+
+`--include` and `--exclude` are mutually exclusive. Unknown regions fail
+before any `kubectl` call. The default intentionally covers every configured
+topology target rather than applying the generic `--stage` filter: the live
+control-silo cluster is classified as `build` in the shared sentry-kube
+configuration.
+
+Because that default is the entire fleet, `--apply` refuses to run against it
+unless the invocation also narrows scope with `--include` or `--exclude`. To
+genuinely apply everywhere, confirm that intent explicitly with
+`--all-regions`:
+
+```shell
+sentry-kube --root ~/dev/ops options set \
+  billing.quotas.exceeded.enabled false \
+  --all-regions \
+  --apply
+```
+
+A dry run (no `--apply`) never requires `--all-regions`; it always previews
+the full fleet by default so you can inspect the plan before deciding how to
+scope the real change.
+
+The tool uses a resource-version JSON Patch, so it refuses to overwrite a
+ConfigMap changed after preflight. There is no cross-cluster transaction: a
+patch failure after apply starts is reported with its exact cluster, and must
+be retried after investigating that cluster. It validates strict JSON input,
+the canonical `sentry-options` schema snapshot, and the deployed ConfigMap
+structure (including both `generated_at` timestamps). It atomically refreshes
+the ConfigMap annotation and the `values.json` timestamp.
+Patch payloads are passed to kubectl through temporary files, avoiding command
+argument size limits. Each file is removed after its write attempt completes;
+local file or process errors are included in the per-target failure summary.
+
+This is intentionally temporary. The next normal `sentry-options-automator`
+deployment restores the declarative value from `option-values/`; make the
+corresponding normal change if the emergency value should remain in effect.
+
 ## Environment Variables
 
 `sentry-kube` can be further configured by setting environment variables.
