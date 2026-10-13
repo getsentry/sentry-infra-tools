@@ -207,7 +207,12 @@ def run_pod(
 ):
     customer_name = ctx.obj.customer_name
 
-    if ctx.obj.service_class == "multi-tenant":
+    if customer_name == "control":
+        default_service, default_deployment = (
+            "getsentry-control",
+            "getsentry-control-web-default-common-production",
+        )
+    elif ctx.obj.service_class == "multi-tenant":
         default_service, default_deployment = (
             "getsentry",
             "getsentry-web-default-common-production",
