@@ -9,7 +9,10 @@ from libsentrykube.gcloud import build_api, get_channel_versions, get_release_ch
 
 @pytest.fixture
 def mock_container_resource():
-    with patch("libsentrykube.gcloud.googleapiclient.discovery.build") as mock_build:
+    with (
+        patch("libsentrykube.gcloud.googleapiclient.discovery.build") as mock_build,
+        patch("libsentrykube.gcloud.google.auth.default", return_value=("creds", None)),
+    ):
         yield mock_build
 
 

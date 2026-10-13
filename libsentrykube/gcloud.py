@@ -104,7 +104,7 @@ def build_api(service: str, version: str) -> Any:
 
 
 def get_all_gke_clusters(project: str) -> List[Any]:
-    container_resource = googleapiclient.discovery.build("container", "v1")
+    container_resource = build_api("container", "v1")
     clusters_resource = container_resource.projects().locations().clusters()
     request = clusters_resource.list(parent=f"projects/{project}/locations/-")
     return request.execute()["clusters"]
@@ -112,7 +112,7 @@ def get_all_gke_clusters(project: str) -> List[Any]:
 
 def get_release_channel(project: str, zone: str, channel: str) -> Mapping[str, Any]:
     """The release channel's server config: defaultVersion, validVersions, ..."""
-    container_resource = googleapiclient.discovery.build("container", "v1")
+    container_resource = build_api("container", "v1")
     server_config_request = (
         container_resource.projects()
         .zones()
