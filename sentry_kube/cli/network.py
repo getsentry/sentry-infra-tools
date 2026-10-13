@@ -102,6 +102,8 @@ def format_text(result: ClusterNetwork) -> str:
         for authorized in result.authorized_networks:
             label = f"  ({authorized.display_name})" if authorized.display_name else ""
             lines.append(f"  {authorized.cidr}{label}")
+        for cidr in result.original_node_ranges:
+            lines.append(f"  {cidr}  (original node range, allowed implicitly)")
     else:
         lines.append("Authorized networks: disabled")
     lines.append(
