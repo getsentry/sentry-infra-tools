@@ -31,6 +31,7 @@ def result(findings: list[str]) -> ClusterNetwork:
         ],
         authorized_networks_enabled=True,
         authorized_networks=[AuthorizedNetwork("10.2.0.0/22", "nodes")],
+        original_node_ranges=["10.2.0.0/23"],
         node_firewall_rules=["gke-cluster-a-1a2b3c4d-vms"],
         findings=findings,
     )
@@ -57,6 +58,7 @@ def test_show_text(mock_fetch) -> None:
     assert "Subnet:  subnet-a in network net-a (region-a)" in output
     assert "50.0%" in output
     assert "10.2.0.0/22  (nodes)" in output
+    assert "10.2.0.0/23  (original node range, allowed implicitly)" in output
     assert "Intra-node firewall rules: gke-cluster-a-1a2b3c4d-vms" in output
     assert "No findings" in output
 
