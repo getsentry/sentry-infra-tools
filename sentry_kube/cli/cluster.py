@@ -1,5 +1,5 @@
 import subprocess
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import click
 
@@ -7,7 +7,7 @@ from libsentrykube.config import Config
 from libsentrykube.customer import get_project
 from libsentrykube.gcloud import get_all_gke_clusters, get_channel_versions
 
-from .network import network
+from .network import gke_cluster_ref, network
 
 __all__ = ("cluster",)
 
@@ -83,42 +83,99 @@ def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) ->
                 )
 
 
+def upgrade_plan(cluster_obj: Dict[str, Any], version: str) -> List[str]:
+    """Describe what upgrade_cluster_to_version would change, one line per step."""
+    steps = []
+    if version != cluster_obj["currentMasterVersion"]:
+        steps.append(
+            f"control plane: {cluster_obj['currentMasterVersion']} -> {version}"
+        )
+    if version != cluster_obj["currentNodeVersion"]:
+        steps.extend(
+            f"node pool {pool['name']}: {pool['version']} -> {version} (async)"
+            for pool in cluster_obj["nodePools"]
+            if version != pool["version"]
+        )
+    return steps
+
+
 @click.group(invoke_without_command=True)
 @click.pass_context
-@click.option("--list", is_flag=True)
-@click.option("--upgrade", is_flag=True)
-@click.option("--cluster", "cluster", type=str, default="")
-@click.option("--version", "version", type=str, default="")
+@click.option("--list", is_flag=True, hidden=True)
+@click.option("--upgrade", is_flag=True, hidden=True)
+@click.option("--cluster", "cluster", type=str, default="", hidden=True)
+@click.option("--version", "version", type=str, default="", hidden=True)
 def cluster(ctx, list: bool, upgrade: bool, cluster: str, version: str = ""):
     """
     Inspect and manage the GKE cluster behind the selected sentry-kube cluster.
-
-    Without a subcommand, --list shows available GKE versions and --upgrade
-    upgrades to --version.
     """
     if ctx.invoked_subcommand is not None:
         return
+    if not (list or upgrade):
+        click.echo(ctx.get_help())
+        return
 
-    customer_name = ctx.obj.customer_name
-    config = Config()
-    project_name = get_project(config, customer_name, cluster)
+    # Deprecated flag interface, kept for one release.
+    replacement = "cluster versions" if list else "cluster upgrade --version <v>"
+    click.echo(
+        f"Warning: `cluster --{'list' if list else 'upgrade'}` is deprecated; "
+        f"use `sentry-kube {replacement}`.",
+        err=True,
+    )
     if not cluster:
-        click.echo("Error: Please specify --cluster")
-        click.Abort()
+        raise click.UsageError("Please specify --cluster")
+    if upgrade and not version:
+        raise click.UsageError("Please specify --version")
+
+    project_name = get_project(Config(), ctx.obj.customer_name, cluster)
     if list:
         list_cluster_versions(project_name, cluster)
-    elif upgrade:
-        if not version:
-            click.echo("Error: Please specify --version")
-            click.Abort()
-        upgrade_cluster_to_version(project_name, cluster, version)
     else:
-        click.echo(
-            "Error: Please specify command. Either --list or --upgrade",
-            err=True,
-            color=True,
+        upgrade_cluster_to_version(project_name, cluster, version)
+
+
+@cluster.command("versions")
+@click.pass_context
+def versions(ctx: click.Context) -> None:
+    """
+    Show the cluster's current GKE versions and those available in its
+    release channel.
+    """
+    ref = gke_cluster_ref(ctx)
+    list_cluster_versions(ref.project, ref.name)
+
+
+@cluster.command("upgrade")
+@click.option("--version", "version", required=True, help="GKE version to upgrade to.")
+@click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
+@click.pass_context
+def upgrade(ctx: click.Context, version: str, yes: bool) -> None:
+    """
+    Upgrade the control plane, then every node pool (asynchronously), to a
+    version available in the cluster's release channel.
+    """
+    ref = gke_cluster_ref(ctx)
+    cluster_obj = get_cluster(ref.project, ref.name)
+    available = get_channel_versions(
+        ref.project, cluster_obj["zone"], cluster_obj["releaseChannel"]["channel"]
+    )
+    if version not in available:
+        raise click.BadParameter(
+            f"{version} is not available in the cluster's release channel. "
+            f"Available: {', '.join(available)}",
+            param_hint="--version",
         )
-        click.Abort()
+
+    steps = upgrade_plan(cluster_obj, version)
+    if not steps:
+        click.echo(f"{ref.name} is already at {version}.")
+        return
+    click.echo(f"Upgrade plan for {ref.name} ({ref.location}, project {ref.project}):")
+    for step in steps:
+        click.echo(f"  {step}")
+    if not yes:
+        click.confirm("Proceed?", abort=True)
+    upgrade_cluster_to_version(ref.project, ref.name, version)
 
 
 cluster.add_command(network)
