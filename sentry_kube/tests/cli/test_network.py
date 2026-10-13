@@ -13,7 +13,7 @@ from libsentrykube.network import (
     GkeClusterRef,
     RangeUsage,
 )
-from sentry_kube.cli.network import network
+from sentry_kube.cli.cluster import cluster
 
 CONTEXT = "gke_test-project_region-a-b_cluster-a"
 REF = GkeClusterRef(project="test-project", location="region-a-b", name="cluster-a")
@@ -44,7 +44,7 @@ def mock_fetch():
 
 def invoke(*args: str, context: str = CONTEXT):
     return CliRunner().invoke(
-        network, ["show", *args], obj=SimpleNamespace(context_name=context)
+        cluster, ["network", *args], obj=SimpleNamespace(context_name=context)
     )
 
 

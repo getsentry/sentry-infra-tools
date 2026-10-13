@@ -7,17 +7,10 @@ from tabulate import tabulate
 
 from libsentrykube.network import ClusterNetwork, GkeClusterRef, fetch_cluster_network
 
-__all__ = ("network",)
+# Registered as `sentry-kube cluster network` (see cluster.py), not top level.
 
 
-@click.group()
-def network() -> None:
-    """
-    Inspect a cluster's GKE networking. Read-only.
-    """
-
-
-@network.command("show")
+@click.command()
 @click.option(
     "--output",
     "-o",
@@ -38,11 +31,11 @@ def network() -> None:
     help="Exit with status 1 if anything is reported under Findings.",
 )
 @click.pass_context
-def show(ctx: click.Context, output: str, warn_threshold: int, check: bool) -> None:
+def network(ctx: click.Context, output: str, warn_threshold: int, check: bool) -> None:
     """
-    Show the cluster's node, pod, service and control plane ranges with their
-    utilization, plus the authorized networks and intra-node firewall rules
-    that must cover the node range.
+    Show the GKE cluster's networking (read-only): node, pod, service and
+    control plane ranges with their utilization, plus the authorized networks
+    and intra-node firewall rules that must cover the node range.
 
     Node range usage counts IPs held by VMs, internal load balancers and
     address reservations of the cluster's project.
