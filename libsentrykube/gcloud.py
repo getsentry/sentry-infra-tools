@@ -89,7 +89,8 @@ def get_all_gke_clusters(project: str) -> List[Any]:
     return request.execute()["clusters"]
 
 
-def get_channel_versions(project: str, zone: str, channel: str) -> List[str]:
+def get_release_channel(project: str, zone: str, channel: str) -> Mapping[str, Any]:
+    """The release channel's server config: defaultVersion, validVersions, ..."""
     container_resource = googleapiclient.discovery.build("container", "v1")
     server_config_request = (
         container_resource.projects()
@@ -98,7 +99,13 @@ def get_channel_versions(project: str, zone: str, channel: str) -> List[str]:
     )
     response = server_config_request.execute()
     try:
-        channel_obj = [ch for ch in response["channels"] if ch["channel"] == channel][0]
-        return channel_obj["validVersions"]
+        return [ch for ch in response["channels"] if ch["channel"] == channel][0]
+    except KeyError:
+        raise Exception("Bad channel API response")
+
+
+def get_channel_versions(project: str, zone: str, channel: str) -> List[str]:
+    try:
+        return get_release_channel(project, zone, channel)["validVersions"]
     except KeyError:
         raise Exception("Bad channel API response")

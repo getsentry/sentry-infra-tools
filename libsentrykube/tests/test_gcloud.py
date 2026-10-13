@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from libsentrykube.gcloud import get_channel_versions
+from libsentrykube.gcloud import get_channel_versions, get_release_channel
 
 
 @pytest.fixture
@@ -42,3 +42,11 @@ def test_get_channel_versions_bad_response(mock_container_resource):
         get_channel_versions(project, zone, channel)
 
     assert str(e.value) == "Bad channel API response"
+
+
+def test_get_release_channel_returns_channel_config(mock_container_resource):
+    channel = {"channel": "stable", "defaultVersion": "1.2.3", "validVersions": []}
+    mock_execute = MagicMock(return_value={"channels": [{"channel": "rapid"}, channel]})
+    mock_container_resource.return_value.projects.return_value.zones.return_value.getServerconfig.return_value.execute = mock_execute
+
+    assert get_release_channel("test_project", "test_zone", "stable") == channel

@@ -59,6 +59,22 @@ def test_versions(mocks) -> None:
     mocks.get_project.assert_not_called()
 
 
+def test_versions_marks_channel_default() -> None:
+    channel = {"defaultVersion": "1.2.4", "validVersions": ["1.2.3", "1.2.4"]}
+    with (
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=gke_cluster()),
+        patch(
+            "sentry_kube.cli.cluster.get_release_channel", return_value=channel
+        ) as get_channel,
+    ):
+        run = invoke("versions")
+    assert run.exit_code == 0
+    get_channel.assert_called_once_with("project-a", "region-a-b", "STABLE")
+    lines = run.output.splitlines()
+    assert "1.2.3" in lines
+    assert "1.2.4 (default)" in lines
+
+
 def test_upgrade_plan() -> None:
     assert upgrade_plan(gke_cluster(), "1.2.4") == [
         "control plane: 1.2.3 -> 1.2.4",
@@ -68,7 +84,7 @@ def test_upgrade_plan() -> None:
 
 
 def test_upgrade_confirmed(mocks) -> None:
-    run = invoke("upgrade", "--version", "1.2.4", input="y\n")
+    run = invoke("upgrade", "1.2.4", input="y\n")
     assert run.exit_code == 0
     assert "control plane: 1.2.3 -> 1.2.4" in run.output
     assert "node pool pool-a: 1.2.3 -> 1.2.4 (async)" in run.output
@@ -77,20 +93,20 @@ def test_upgrade_confirmed(mocks) -> None:
 
 
 def test_upgrade_declined(mocks) -> None:
-    run = invoke("upgrade", "--version", "1.2.4", input="n\n")
+    run = invoke("upgrade", "1.2.4", input="n\n")
     assert run.exit_code == 1
     mocks.upgraded.assert_not_called()
 
 
 def test_upgrade_yes_skips_prompt(mocks) -> None:
-    run = invoke("upgrade", "--version", "1.2.4", "--yes")
+    run = invoke("upgrade", "1.2.4", "--yes")
     assert run.exit_code == 0
     assert "Proceed?" not in run.output
     mocks.upgraded.assert_called_once()
 
 
 def test_upgrade_unavailable_version(mocks) -> None:
-    run = invoke("upgrade", "--version", "9.9.9", "--yes")
+    run = invoke("upgrade", "9.9.9", "--yes")
     assert run.exit_code == 2
     assert "Available: 1.2.3, 1.2.4" in run.output
     mocks.upgraded.assert_not_called()
@@ -98,7 +114,7 @@ def test_upgrade_unavailable_version(mocks) -> None:
 
 def test_upgrade_already_current(mocks) -> None:
     mocks.get_cluster.return_value = gke_cluster(master="1.2.4", nodes="1.2.4")
-    run = invoke("upgrade", "--version", "1.2.4")
+    run = invoke("upgrade", "1.2.4")
     assert run.exit_code == 0
     assert "already at 1.2.4" in run.output
     mocks.upgraded.assert_not_called()
@@ -107,6 +123,7 @@ def test_upgrade_already_current(mocks) -> None:
 def test_upgrade_requires_version(mocks) -> None:
     run = invoke("upgrade")
     assert run.exit_code == 2
+    assert "Missing argument 'VERSION'" in run.output
     mocks.get_cluster.assert_not_called()
 
 

@@ -5,7 +5,11 @@ import click
 
 from libsentrykube.config import Config
 from libsentrykube.customer import get_project
-from libsentrykube.gcloud import get_all_gke_clusters, get_channel_versions
+from libsentrykube.gcloud import (
+    get_all_gke_clusters,
+    get_channel_versions,
+    get_release_channel,
+)
 
 from .network import gke_cluster_ref, network
 
@@ -33,8 +37,10 @@ def list_cluster_versions(project: str, cluster_name: str) -> None:
     click.echo(f"release channel: {release_channel}")
     click.echo("=" * 10)
     click.echo("Available versions:")
-    versions = get_channel_versions(project, cluster_zone, release_channel)
-    click.echo("\n".join(versions))
+    channel = get_release_channel(project, cluster_zone, release_channel)
+    for version in channel.get("validVersions", []):
+        default = " (default)" if version == channel.get("defaultVersion") else ""
+        click.echo(f"{version}{default}")
 
 
 def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) -> None:
@@ -116,7 +122,7 @@ def cluster(ctx, list: bool, upgrade: bool, cluster: str, version: str = ""):
         return
 
     # Deprecated flag interface, kept for one release.
-    replacement = "cluster versions" if list else "cluster upgrade --version <v>"
+    replacement = "cluster versions" if list else "cluster upgrade VERSION"
     click.echo(
         f"Warning: `cluster --{'list' if list else 'upgrade'}` is deprecated; "
         f"use `sentry-kube {replacement}`.",
@@ -146,13 +152,14 @@ def versions(ctx: click.Context) -> None:
 
 
 @cluster.command("upgrade")
-@click.option("--version", "version", required=True, help="GKE version to upgrade to.")
+@click.argument("version", metavar="VERSION")
 @click.option("--yes", "-y", is_flag=True, help="Skip the confirmation prompt.")
 @click.pass_context
 def upgrade(ctx: click.Context, version: str, yes: bool) -> None:
     """
-    Upgrade the control plane, then every node pool (asynchronously), to a
-    version available in the cluster's release channel.
+    Upgrade the control plane, then every node pool (asynchronously), to
+    VERSION. It must be available in the cluster's release channel; see
+    `cluster versions`, which marks the channel's default.
     """
     ref = gke_cluster_ref(ctx)
     cluster_obj = get_cluster(ref.project, ref.name)
@@ -163,7 +170,7 @@ def upgrade(ctx: click.Context, version: str, yes: bool) -> None:
         raise click.BadParameter(
             f"{version} is not available in the cluster's release channel. "
             f"Available: {', '.join(available)}",
-            param_hint="--version",
+            param_hint="VERSION",
         )
 
     steps = upgrade_plan(cluster_obj, version)
