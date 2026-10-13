@@ -256,6 +256,20 @@ def test_narrow_rule_on_node_tag_does_not_count() -> None:
     assert result.findings == []
 
 
+def test_node_firewall_rules_exclude_other_sources() -> None:
+    # GKE's -all rule allows everything to the node tag, but from the pod range.
+    pods_all = vms_rule("gke-cluster-a-1a2b3c4d-all", ["10.4.0.0/20"])
+    pods_all["allowed"] = [{"IPProtocol": "all"}]
+    internal = vms_rule("allow-internal-to-cluster-a", ["10.0.0.0/8"])
+    internal["allowed"] = [{"IPProtocol": "all"}]
+    result = build(firewalls=[*FIREWALLS, pods_all, internal])
+    assert result.node_firewall_rules == [
+        "gke-cluster-a-1a2b3c4d-vms",
+        "allow-internal-to-cluster-a",
+    ]
+    assert result.findings == []
+
+
 def test_missing_vms_rule() -> None:
     other_network = vms_rule("gke-cluster-a-1a2b3c4d-vms", ["10.2.0.0/22"])
     other_network["network"] = f"{API}projects/test-project/global/networks/net-b"
@@ -300,7 +314,7 @@ def test_fetch_cluster_network_wires_api_calls() -> None:
     compute.addresses.return_value = paged([[]])
     compute.firewalls.return_value = paged([FIREWALLS])
 
-    with patch("libsentrykube.network.googleapiclient.discovery.build") as build_api:
+    with patch("libsentrykube.network.build_api") as build_api:
         build_api.side_effect = lambda api, version: {
             "container": container,
             "compute": compute,

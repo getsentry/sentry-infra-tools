@@ -1,9 +1,11 @@
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import Any, Mapping, List
 
+import google.auth
 import googleapiclient.discovery
 
 import click
@@ -80,6 +82,25 @@ def lookup_zone(host, project, region):
         newline = "\n"
         click.echo(f"Did you mean to use one of: \n\n{newline.join(filtered_hosts)}")
         die()
+
+
+def build_api(service: str, version: str) -> Any:
+    """
+    A Google API client using application default credentials, without the
+    log noise of the defaults: google.auth warns that no default project is
+    set (every call here passes the project explicitly), and the discovery
+    file cache logs that it needs oauth2client.
+    """
+    auth_logger = logging.getLogger("google.auth._default")
+    previous_level = auth_logger.level
+    auth_logger.setLevel(logging.ERROR)
+    try:
+        credentials, _ = google.auth.default()
+    finally:
+        auth_logger.setLevel(previous_level)
+    return googleapiclient.discovery.build(
+        service, version, credentials=credentials, cache_discovery=False
+    )
 
 
 def get_all_gke_clusters(project: str) -> List[Any]:
