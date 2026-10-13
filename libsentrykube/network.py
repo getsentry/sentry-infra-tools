@@ -11,7 +11,7 @@ from ipaddress import IPv4Address, IPv4Network, collapse_addresses, ip_address
 from ipaddress import ip_network
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
-import googleapiclient.discovery
+from libsentrykube.gcloud import build_api
 
 # GCP reserves the network, gateway, second-to-last and broadcast addresses.
 GCP_RESERVED_IPS_PER_SUBNET = 4
@@ -263,8 +263,10 @@ def build_cluster_network(
             f"No GKE intra-node firewall rule (gke-{cluster.name}-<hash>-vms) found"
         )
     else:
-        # Only rules that allow at least what the -vms rule allows can stand in
-        # for it; a narrow rule on the node tag doesn't restore node-to-node traffic.
+        # Rules that can stand in for the -vms rule: on the node tag, sourced
+        # from (part of) the node range (not e.g. GKE's pod-range -all rule),
+        # and allowing at least what -vms allows; a narrow rule on the node tag
+        # doesn't restore node-to-node traffic.
         node_tags = {tag for fw in vms_rules for tag in fw.get("targetTags", [])}
         node_rules = [
             fw
@@ -272,6 +274,11 @@ def build_cluster_network(
             if not fw.get("disabled")
             and fw.get("direction", "INGRESS") == "INGRESS"
             and node_tags.intersection(fw.get("targetTags", []))
+            and any(
+                src.overlaps(node_range)
+                for src in (_v4(c) for c in fw.get("sourceRanges", []))
+                if src is not None
+            )
             and any(_allows_all_of(fw, vms) for vms in vms_rules)
         ]
         sources = [src for fw in node_rules for src in fw.get("sourceRanges", [])]
@@ -343,8 +350,8 @@ def fetch_cluster_network(
     cluster: GkeClusterRef, warn_threshold: float = DEFAULT_WARN_THRESHOLD
 ) -> ClusterNetwork:
     """Look up a cluster's networking through the GKE and Compute APIs (read-only)."""
-    container = googleapiclient.discovery.build("container", "v1")
-    compute = googleapiclient.discovery.build("compute", "v1")
+    container = build_api("container", "v1")
+    compute = build_api("compute", "v1")
 
     gke_cluster = (
         container.projects()

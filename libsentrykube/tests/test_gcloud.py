@@ -2,7 +2,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from libsentrykube.gcloud import get_channel_versions
+import logging
+
+from libsentrykube.gcloud import build_api, get_channel_versions
 
 
 @pytest.fixture
@@ -42,3 +44,25 @@ def test_get_channel_versions_bad_response(mock_container_resource):
         get_channel_versions(project, zone, channel)
 
     assert str(e.value) == "Bad channel API response"
+
+
+def test_build_api_passes_credentials_without_cache(mock_container_resource):
+    with patch("libsentrykube.gcloud.google.auth.default") as default:
+        default.return_value = ("creds", None)
+        client = build_api("compute", "v1")
+
+    assert client is mock_container_resource.return_value
+    mock_container_resource.assert_called_once_with(
+        "compute", "v1", credentials="creds", cache_discovery=False
+    )
+
+
+def test_build_api_silences_missing_project_warning(mock_container_resource, caplog):
+    def default():
+        logging.getLogger("google.auth._default").warning("No project ID")
+        return "creds", None
+
+    with patch("libsentrykube.gcloud.google.auth.default", side_effect=default):
+        build_api("compute", "v1")
+
+    assert "No project ID" not in caplog.text
