@@ -5,7 +5,12 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from sentry_kube.cli.cluster import cluster, upgrade_plan
+from sentry_kube.cli.cluster import (
+    cluster,
+    plan_upgrade,
+    upgrade_cluster_to_version,
+    version_key,
+)
 
 OBJ = SimpleNamespace(
     customer_name="region1", context_name="gke_project-a_region-a-b_cluster-a"
@@ -59,8 +64,8 @@ def test_versions(mocks) -> None:
     mocks.get_project.assert_not_called()
 
 
-def test_versions_marks_channel_default() -> None:
-    channel = {"defaultVersion": "1.2.4", "validVersions": ["1.2.3", "1.2.4"]}
+def test_versions_labels() -> None:
+    channel = {"defaultVersion": "1.2.2", "validVersions": ["1.2.4", "1.2.3", "1.2.2"]}
     with (
         patch("sentry_kube.cli.cluster.get_cluster", return_value=gke_cluster()),
         patch(
@@ -71,16 +76,100 @@ def test_versions_marks_channel_default() -> None:
     assert run.exit_code == 0
     get_channel.assert_called_once_with("project-a", "region-a-b", "STABLE")
     lines = run.output.splitlines()
-    assert "1.2.3" in lines
-    assert "1.2.4 (default)" in lines
+    assert "1.2.4" in lines
+    assert "1.2.3 (current control plane)" in lines
+    # A channel default can lag behind the control plane on fast channels.
+    assert "1.2.2 (default, older than control plane)" in lines
 
 
-def test_upgrade_plan() -> None:
-    assert upgrade_plan(gke_cluster(), "1.2.4") == [
-        "control plane: 1.2.3 -> 1.2.4",
-        "node pool pool-a: 1.2.3 -> 1.2.4 (async)",
+def test_version_key() -> None:
+    assert version_key("1.37.0-gke.3503000") == (1, 37, 0, 3503000)
+    assert version_key("1.37.0-gke.3503000") > version_key("1.36.4-gke.2046002")
+    assert version_key("1.35.6-gke.1250001") > version_key("1.35.6-gke.1250000")
+    assert version_key("1.2.3") == (1, 2, 3, 0)
+
+
+def mixed_cluster() -> dict[str, Any]:
+    # Control plane ahead of most pools, with some pools already on it.
+    return {
+        **gke_cluster(master="1.37.0-gke.3", nodes="1.35.6-gke.1"),
+        "nodePools": [
+            {"name": "old", "version": "1.35.6-gke.1"},
+            {"name": "current", "version": "1.37.0-gke.3"},
+        ],
+    }
+
+
+def test_plan_upgrade() -> None:
+    plan = plan_upgrade(mixed_cluster(), "1.37.1-gke.1")
+    assert plan.describe() == [
+        "control plane: 1.37.0-gke.3 -> 1.37.1-gke.1",
+        "node pool old: 1.35.6-gke.1 -> 1.37.1-gke.1 (async)",
+        "node pool current: 1.37.0-gke.3 -> 1.37.1-gke.1 (async)",
     ]
-    assert upgrade_plan(gke_cluster(master="1.2.4", nodes="1.2.4"), "1.2.4") == []
+
+    # Catching node pools up to the control plane leaves it alone.
+    plan = plan_upgrade(mixed_cluster(), "1.37.0-gke.3")
+    assert plan.control_plane is None
+    assert plan.node_pools == [("old", "1.35.6-gke.1")]
+
+    assert plan_upgrade(gke_cluster(master="1.2.4", nodes="1.2.4"), "1.2.4").empty
+
+
+def test_plan_upgrade_never_downgrades_node_pools() -> None:
+    cluster_obj = mixed_cluster()
+    cluster_obj["currentMasterVersion"] = "1.37.0-gke.3"
+    cluster_obj["nodePools"].append({"name": "newer", "version": "1.37.0-gke.9"})
+    plan = plan_upgrade(cluster_obj, "1.37.0-gke.5")
+    assert plan.node_pools == [("old", "1.35.6-gke.1"), ("current", "1.37.0-gke.3")]
+    assert plan.newer_node_pools == [("newer", "1.37.0-gke.9")]
+    assert (
+        "node pool newer: 1.37.0-gke.9 (newer than 1.37.0-gke.5, unchanged)"
+        in plan.describe()
+    )
+
+
+def test_upgrade_refuses_control_plane_downgrade(mocks) -> None:
+    mocks.get_cluster.return_value = mixed_cluster()
+    mocks.channel_versions.return_value = ["1.37.0-gke.3", "1.36.4-gke.2"]
+    run = invoke("upgrade", "1.36.4-gke.2", "--yes")
+    assert run.exit_code == 2
+    assert "older than the control plane (1.37.0-gke.3)" in run.output
+    assert "Upgrade plan" not in run.output
+    mocks.upgraded.assert_not_called()
+
+
+def test_upgrade_cluster_to_version_runs_the_plan() -> None:
+    with (
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=mixed_cluster()),
+        patch(
+            "sentry_kube.cli.cluster.get_channel_versions",
+            return_value=["1.37.0-gke.3"],
+        ),
+        patch("sentry_kube.cli.cluster.subprocess.check_output") as gcloud,
+    ):
+        upgrade_cluster_to_version("project-a", "cluster-a", "1.37.0-gke.3")
+    # Control plane is already there; only the older pool is upgraded.
+    assert len(gcloud.call_args_list) == 1
+    argv = gcloud.call_args.args[0]
+    assert argv[argv.index("--node-pool") + 1] == "old"
+    assert "--master" not in argv
+
+
+def test_deprecated_upgrade_flag_refuses_downgrade() -> None:
+    with (
+        patch("sentry_kube.cli.cluster.Config"),
+        patch("sentry_kube.cli.cluster.get_project", return_value="project-a"),
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=mixed_cluster()),
+        patch(
+            "sentry_kube.cli.cluster.get_channel_versions",
+            return_value=["1.36.4-gke.2"],
+        ),
+        patch("sentry_kube.cli.cluster.subprocess.check_output") as gcloud,
+    ):
+        run = invoke("--upgrade", "--cluster", "cluster-a", "--version", "1.36.4-gke.2")
+    assert run.exit_code == 2
+    gcloud.assert_not_called()
 
 
 def test_upgrade_confirmed(mocks) -> None:
