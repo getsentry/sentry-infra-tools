@@ -188,6 +188,23 @@ def test_upgrade_cluster_to_version_runs_the_plan() -> None:
     argv = gcloud.call_args.args[0]
     assert argv[argv.index("--node-pool") + 1] == "old"
     assert "--master" not in argv
+    # Without a confirmed plan, gcloud keeps its own confirmation prompt.
+    assert "--quiet" not in argv
+
+
+def test_upgrade_cluster_to_version_quiet() -> None:
+    with (
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=mixed_cluster()),
+        patch(
+            "sentry_kube.cli.cluster.get_channel_versions",
+            return_value=["1.37.1-gke.1"],
+        ),
+        patch("sentry_kube.cli.cluster.subprocess.check_output") as gcloud,
+    ):
+        upgrade_cluster_to_version("project-a", "cluster-a", "1.37.1-gke.1", quiet=True)
+    calls = [c.args[0] for c in gcloud.call_args_list]
+    assert len(calls) == 3  # control plane + 2 node pools
+    assert all(argv[-1] == "--quiet" for argv in calls)
 
 
 def test_deprecated_upgrade_flag_refuses_downgrade() -> None:
@@ -212,7 +229,9 @@ def test_upgrade_confirmed(mocks) -> None:
     assert "control plane: 1.2.3 -> 1.2.4" in run.output
     assert "node pool pool-a: 1.2.3 -> 1.2.4 (async)" in run.output
     mocks.channel_versions.assert_called_once_with("project-a", "region-a-b", "STABLE")
-    mocks.upgraded.assert_called_once_with("project-a", "cluster-a", "1.2.4")
+    mocks.upgraded.assert_called_once_with(
+        "project-a", "cluster-a", "1.2.4", quiet=True
+    )
 
 
 def test_upgrade_declined(mocks) -> None:

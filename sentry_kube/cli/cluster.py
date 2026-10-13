@@ -141,13 +141,20 @@ def plan_upgrade(cluster_obj: Dict[str, Any], version: str) -> UpgradePlan:
     return plan
 
 
-def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) -> None:
+def upgrade_cluster_to_version(
+    project: str, cluster_name: str, version: str, quiet: bool = False
+) -> None:
+    """
+    Run the upgrade plan. `quiet` passes --quiet to gcloud, skipping its
+    per-command confirmation; only use it once the plan has been confirmed.
+    """
     cluster_obj = get_cluster(project, cluster_name)
     release_channel = cluster_obj["releaseChannel"]["channel"]
     cluster_zone = cluster_obj["zone"]
     versions = get_channel_versions(project, cluster_zone, release_channel)
     assert version in versions
     plan = plan_upgrade(cluster_obj, version)
+    quiet_flag = ["--quiet"] if quiet else []
     if plan.control_plane:
         subprocess.check_output(
             [
@@ -163,6 +170,7 @@ def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) ->
                 cluster_zone,
                 "--cluster-version",
                 version,
+                *quiet_flag,
             ],
         )
     for pool_name, _ in plan.node_pools:
@@ -182,6 +190,7 @@ def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) ->
                 "--node-pool",
                 pool_name,
                 "--async",
+                *quiet_flag,
             ],
         )
 
@@ -264,7 +273,8 @@ def upgrade(ctx: click.Context, version: str, yes: bool) -> None:
         click.echo(f"  {line}")
     if not yes:
         click.confirm("Proceed?", abort=True)
-    upgrade_cluster_to_version(ref.project, ref.name, version)
+    # The plan is confirmed (or --yes), so don't let gcloud ask again per step.
+    upgrade_cluster_to_version(ref.project, ref.name, version, quiet=True)
 
 
 cluster.add_command(network)
