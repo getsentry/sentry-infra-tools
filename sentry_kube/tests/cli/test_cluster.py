@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -76,10 +77,43 @@ def test_versions_labels() -> None:
     assert run.exit_code == 0
     get_channel.assert_called_once_with("project-a", "region-a-b", "STABLE")
     lines = run.output.splitlines()
-    assert "1.2.4" in lines
-    assert "1.2.3 (current control plane)" in lines
+    targets = lines.index("Upgrade targets:")
+    older = lines.index(
+        "Older than the control plane (`cluster upgrade` refuses these):"
+    )
+    assert lines[targets + 1 : older] == [
+        "  1.2.4",
+        "  1.2.3 (current control plane)",
+        "",
+    ]
     # A channel default can lag behind the control plane on fast channels.
-    assert "1.2.2 (default, older than control plane)" in lines
+    assert lines[older + 1 :] == ["  1.2.2 (default)"]
+
+
+def test_versions_dims_older_versions() -> None:
+    channel = {"defaultVersion": "1.2.3", "validVersions": ["1.2.3", "1.2.2"]}
+    with (
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=gke_cluster()),
+        patch("sentry_kube.cli.cluster.get_release_channel", return_value=channel),
+    ):
+        run = CliRunner().invoke(cluster, ["versions"], obj=OBJ, color=True)
+    assert run.exit_code == 0
+    assert click.style("  1.2.2", dim=True) in run.output
+    assert (
+        click.style("  1.2.3 (default, current control plane)", dim=True)
+        not in run.output
+    )
+
+
+def test_versions_without_older_versions() -> None:
+    channel = {"defaultVersion": "1.2.3", "validVersions": ["1.2.4", "1.2.3"]}
+    with (
+        patch("sentry_kube.cli.cluster.get_cluster", return_value=gke_cluster()),
+        patch("sentry_kube.cli.cluster.get_release_channel", return_value=channel),
+    ):
+        run = invoke("versions")
+    assert "Older than the control plane" not in run.output
+    assert run.output.splitlines()[-1] == "  1.2.3 (default, current control plane)"
 
 
 def test_version_key() -> None:

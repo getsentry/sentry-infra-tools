@@ -50,17 +50,32 @@ def list_cluster_versions(project: str, cluster_name: str) -> None:
     click.echo(f"nodes: {cluster_obj['currentNodeVersion']}")
     click.echo(f"release channel: {release_channel}")
     click.echo("=" * 10)
-    click.echo("Available versions:")
     channel = get_release_channel(project, cluster_zone, release_channel)
-    for version in channel.get("validVersions", []):
+
+    def entry(version: str) -> str:
         labels = []
         if version == channel.get("defaultVersion"):
             labels.append("default")
         if version == master:
             labels.append("current control plane")
-        elif _is_older(version, master):
-            labels.append("older than control plane")
-        click.echo(f"{version} ({', '.join(labels)})" if labels else version)
+        return f"  {version} ({', '.join(labels)})" if labels else f"  {version}"
+
+    valid = channel.get("validVersions", [])
+    targets = [v for v in valid if not _is_older(v, master)]
+    older = [v for v in valid if _is_older(v, master)]
+    click.echo("Upgrade targets:")
+    for version in targets:
+        click.echo(entry(version))
+    if older:
+        click.echo()
+        click.echo(
+            click.style(
+                "Older than the control plane (`cluster upgrade` refuses these):",
+                dim=True,
+            )
+        )
+        for version in older:
+            click.echo(click.style(entry(version), dim=True))
 
 
 def _is_older(version: str, than: str) -> bool:
@@ -109,8 +124,8 @@ def plan_upgrade(cluster_obj: Dict[str, Any], version: str) -> UpgradePlan:
     if _is_older(version, master):
         raise click.UsageError(
             f"{version} is older than the control plane ({master}); "
-            "refusing to downgrade. Pick a version from `cluster versions` that "
-            "isn't marked older than the control plane."
+            "refusing to downgrade. Pick one of the upgrade targets listed by "
+            "`cluster versions`."
         )
     plan = UpgradePlan(version=version)
     if version != master:
