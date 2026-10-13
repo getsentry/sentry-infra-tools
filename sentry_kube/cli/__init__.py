@@ -186,10 +186,10 @@ Valid regions for stage '{stage}':
             "render",
             "lint",
             "validate",
-            "network",
+            "cluster",
         ):
             # Force offline, we don't need Kubernetes connections for these
-            # subcommands (network only talks to the GCP APIs)
+            # subcommands (cluster only talks to the GCP APIs)
             os.environ["KUBERNETES_OFFLINE"] = "1"
 
             ctx.obj = CliContext(
