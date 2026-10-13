@@ -233,6 +233,29 @@ def test_firewall_coverage_can_span_rules() -> None:
     assert result.findings == []
 
 
+def test_narrow_rule_on_node_tag_does_not_count() -> None:
+    cluster = gke_cluster(masterAuthorizedNetworksConfig={})
+    https_only = vms_rule("allow-internal-https", ["10.0.0.0/8"])
+    https_only["allowed"] = [{"IPProtocol": "tcp", "ports": ["443"]}]
+    result = build(
+        gke_cluster=cluster,
+        subnet=subnet("10.2.0.0/20"),
+        firewalls=[*FIREWALLS, https_only],
+    )
+    assert result.node_firewall_rules == ["gke-cluster-a-1a2b3c4d-vms"]
+    assert len(result.findings) == 1
+    assert "do not cover the node range 10.2.0.0/20" in result.findings[0]
+
+    # A rule allowing everything does stand in for the -vms rule.
+    https_only["allowed"] = [{"IPProtocol": "all"}]
+    result = build(
+        gke_cluster=cluster,
+        subnet=subnet("10.2.0.0/20"),
+        firewalls=[*FIREWALLS, https_only],
+    )
+    assert result.findings == []
+
+
 def test_missing_vms_rule() -> None:
     other_network = vms_rule("gke-cluster-a-1a2b3c4d-vms", ["10.2.0.0/22"])
     other_network["network"] = f"{API}projects/test-project/global/networks/net-b"

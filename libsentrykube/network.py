@@ -263,14 +263,16 @@ def build_cluster_network(
             f"No GKE intra-node firewall rule (gke-{cluster.name}-<hash>-vms) found"
         )
     else:
+        # Only rules that allow at least what the -vms rule allows can stand in
+        # for it; a narrow rule on the node tag doesn't restore node-to-node traffic.
         node_tags = {tag for fw in vms_rules for tag in fw.get("targetTags", [])}
         node_rules = [
             fw
             for fw in network_rules
             if not fw.get("disabled")
             and fw.get("direction", "INGRESS") == "INGRESS"
-            and fw.get("allowed")
             and node_tags.intersection(fw.get("targetTags", []))
+            and any(_allows_all_of(fw, vms) for vms in vms_rules)
         ]
         sources = [src for fw in node_rules for src in fw.get("sourceRanges", [])]
         if not _covered(node_range, sources):
@@ -290,6 +292,34 @@ def build_cluster_network(
         authorized_networks=authorized,
         node_firewall_rules=[fw["name"] for fw in node_rules],
         findings=findings,
+    )
+
+
+def _port_ranges(ports: Optional[Sequence[str]]) -> list[tuple[int, int]]:
+    if not ports:
+        return [(0, 65535)]
+    ranges = []
+    for port in ports:
+        low, _, high = port.partition("-")
+        ranges.append((int(low), int(high or low)))
+    return ranges
+
+
+def _allows_all_of(candidate: Mapping[str, Any], reference: Mapping[str, Any]) -> bool:
+    """True if `candidate` allows every protocol and port that `reference` allows."""
+    granted: dict[str, list[tuple[int, int]]] = {}
+    for allowed in candidate.get("allowed", []):
+        proto = str(allowed["IPProtocol"]).lower()
+        granted.setdefault(proto, []).extend(_port_ranges(allowed.get("ports")))
+    if not granted:
+        return False
+    if "all" in granted:
+        return True
+    return all(
+        any(g_low <= low and high <= g_high for g_low, g_high in granted.get(proto, []))
+        for allowed in reference.get("allowed", [])
+        for proto in [str(allowed["IPProtocol"]).lower()]
+        for low, high in _port_ranges(allowed.get("ports"))
     )
 
 
