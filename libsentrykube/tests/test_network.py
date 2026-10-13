@@ -177,15 +177,50 @@ def test_utilization_threshold() -> None:
     ]
 
 
-def test_authorized_networks_must_cover_node_range() -> None:
-    result = build(
-        subnet=subnet("10.2.0.0/20"),
-        firewalls=[vms_rule("gke-cluster-a-1a2b3c4d-vms", ["10.2.0.0/20"])],
+def test_original_node_range_is_implicitly_authorized() -> None:
+    # Never-expanded subnet: the -vms rule still matches the subnet, and GKE
+    # authorizes it for the control plane without an explicit entry.
+    cluster = gke_cluster(masterAuthorizedNetworksConfig={"enabled": True})
+    result = build(gke_cluster=cluster)
+    assert result.original_node_ranges == ["10.2.0.0/22"]
+    assert result.findings == []
+
+
+def test_expanded_range_must_be_authorized() -> None:
+    # Expanded /22 -> /20 with the firewall gap closed but only the original
+    # range authorized: nodes in the added range can't register.
+    firewalls = [
+        *FIREWALLS,
+        vms_rule("gke-cluster-a-1a2b3c4d-vms-expanded", ["10.2.0.0/20"]),
+    ]
+    result = build(subnet=subnet("10.2.0.0/20"), firewalls=firewalls)
+    assert result.original_node_ranges == ["10.2.0.0/22"]
+    assert result.findings == [
+        "Control plane authorized networks do not cover the node range "
+        "10.2.0.0/20 beyond its original range 10.2.0.0/22; nodes with "
+        "uncovered IPs cannot register with the control plane"
+    ]
+
+    # Authorizing the expanded range clears it.
+    cluster = gke_cluster(
+        masterAuthorizedNetworksConfig={
+            "enabled": True,
+            "cidrBlocks": [{"cidrBlock": "10.2.0.0/20"}],
+        }
     )
-    assert len(result.findings) == 1
-    assert (
-        "authorized networks do not cover the node range 10.2.0.0/20"
-        in (result.findings[0])
+    result = build(
+        gke_cluster=cluster, subnet=subnet("10.2.0.0/20"), firewalls=firewalls
+    )
+    assert result.findings == []
+
+
+def test_authorized_networks_without_vms_rule() -> None:
+    # Without the -vms rule there is no record of the original range.
+    cluster = gke_cluster(masterAuthorizedNetworksConfig={"enabled": True})
+    result = build(gke_cluster=cluster, firewalls=[])
+    assert result.original_node_ranges == []
+    assert any(
+        "do not cover the node range 10.2.0.0/22; nodes" in f for f in result.findings
     )
 
 

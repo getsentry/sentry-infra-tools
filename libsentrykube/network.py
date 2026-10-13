@@ -72,6 +72,9 @@ class ClusterNetwork:
     ranges: list[RangeUsage]
     authorized_networks_enabled: bool
     authorized_networks: list[AuthorizedNetwork] = field(default_factory=list)
+    # The node range at cluster creation (from GKE's -vms rule); GKE authorizes
+    # it for control plane access without an explicit authorized network.
+    original_node_ranges: list[str] = field(default_factory=list)
     node_firewall_rules: list[str] = field(default_factory=list)
     findings: list[str] = field(default_factory=list)
 
@@ -236,19 +239,6 @@ def build_cluster_network(
         if usage.utilization is not None and usage.utilization >= warn_threshold
     ]
 
-    # Authorized networks: nodes outside them can't register with the control plane.
-    man_config = gke_cluster.get("masterAuthorizedNetworksConfig") or {}
-    man_enabled = bool(man_config.get("enabled"))
-    authorized = [
-        AuthorizedNetwork(b.get("cidrBlock", ""), b.get("displayName", ""))
-        for b in man_config.get("cidrBlocks", [])
-    ]
-    if man_enabled and not _covered(node_range, (a.cidr for a in authorized)):
-        findings.append(
-            f"Control plane authorized networks do not cover the node range {node_range}; "
-            "nodes with uncovered IPs cannot register with the control plane"
-        )
-
     # GKE creates gke-<cluster>-<hash>-vms for the node range at creation and
     # never widens it, so an expanded subnet needs a second rule for the same tags.
     network_path = _resource_path(subnet.get("network"))
@@ -257,6 +247,39 @@ def build_cluster_network(
         fw for fw in firewalls if _resource_path(fw.get("network")) == network_path
     ]
     vms_rules = [fw for fw in network_rules if vms_rule.match(fw.get("name", ""))]
+    # That makes the -vms rule the only record of the subnet's original range,
+    # which GKE also authorizes implicitly for control plane access. Only
+    # addresses added by expanding the subnet need explicit authorized networks.
+    original_node_ranges = sorted(
+        {
+            str(n)
+            for fw in vms_rules
+            for n in (_v4(c) for c in fw.get("sourceRanges", []))
+            if n is not None and n.overlaps(node_range)
+        }
+    )
+
+    # Authorized networks: nodes outside them can't register with the control plane.
+    man_config = gke_cluster.get("masterAuthorizedNetworksConfig") or {}
+    man_enabled = bool(man_config.get("enabled"))
+    authorized = [
+        AuthorizedNetwork(b.get("cidrBlock", ""), b.get("displayName", ""))
+        for b in man_config.get("cidrBlocks", [])
+    ]
+    if man_enabled and not _covered(
+        node_range, [*(a.cidr for a in authorized), *original_node_ranges]
+    ):
+        original = (
+            f" beyond its original range {', '.join(original_node_ranges)}"
+            if original_node_ranges
+            else ""
+        )
+        findings.append(
+            f"Control plane authorized networks do not cover the node range "
+            f"{node_range}{original}; nodes with uncovered IPs cannot register "
+            "with the control plane"
+        )
+
     node_rules: list[Mapping[str, Any]] = []
     if not vms_rules:
         findings.append(
@@ -297,6 +320,7 @@ def build_cluster_network(
         ranges=ranges,
         authorized_networks_enabled=man_enabled,
         authorized_networks=authorized,
+        original_node_ranges=original_node_ranges,
         node_firewall_rules=[fw["name"] for fw in node_rules],
         findings=findings,
     )
