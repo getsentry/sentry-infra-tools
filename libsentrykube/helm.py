@@ -626,6 +626,7 @@ def diff(
             "--namespace",
             helm_release.namespace,
             "--install",
+            "--dry-run=server",
         ]
         if kctx:
             helm_params.extend(["--kube-context", kctx])
