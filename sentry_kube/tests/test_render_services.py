@@ -1,11 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 from jinja2.exceptions import UndefinedError
 
 from libsentrykube.reversemap import ResourceReference
-from sentry_kube.render_services import _render_multithreaded, render_services
+from sentry_kube.render_services import (
+    _render_multithreaded,
+    _services_to_materialize,
+    render_services,
+)
+
+FLAGS = {"svc-argo": {"legacy_materialization": False}}
+
+
+@pytest.fixture(autouse=True)
+def mock_service_flags():
+    with patch(
+        "sentry_kube.render_services.get_service_flags",
+        side_effect=lambda s: FLAGS.get(s, {}),
+    ):
+        yield
 
 
 def _make_resource(customer, cluster, service=None):
@@ -14,6 +30,27 @@ def _make_resource(customer, cluster, service=None):
         cluster_name=cluster,
         service_name=service,
     )
+
+
+class TestServicesToMaterialize:
+    @patch(
+        "sentry_kube.render_services.get_service_names",
+        return_value=["svc-a", "svc-argo", "svc-b"],
+    )
+    def test_skips_opted_out_services_in_cluster(self, _):
+        assert _services_to_materialize(_make_resource("cust1", "cluster-a")) == [
+            "svc-a",
+            "svc-b",
+        ]
+
+    def test_skips_opted_out_explicit_service(self):
+        assert (
+            _services_to_materialize(_make_resource("cust1", "cluster-a", "svc-argo"))
+            == []
+        )
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-a")
+        ) == ["svc-a"]
 
 
 class TestRenderMultithreaded:
