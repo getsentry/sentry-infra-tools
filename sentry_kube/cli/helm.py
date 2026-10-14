@@ -12,6 +12,7 @@ from libsentrykube.helm import (
     render_values as _helm_render_values,
     rollback as _helm_rollback,
     materialize_values as _helm_materialize_values,
+    materialize_manifests as _helm_materialize_manifests,
 )
 from libsentrykube.service import get_service_names
 
@@ -95,6 +96,16 @@ def _materialize(ctx, services, release, namespace):
     cluster_name = ctx.obj.cluster_name
     for service in services:
         _helm_materialize_values(
+            customer_name, service, cluster_name, release=release, namespace=namespace
+        )
+
+
+@check_helm_bin
+def _materialize_manifests(ctx, services, release, namespace):
+    customer_name = ctx.obj.customer_name
+    cluster_name = ctx.obj.cluster_name
+    for service in services:
+        _helm_materialize_manifests(
             customer_name, service, cluster_name, release=release, namespace=namespace
         )
 
@@ -212,9 +223,24 @@ def _delete(ctx, services, release, namespace, timeout):
 @click.option("--pager/--no-pager", default=True)
 @click.option("--values-only", is_flag=True, help="Render Helm values only")
 @click.option("--materialize", is_flag=True)
+@click.option(
+    "--materialize-manifests",
+    is_flag=True,
+    help="Materialize the fully rendered manifests (offline `helm template`)",
+)
 @click.pass_context
 @allow_for_all_services
-def render(ctx, services, release, namespace, raw, pager, values_only, materialize):
+def render(
+    ctx,
+    services,
+    release,
+    namespace,
+    raw,
+    pager,
+    values_only,
+    materialize,
+    materialize_manifests,
+):
     """
     Render helm service(s).
 
@@ -223,6 +249,9 @@ def render(ctx, services, release, namespace, raw, pager, values_only, materiali
 
     if materialize:
         _materialize(ctx, services, release, namespace)
+        return
+    if materialize_manifests:
+        _materialize_manifests(ctx, services, release, namespace)
         return
     if values_only:
         rendered = _render(ctx, services, release, namespace, raw, _helm_render_values)
