@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Sequence
 
 import click
-from libsentrykube.kube import materialize
+from libsentrykube.kube import DEFAULT_FLAGS, materialize
 from libsentrykube.reversemap import build_index
 from libsentrykube.reversemap import extract_clusters
 from libsentrykube.service import get_service_flags, get_service_names
@@ -22,7 +22,9 @@ def _services_to_materialize(resource) -> list[str]:
     else:
         services = get_service_names()
     return [
-        s for s in services if get_service_flags(s).get("legacy_materialization", True)
+        s
+        for s in services
+        if (DEFAULT_FLAGS | get_service_flags(s))["legacy_materialization"]
     ]
 
 
