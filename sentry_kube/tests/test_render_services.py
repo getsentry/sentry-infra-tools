@@ -33,24 +33,48 @@ def _make_resource(customer, cluster, service=None):
 
 
 class TestServicesToMaterialize:
+    @pytest.fixture(autouse=True)
+    def materialized_dir(self, tmp_path):
+        def build(customer, cluster, service):
+            path = tmp_path / cluster / service
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+
+        with patch(
+            "sentry_kube.render_services.build_materialized_directory",
+            side_effect=build,
+        ):
+            yield tmp_path
+
     @patch(
         "sentry_kube.render_services.get_service_names",
         return_value=["svc-a", "svc-argo", "svc-b"],
     )
     def test_skips_opted_out_services_in_cluster(self, _):
-        assert _services_to_materialize(_make_resource("cust1", "cluster-a")) == [
-            "svc-a",
-            "svc-b",
-        ]
-
-    def test_skips_opted_out_explicit_service(self):
-        assert (
-            _services_to_materialize(_make_resource("cust1", "cluster-a", "svc-argo"))
-            == []
+        assert _services_to_materialize(_make_resource("cust1", "cluster-a")) == (
+            ["svc-a", "svc-b"],
+            False,
         )
+
+    def test_skips_opted_out_explicit_service(self, materialized_dir, capsys):
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-argo")
+        ) == ([], False)
+        assert not (materialized_dir / "cluster-a" / "svc-argo").exists()
+        assert "Service skipped" in capsys.readouterr().out
         assert _services_to_materialize(
             _make_resource("cust1", "cluster-a", "svc-a")
-        ) == ["svc-a"]
+        ) == (["svc-a"], False)
+
+    def test_removes_existing_manifests_of_opted_out_service(self, materialized_dir):
+        stale = materialized_dir / "cluster-a" / "svc-argo"
+        stale.mkdir(parents=True)
+        (stale / "deployment.yaml").write_text("kind: Deployment\n")
+
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-argo")
+        ) == ([], True)
+        assert not stale.exists()
 
 
 class TestRenderMultithreaded:
