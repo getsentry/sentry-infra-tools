@@ -35,14 +35,9 @@ def _make_resource(customer, cluster, service=None):
 class TestServicesToMaterialize:
     @pytest.fixture(autouse=True)
     def materialized_dir(self, tmp_path):
-        def build(customer, cluster, service):
-            path = tmp_path / cluster / service
-            path.mkdir(parents=True, exist_ok=True)
-            return path
-
         with patch(
-            "sentry_kube.render_services.build_materialized_directory",
-            side_effect=build,
+            "sentry_kube.render_services._materialized_directory",
+            side_effect=lambda customer, cluster, service: tmp_path / cluster / service,
         ):
             yield tmp_path
 
@@ -60,7 +55,7 @@ class TestServicesToMaterialize:
         assert _services_to_materialize(
             _make_resource("cust1", "cluster-a", "svc-argo")
         ) == ([], False)
-        assert not (materialized_dir / "cluster-a" / "svc-argo").exists()
+        assert not (materialized_dir / "cluster-a").exists()
         assert "Service skipped" in capsys.readouterr().out
         assert _services_to_materialize(
             _make_resource("cust1", "cluster-a", "svc-a")

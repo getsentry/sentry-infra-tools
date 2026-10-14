@@ -10,15 +10,24 @@ import click
 from libsentrykube.kube import DEFAULT_FLAGS, materialize
 from libsentrykube.reversemap import build_index
 from libsentrykube.reversemap import extract_clusters
-from libsentrykube.service import (
-    build_materialized_directory,
-    get_service_flags,
-    get_service_names,
-)
+from libsentrykube.service import get_service_flags, get_service_names
+from libsentrykube.config import Config
 from libsentrykube.context import init_cluster_context
+from libsentrykube.utils import workspace_root
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+def _materialized_directory(customer_name: str, cluster_name: str, service: str):
+    config = Config().silo_regions[customer_name].k8s_config
+    return (
+        workspace_root()
+        / config.root
+        / config.materialized_manifests
+        / cluster_name
+        / service
+    )
 
 
 def _services_to_materialize(resource) -> tuple[list[str], bool]:
@@ -33,11 +42,10 @@ def _services_to_materialize(resource) -> tuple[list[str], bool]:
         if (DEFAULT_FLAGS | get_service_flags(s))["legacy_materialization"]:
             to_render.append(s)
             continue
-        path = build_materialized_directory(
-            resource.customer_name, resource.cluster_name, s
-        )
-        removed |= any(path.iterdir())
-        shutil.rmtree(path)
+        path = _materialized_directory(resource.customer_name, resource.cluster_name, s)
+        if path.exists():
+            removed |= any(path.iterdir())
+            shutil.rmtree(path)
         click.echo(
             f"Service skipped (legacy_materialization: false): "
             f"{resource.customer_name} : {resource.cluster_name} : {s}"
