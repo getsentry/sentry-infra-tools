@@ -360,6 +360,17 @@ def test_get_service_template_files():
         assert Path("template4.yml.j2") in templates
 
 
+def test_get_service_ctx_merges_files_in_filename_order(tmp_path):
+    (tmp_path / "_values_z.yaml").write_text("setting: z\n")
+    (tmp_path / "_values_a.yaml").write_text("setting: a\n")
+    merge_config = MergeConfig({"default": "overwrite"})
+
+    with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
+        result = get_service_ctx("test-service", merge_config)
+
+    assert result == {"setting": "z"}
+
+
 def test_verify_values_files_no_conflict_no_conflict():
     merge_config = MergeConfig.defaults()
     base = {"workers": {"rabbit-worker-1": {"some": "data"}}}
