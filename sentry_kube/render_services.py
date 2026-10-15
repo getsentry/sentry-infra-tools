@@ -1,19 +1,56 @@
 import logging
 import os
+import shutil
 import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Sequence
 
 import click
-from libsentrykube.kube import materialize
+from libsentrykube.kube import DEFAULT_FLAGS, materialize
 from libsentrykube.reversemap import build_index
 from libsentrykube.reversemap import extract_clusters
-from libsentrykube.service import get_service_names
+from libsentrykube.service import get_service_flags, get_service_names
+from libsentrykube.config import Config
 from libsentrykube.context import init_cluster_context
+from libsentrykube.utils import workspace_root
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+def _materialized_directory(customer_name: str, cluster_name: str, service: str):
+    config = Config().silo_regions[customer_name].k8s_config
+    return (
+        workspace_root()
+        / config.root
+        / config.materialized_manifests
+        / cluster_name
+        / service
+    )
+
+
+def _services_to_materialize(resource) -> tuple[list[str], bool]:
+    if resource.service_name is not None:
+        services = [resource.service_name]
+    else:
+        services = get_service_names()
+
+    to_render = []
+    removed = False
+    for s in services:
+        if (DEFAULT_FLAGS | get_service_flags(s))["legacy_materialization"]:
+            to_render.append(s)
+            continue
+        path = _materialized_directory(resource.customer_name, resource.cluster_name, s)
+        if path.exists():
+            removed |= any(path.iterdir())
+            shutil.rmtree(path)
+        click.echo(
+            f"Service skipped (legacy_materialization: false): "
+            f"{resource.customer_name} : {resource.cluster_name} : {s}"
+        )
+    return to_render, removed
 
 
 def _materialize_service_worker(
@@ -34,19 +71,14 @@ def _render_multithreaded(
     resources_to_render, split_by_kind: bool, workers: int
 ) -> tuple[bool, list[tuple[str, str, str, Exception]]]:
     work_items = []
+    changes_made = False
     for resource in resources_to_render:
         logger.debug(
             f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
         )
         init_cluster_context(resource.customer_name, resource.cluster_name)
-
-        if resource.service_name is not None:
-            logger.debug(f"Materializing service: {resource.service_name}")
-            services_to_materialize = [resource.service_name]
-        else:
-            logger.debug("Getting all service names")
-            services_to_materialize = get_service_names()
-
+        services_to_materialize, removed = _services_to_materialize(resource)
+        changes_made |= removed
         logger.debug(f"Services to materialize: {services_to_materialize}")
 
         for service_name in services_to_materialize:
@@ -54,7 +86,6 @@ def _render_multithreaded(
                 (resource.customer_name, service_name, resource.cluster_name)
             )
 
-    changes_made = False
     errors: list[tuple[str, str, str, Exception]] = []
     future_to_work = {}
     with ProcessPoolExecutor(max_workers=workers) as executor:
@@ -180,14 +211,8 @@ def render_services(
                 f"Initializing cluster context for {resource.customer_name} : {resource.cluster_name}"
             )
             init_cluster_context(resource.customer_name, resource.cluster_name)
-
-            if resource.service_name is not None:
-                logger.debug(f"Materializing service: {resource.service_name}")
-                services_to_materialize = [resource.service_name]
-            else:
-                logger.debug("Getting all service names")
-                services_to_materialize = get_service_names()
-
+            services_to_materialize, removed = _services_to_materialize(resource)
+            changes_made |= removed
             logger.debug(f"Services to materialize: {services_to_materialize}")
 
             for s in services_to_materialize:

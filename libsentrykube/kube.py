@@ -64,6 +64,7 @@ DEFAULT_FLAGS = {
     "jinja_whitespace_easymode": True,
     "server_side_apply": False,
     "force_conflicts": False,
+    "legacy_materialization": True,
 }
 
 
