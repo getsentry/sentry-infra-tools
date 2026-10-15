@@ -1,3 +1,18 @@
+## 1.34.2
+
+### New Features ✨
+
+- (sentry-kube) Add options subcommand breakglass by @joshuarli in [#252](https://github.com/getsentry/sentry-infra-tools/pull/252)
+
+### Bug Fixes 🐛
+
+- (sentry-kube) Default run-pod to getsentry-control in control silo by @oioki in [#256](https://github.com/getsentry/sentry-infra-tools/pull/256)
+
+### Other
+
+- render_services: skip legacy materialization per service by @tnt-sentry in [#257](https://github.com/getsentry/sentry-infra-tools/pull/257)
+- fix cloudbuild by @joshuarli in [#253](https://github.com/getsentry/sentry-infra-tools/pull/253)
+
 ## 1.34.1
 
 - kube: copy consolidated values without copy.deepcopy by @tnt-sentry in [#249](https://github.com/getsentry/sentry-infra-tools/pull/249)
