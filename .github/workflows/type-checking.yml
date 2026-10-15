@@ -9,12 +9,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
           python-version: 3.11
 
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements*.txt
+
       - name: Make environment
-        run: make install-all-dependencies
+        run: uv pip install --system -r requirements-dev.txt -r requirements.txt
 
       - name: Run strict mypy
         run: make cli-typecheck
