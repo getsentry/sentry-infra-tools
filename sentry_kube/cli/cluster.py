@@ -7,6 +7,8 @@ from libsentrykube.config import Config
 from libsentrykube.customer import get_project
 from libsentrykube.gcloud import get_all_gke_clusters, get_channel_versions
 
+from .network import network
+
 __all__ = ("cluster",)
 
 
@@ -81,13 +83,22 @@ def upgrade_cluster_to_version(project: str, cluster_name: str, version: str) ->
                 )
 
 
-@click.command()
+@click.group(invoke_without_command=True)
 @click.pass_context
 @click.option("--list", is_flag=True)
 @click.option("--upgrade", is_flag=True)
 @click.option("--cluster", "cluster", type=str, default="")
 @click.option("--version", "version", type=str, default="")
 def cluster(ctx, list: bool, upgrade: bool, cluster: str, version: str = ""):
+    """
+    Inspect and manage the GKE cluster behind the selected sentry-kube cluster.
+
+    Without a subcommand, --list shows available GKE versions and --upgrade
+    upgrades to --version.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+
     customer_name = ctx.obj.customer_name
     config = Config()
     project_name = get_project(config, customer_name, cluster)
@@ -108,3 +119,6 @@ def cluster(ctx, list: bool, upgrade: bool, cluster: str, version: str = ""):
             color=True,
         )
         click.Abort()
+
+
+cluster.add_command(network)
