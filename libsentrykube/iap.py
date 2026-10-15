@@ -48,7 +48,9 @@ def _get_cluster_credentials(context: str) -> None:
         "--project",
         project,
     ]
-    click.echo(f"Running: {' '.join(cmd)}")
+    # stderr, so commands that print machine-readable output (e.g. `-o json`)
+    # aren't corrupted on the run that fetches credentials.
+    click.echo(f"Running: {' '.join(cmd)}", err=True)
     # Set KUBECONFIG to ensure gcloud writes to the same path we read from
     env = os.environ.copy()
     env["KUBECONFIG"] = KUBE_CONFIG_PATH

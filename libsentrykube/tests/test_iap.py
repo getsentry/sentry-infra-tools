@@ -93,6 +93,9 @@ def test_get_cluster_credentials_success(mock_echo, mock_run) -> None:
     # Verify KUBECONFIG is passed to subprocess
     env = mock_run.call_args[1]["env"]
     assert env["KUBECONFIG"] == "/tmp/test-kubeconfig"
+    # Progress output goes to stderr so it can't corrupt stdout (e.g. JSON).
+    mock_echo.assert_called_once()
+    assert mock_echo.call_args.kwargs.get("err") is True
 
 
 @mock.patch("builtins.open", new_callable=mock.mock_open, read_data="")
