@@ -10,6 +10,14 @@ from libsentrykube.network import ClusterNetwork, GkeClusterRef, fetch_cluster_n
 # Registered as `sentry-kube cluster network` (see cluster.py), not top level.
 
 
+def gke_cluster_ref(ctx: click.Context) -> GkeClusterRef:
+    """The GKE cluster behind the selected sentry-kube cluster's kube context."""
+    try:
+        return GkeClusterRef.from_context(ctx.obj.context_name)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+
+
 @click.command()
 @click.option(
     "--output",
@@ -40,11 +48,7 @@ def network(ctx: click.Context, output: str, warn_threshold: int, check: bool) -
     Node range usage counts IPs held by VMs, internal load balancers and
     address reservations of the cluster's project.
     """
-    try:
-        cluster = GkeClusterRef.from_context(ctx.obj.context_name)
-    except ValueError as e:
-        raise click.ClickException(str(e))
-
+    cluster = gke_cluster_ref(ctx)
     try:
         result = fetch_cluster_network(cluster, warn_threshold=warn_threshold / 100)
     except HttpError as e:

@@ -4,12 +4,15 @@ import pytest
 
 import logging
 
-from libsentrykube.gcloud import build_api, get_channel_versions
+from libsentrykube.gcloud import build_api, get_channel_versions, get_release_channel
 
 
 @pytest.fixture
 def mock_container_resource():
-    with patch("libsentrykube.gcloud.googleapiclient.discovery.build") as mock_build:
+    with (
+        patch("libsentrykube.gcloud.googleapiclient.discovery.build") as mock_build,
+        patch("libsentrykube.gcloud.google.auth.default", return_value=("creds", None)),
+    ):
         yield mock_build
 
 
@@ -44,6 +47,14 @@ def test_get_channel_versions_bad_response(mock_container_resource):
         get_channel_versions(project, zone, channel)
 
     assert str(e.value) == "Bad channel API response"
+
+
+def test_get_release_channel_returns_channel_config(mock_container_resource):
+    channel = {"channel": "stable", "defaultVersion": "1.2.3", "validVersions": []}
+    mock_execute = MagicMock(return_value={"channels": [{"channel": "rapid"}, channel]})
+    mock_container_resource.return_value.projects.return_value.zones.return_value.getServerconfig.return_value.execute = mock_execute
+
+    assert get_release_channel("test_project", "test_zone", "stable") == channel
 
 
 def test_build_api_passes_credentials_without_cache(mock_container_resource):
