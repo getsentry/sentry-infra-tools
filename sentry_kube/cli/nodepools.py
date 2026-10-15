@@ -91,6 +91,18 @@ def nodepools(
         ctx.exit(1)
 
 
+# Long ComputeClass fallback lists are cut short in text output (JSON has all).
+MAX_PRIORITIES_SHOWN = 6
+
+
+def _priorities(priorities: list[str]) -> str:
+    if not priorities:
+        return "(no priorities)"
+    shown = " → ".join(priorities[:MAX_PRIORITIES_SHOWN])
+    hidden = len(priorities) - MAX_PRIORITIES_SHOWN
+    return f"{shown} → … (+{hidden} more)" if hidden > 0 else shown
+
+
 def _bound(value: int | None) -> str:
     return "?" if value is None else str(value)
 
@@ -112,6 +124,11 @@ def format_text(result: ClusterNodePools) -> str:
                 f"  {limit.resource:<7} {limit.used:.0f} / {limit.maximum:.0f} "
                 f"{limit.unit} ({_pct(limit.utilization)})"
             )
+    elif any(cc.auto_create for cc in result.compute_classes):
+        lines.append(
+            "Node auto-provisioning: disabled cluster-wide "
+            "(compute classes still auto-create node pools)"
+        )
     else:
         lines.append("Node auto-provisioning: disabled")
     lines.append("")
@@ -162,14 +179,16 @@ def format_text(result: ClusterNodePools) -> str:
     )
     lines.append("")
 
-    if result.compute_classes:
+    used = [cc for cc in result.compute_classes if cc.nodes]
+    unused = [cc.name for cc in result.compute_classes if not cc.nodes]
+    if used or unused:
         lines.append("Compute classes:")
-        for cc in result.compute_classes:
+        for cc in used:
             create = "auto-creates pools" if cc.auto_create else "existing pools only"
-            lines.append(
-                f"  {cc.name}: {' → '.join(cc.priorities) or '(no priorities)'}"
-            )
+            lines.append(f"  {cc.name}: {_priorities(cc.priorities)}")
             lines.append(f"    {create}; {cc.pools} pool(s), {cc.nodes} node(s)")
+        if unused:
+            lines.append(click.style(f"  No nodes: {', '.join(unused)}", dim=True))
         lines.append("")
 
     for note in result.notes:

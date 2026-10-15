@@ -58,10 +58,12 @@ def result(findings: list[str]) -> ClusterNodePools:
             ),
         ],
         compute_classes=[
-            ComputeClass("general-purpose", ["n4", "c4d"], True, pools=1, nodes=12)
+            ComputeClass("general-purpose", ["n4", "c4d"], True, pools=1, nodes=12),
+            ComputeClass("unused-a", ["n2"], True, pools=0, nodes=0),
+            ComputeClass("unused-b", [], False, pools=0, nodes=0),
         ],
         findings=findings,
-        notes=["Compute classes with no nodes: unused"],
+        notes=["Empty node pools outside any compute class: pool-z"],
     )
 
 
@@ -99,7 +101,9 @@ def test_text(mocks) -> None:
     assert "default" in legacy and "1-3 (max)" in legacy and legacy.split()[0] == "-"
     assert "  general-purpose: n4 → c4d" in out
     assert "auto-creates pools; 1 pool(s), 12 node(s)" in out
-    assert "ℹ Compute classes with no nodes: unused" in out
+    assert "  No nodes: unused-a, unused-b" in out
+    assert "unused-a:" not in out
+    assert "ℹ Empty node pools outside any compute class: pool-z" in out
     assert "No findings" in out
 
 
@@ -161,3 +165,31 @@ def test_unknown_autoscaling_bound() -> None:
     )
     assert " 0-? " in out
     assert "Node auto-provisioning: disabled" in out
+
+
+def test_autoprovisioning_disabled_but_classes_create_pools() -> None:
+    classes = [ComputeClass("cc", ["n4"], True, pools=0, nodes=0)]
+    out = format_text(
+        ClusterNodePools(
+            REF, "1.37.0-gke.3", autoprovisioning=False, compute_classes=classes
+        )
+    )
+    assert (
+        "Node auto-provisioning: disabled cluster-wide "
+        "(compute classes still auto-create node pools)"
+    ) in out
+
+
+def test_long_priority_lists_are_truncated() -> None:
+    priorities = [f"family-{i}" for i in range(10)]
+    classes = [ComputeClass("cc", priorities, True, pools=1, nodes=1)]
+    out = format_text(
+        ClusterNodePools(
+            REF, "1.37.0-gke.3", autoprovisioning=True, compute_classes=classes
+        )
+    )
+    assert (
+        "  cc: family-0 → family-1 → family-2 → family-3 → family-4 → family-5" in out
+    )
+    assert "family-6" not in out
+    assert "→ … (+4 more)" in out

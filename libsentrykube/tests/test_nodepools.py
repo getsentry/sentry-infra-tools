@@ -88,6 +88,7 @@ GENERAL_PURPOSE = {
             {"machineFamily": "c4d", "spot": True},
             {"machineType": "n2-standard-16"},
             {"nodepools": ["pool-x", "pool-y"]},
+            {"podFamily": "general-purpose"},
         ],
     },
 }
@@ -101,7 +102,7 @@ def build(**kwargs: Any) -> ClusterNodePools:
             autoscaling={
                 "enabled": True,
                 "autoprovisioned": True,
-                "minNodeCount": 0,
+                # GKE omits a zero minNodeCount.
                 "maxNodeCount": 1000,
             },
         ),
@@ -116,7 +117,7 @@ def build(**kwargs: Any) -> ClusterNodePools:
             },
             labels={"nodepool.sentry.io/name": "default"},
         ),
-        gke_pool("legacy-empty", autoscaling={"enabled": True, "minNodeCount": 0}),
+        gke_pool("legacy-empty", autoscaling={"enabled": True, "maxNodeCount": 5}),
         gke_pool("static", version="1.36.4-gke.2"),
     ]
     args: dict[str, Any] = {
@@ -194,6 +195,7 @@ def test_compute_classes() -> None:
         "c4d (spot)",
         "n2-standard-16",
         "pools pool-x,pool-y",
+        "podFamily general-purpose",
     ]
     assert gp.auto_create
     assert (gp.pools, gp.nodes) == (1, 2)
@@ -214,13 +216,29 @@ def test_findings_and_notes() -> None:
         "at the limit the cluster autoscaler can't add nodes",
         "Node pool legacy-default is at its autoscaling maximum "
         "(2/2 nodes, 88% of CPU requested); it can't scale up",
-        "1 node pool(s) are 2+ minor versions behind the control plane "
-        "(1.37.0-gke.3): legacy-default",
+        "1 node pool(s) are 2 minor versions behind the control plane "
+        "(1.37.0-gke.3), the most GKE supports; upgrade them before the control "
+        "plane's next minor upgrade: legacy-default",
     ]
     assert result.notes == [
         "Empty node pools outside any compute class (0 nodes, min 0), "
         "possibly removable: legacy-empty",
-        "Compute classes with no nodes: unused",
+    ]
+
+
+def test_version_skew_beyond_supported() -> None:
+    pools = [
+        gke_pool("ok", version="1.36.4-gke.2"),
+        gke_pool("at-limit", version="1.35.6-gke.1"),
+        gke_pool("beyond", version="1.34.12-gke.1"),
+    ]
+    result = build(gke_cluster=gke_cluster(pools, autoscaling={}), nodes=[], pods=[])
+    assert result.findings == [
+        "1 node pool(s) are 2 minor versions behind the control plane "
+        "(1.37.0-gke.3), the most GKE supports; upgrade them before the control "
+        "plane's next minor upgrade: at-limit",
+        "1 node pool(s) are more than 2 minor versions behind the control plane "
+        "(1.37.0-gke.3), beyond what GKE supports: beyond",
     ]
 
 

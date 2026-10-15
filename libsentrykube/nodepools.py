@@ -160,6 +160,8 @@ def _format_priority(priority: Mapping[str, Any]) -> str:
         text = str(priority["machineFamily"])
     elif priority.get("nodepools"):
         text = "pools " + ",".join(priority["nodepools"])
+    elif priority.get("podFamily"):
+        text = f"podFamily {priority['podFamily']}"
     else:
         text = "/".join(sorted(priority)) or "any"
     extras = []
@@ -251,7 +253,8 @@ def build_cluster_nodepools(
                 version=str(gke_pool.get("version", "")),
                 nodes=pool_nodes[name],
                 autoscaling=enabled,
-                min_nodes=_total_bound(autoscaling, "minNodeCount", zones)
+                # GKE omits a zero minimum from the API response.
+                min_nodes=(_total_bound(autoscaling, "minNodeCount", zones) or 0)
                 if enabled
                 else None,
                 max_nodes=_total_bound(autoscaling, "maxNodeCount", zones)
@@ -324,19 +327,30 @@ def build_cluster_nodepools(
     control_plane = str(gke_cluster.get("currentMasterVersion", ""))
     cp_minor = _minor(control_plane)
     if cp_minor is not None:
-        behind = []
+        # GKE supports node pools up to VERSION_SKEW_MINORS minor versions
+        # behind the control plane.
+        at_limit, beyond = [], []
         for pool in pools:
             minor = _minor(pool.version)
-            if (
-                minor is not None
-                and minor[0] == cp_minor[0]
-                and cp_minor[1] - minor[1] >= VERSION_SKEW_MINORS
-            ):
-                behind.append(pool.name)
-        if behind:
+            if minor is None or minor[0] != cp_minor[0]:
+                continue
+            skew = cp_minor[1] - minor[1]
+            if skew == VERSION_SKEW_MINORS:
+                at_limit.append(pool.name)
+            elif skew > VERSION_SKEW_MINORS:
+                beyond.append(pool.name)
+        if at_limit:
             findings.append(
-                f"{len(behind)} node pool(s) are {VERSION_SKEW_MINORS}+ minor versions "
-                f"behind the control plane ({control_plane}): {_names(behind)}"
+                f"{len(at_limit)} node pool(s) are {VERSION_SKEW_MINORS} minor versions "
+                f"behind the control plane ({control_plane}), the most GKE supports; "
+                "upgrade them before the control plane's next minor upgrade: "
+                f"{_names(at_limit)}"
+            )
+        if beyond:
+            findings.append(
+                f"{len(beyond)} node pool(s) are more than {VERSION_SKEW_MINORS} minor "
+                f"versions behind the control plane ({control_plane}), beyond what GKE "
+                f"supports: {_names(beyond)}"
             )
 
     notes = []
@@ -353,9 +367,6 @@ def build_cluster_nodepools(
             "Empty node pools outside any compute class (0 nodes, min 0), "
             f"possibly removable: {_names(empty_legacy)}"
         )
-    unused = [c.name for c in classes if c.nodes == 0]
-    if unused:
-        notes.append(f"Compute classes with no nodes: {_names(unused)}")
 
     return ClusterNodePools(
         cluster=cluster,
