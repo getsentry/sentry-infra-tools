@@ -118,6 +118,16 @@ def _ips_in(addresses: Iterable[Optional[str]], network: IPv4Network) -> set[str
     return found
 
 
+def pool_pod_range(
+    pool: Mapping[str, Any], default_pod_range: Optional[str]
+) -> Optional[str]:
+    """
+    The secondary range a node pool's pods get IPs from. It's fixed when the
+    pool is created; pools without one use the cluster's default pod range.
+    """
+    return (pool.get("networkConfig") or {}).get("podRange") or default_pod_range
+
+
 def _node_counts(
     cluster: GkeClusterRef, instances: Iterable[Mapping[str, Any]]
 ) -> Counter[str]:
@@ -194,9 +204,7 @@ def build_cluster_network(
     ):
         pod_ranges.setdefault(name, 0)
     for pool in gke_cluster.get("nodePools", []):
-        range_name = (pool.get("networkConfig") or {}).get(
-            "podRange"
-        ) or default_pod_range
+        range_name = pool_pod_range(pool, default_pod_range)
         block_size = pool.get("podIpv4CidrSize")
         if not range_name or not block_size:
             continue

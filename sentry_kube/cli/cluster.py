@@ -14,6 +14,7 @@ from libsentrykube.gcloud import (
 )
 
 from .network import gke_cluster_ref, network
+from .nodepools import nodepools
 
 __all__ = ("cluster",)
 
@@ -278,3 +279,4 @@ def upgrade(ctx: click.Context, version: str, yes: bool) -> None:
 
 
 cluster.add_command(network)
+cluster.add_command(nodepools)
