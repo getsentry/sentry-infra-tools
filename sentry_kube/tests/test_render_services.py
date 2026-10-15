@@ -1,11 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 from jinja2.exceptions import UndefinedError
 
 from libsentrykube.reversemap import ResourceReference
-from sentry_kube.render_services import _render_multithreaded, render_services
+from sentry_kube.render_services import (
+    _render_multithreaded,
+    _services_to_materialize,
+    render_services,
+)
+
+FLAGS = {"svc-argo": {"legacy_materialization": False}}
+
+
+@pytest.fixture(autouse=True)
+def mock_service_flags():
+    with patch(
+        "sentry_kube.render_services.get_service_flags",
+        side_effect=lambda s: FLAGS.get(s, {}),
+    ):
+        yield
 
 
 def _make_resource(customer, cluster, service=None):
@@ -14,6 +30,46 @@ def _make_resource(customer, cluster, service=None):
         cluster_name=cluster,
         service_name=service,
     )
+
+
+class TestServicesToMaterialize:
+    @pytest.fixture(autouse=True)
+    def materialized_dir(self, tmp_path):
+        with patch(
+            "sentry_kube.render_services._materialized_directory",
+            side_effect=lambda customer, cluster, service: tmp_path / cluster / service,
+        ):
+            yield tmp_path
+
+    @patch(
+        "sentry_kube.render_services.get_service_names",
+        return_value=["svc-a", "svc-argo", "svc-b"],
+    )
+    def test_skips_opted_out_services_in_cluster(self, _):
+        assert _services_to_materialize(_make_resource("cust1", "cluster-a")) == (
+            ["svc-a", "svc-b"],
+            False,
+        )
+
+    def test_skips_opted_out_explicit_service(self, materialized_dir, capsys):
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-argo")
+        ) == ([], False)
+        assert not (materialized_dir / "cluster-a").exists()
+        assert "Service skipped" in capsys.readouterr().out
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-a")
+        ) == (["svc-a"], False)
+
+    def test_removes_existing_manifests_of_opted_out_service(self, materialized_dir):
+        stale = materialized_dir / "cluster-a" / "svc-argo"
+        stale.mkdir(parents=True)
+        (stale / "deployment.yaml").write_text("kind: Deployment\n")
+
+        assert _services_to_materialize(
+            _make_resource("cust1", "cluster-a", "svc-argo")
+        ) == ([], True)
+        assert not stale.exists()
 
 
 class TestRenderMultithreaded:

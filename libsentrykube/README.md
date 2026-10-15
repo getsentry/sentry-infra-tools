@@ -97,6 +97,7 @@ If the file is absent or a flag is omitted, the default value is used.
 | `jinja_whitespace_easymode` | bool | `true` | Enables `trim_blocks` and `lstrip_blocks` in the Jinja environment, making whitespace handling more forgiving. Set to `false` if you need precise control over whitespace in templates. |
 | `server_side_apply` | bool | `false` | Use server-side apply (SSA) for `sentry-kube diff` and `sentry-kube apply`. SSA tracks field ownership on the server and avoids the `last-applied-configuration` annotation, which can exceed the 256 KB annotation size limit for large manifests. |
 | `force_conflicts` | bool | `false` | When `server_side_apply` is enabled, also pass `--force-conflicts` to override field ownership conflicts. |
+| `legacy_materialization` | bool | `true` | Render the service into `k8s/materialized_manifests` via `render_services`. Set to `false` once the service is fully on ArgoCD. |
 
 ### How flags are resolved
 
