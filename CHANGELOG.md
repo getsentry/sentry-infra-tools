@@ -1,3 +1,17 @@
+## 1.35.0
+
+### New Features ✨
+
+#### Sentry Kube
+
+- Add `cluster nodepools` by @mwarkentin in [#258](https://github.com/getsentry/sentry-infra-tools/pull/258)
+- Add `cluster versions` and `cluster upgrade` subcommands by @mwarkentin in [#255](https://github.com/getsentry/sentry-infra-tools/pull/255)
+- Add `cluster network` for GKE cluster networking by @mwarkentin in [#254](https://github.com/getsentry/sentry-infra-tools/pull/254)
+
+### Internal Changes 🔧
+
+- Speed up dependency and kube-linter installs by @mwarkentin in [#260](https://github.com/getsentry/sentry-infra-tools/pull/260)
+
 ## 1.34.2
 
 ### New Features ✨
