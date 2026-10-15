@@ -227,3 +227,17 @@ def test_pod_range_column_only_with_multiple_ranges() -> None:
     lines = out.splitlines()
     assert "pods-a (/24)" in next(line for line in lines if "pool-a" in line)
     assert "pods-b (/26)" in next(line for line in lines if "pool-b" in line)
+
+
+def test_shared_priority_constraints_shown_once() -> None:
+    classes = [
+        ComputeClass(
+            "cc", ["n4", "c4d"], True, pools=1, nodes=1, shared_constraints="≥30 cores"
+        )
+    ]
+    out = format_text(
+        ClusterNodePools(
+            REF, "1.37.0-gke.3", autoprovisioning=True, compute_classes=classes
+        )
+    )
+    assert "  cc (all ≥30 cores): n4 → c4d" in out

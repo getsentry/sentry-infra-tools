@@ -248,6 +248,73 @@ def test_findings_and_notes() -> None:
     ]
 
 
+def test_pools_held_idle_at_minimum() -> None:
+    held = {"enabled": True, "totalMinNodeCount": 2, "totalMaxNodeCount": 10}
+    pools = [
+        gke_pool("idle-at-min", autoscaling=held),
+        gke_pool("busy-at-min", autoscaling=held),
+        gke_pool("idle-above-min", autoscaling={**held, "totalMinNodeCount": 1}),
+        gke_pool("idle-min-zero", autoscaling={"enabled": True, "maxNodeCount": 5}),
+        gke_pool("idle-static"),
+    ]
+    nodes = [
+        node("a1", "idle-at-min"),
+        node("a2", "idle-at-min"),
+        node("b1", "busy-at-min"),
+        node("b2", "busy-at-min"),
+        node("c1", "idle-above-min"),
+        node("c2", "idle-above-min"),
+        node("d1", "idle-min-zero"),
+        node("e1", "idle-static"),
+    ]
+    pods = [
+        pod("a1", cpu="1", memory="1Gi"),
+        # Memory-bound: low CPU but most memory requested.
+        pod("b1", cpu="1", memory="20Gi"),
+        pod("b2", cpu="1", memory="20Gi"),
+    ]
+    result = build(gke_cluster=gke_cluster(pools), nodes=nodes, pods=pods)
+    assert result.notes == [
+        "Node pools held at their autoscaling minimum with under 25% of CPU and "
+        "memory requested; the minimum keeps these nodes running: "
+        "idle-at-min (2 nodes, 6% CPU / 2% memory)",
+    ]
+
+
+def test_shared_priority_constraints() -> None:
+    def cc(name: str, priorities: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"metadata": {"name": name}, "spec": {"priorities": priorities}}
+
+    classes = {
+        c.name: c
+        for c in build(
+            compute_classes=[
+                cc(
+                    "shared",
+                    [
+                        {"machineFamily": "n4", "minCores": 30},
+                        {"machineFamily": "c4d", "minCores": 30},
+                    ],
+                ),
+                cc(
+                    "mixed",
+                    [
+                        {"machineFamily": "n4", "minCores": 30},
+                        {"machineFamily": "c4d"},
+                    ],
+                ),
+                cc("single", [{"machineFamily": "n4", "minCores": 30}]),
+            ]
+        ).compute_classes
+    }
+    assert classes["shared"].priorities == ["n4", "c4d"]
+    assert classes["shared"].shared_constraints == "≥30 cores"
+    assert classes["mixed"].priorities == ["n4 (≥30 cores)", "c4d"]
+    assert classes["mixed"].shared_constraints is None
+    assert classes["single"].priorities == ["n4 (≥30 cores)"]
+    assert classes["single"].shared_constraints is None
+
+
 def test_version_skew_beyond_supported() -> None:
     pools = [
         gke_pool("ok", version="1.36.4-gke.2"),

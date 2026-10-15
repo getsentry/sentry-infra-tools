@@ -206,7 +206,8 @@ def format_text(result: ClusterNodePools) -> str:
         lines.append("Compute classes:")
         for cc in used:
             create = "auto-creates pools" if cc.auto_create else "existing pools only"
-            lines.append(f"  {cc.name}: {_priorities(cc.priorities)}")
+            shared = f" (all {cc.shared_constraints})" if cc.shared_constraints else ""
+            lines.append(f"  {cc.name}{shared}: {_priorities(cc.priorities)}")
             lines.append(f"    {create}; {cc.pools} pool(s), {cc.nodes} node(s)")
         if unused:
             lines.append(click.style(f"  No nodes: {', '.join(unused)}", dim=True))

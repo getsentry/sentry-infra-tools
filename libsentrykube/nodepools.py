@@ -24,6 +24,9 @@ SENTRY_NODE_POOL_LABEL = "nodepool.sentry.io/name"
 DEFAULT_WARN_THRESHOLD = 0.8
 # Node pools this many minor versions behind the control plane are reported.
 VERSION_SKEW_MINORS = 2
+# Pools held at their autoscaling minimum with less than this share of both CPU
+# and memory requested are noted as over-provisioned.
+LOW_UTILIZATION = 0.25
 GIB = Decimal(2**30)
 _MINOR_VERSION = re.compile(r"^(\d+)\.(\d+)")
 
@@ -74,6 +77,9 @@ class ComputeClass:
     auto_create: bool
     pools: int
     nodes: int
+    # Constraints every priority shares (e.g. "≥30 cores"), left out of
+    # `priorities` so they aren't repeated on each one.
+    shared_constraints: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -158,7 +164,8 @@ def pod_requests(pod: Mapping[str, Any]) -> tuple[Decimal, Decimal]:
     )
 
 
-def _format_priority(priority: Mapping[str, Any]) -> str:
+def _priority_parts(priority: Mapping[str, Any]) -> tuple[str, str]:
+    """A ComputeClass priority as (what it selects, its constraints)."""
     if priority.get("machineType"):
         text = str(priority["machineType"])
     elif priority.get("machineFamily"):
@@ -176,7 +183,18 @@ def _format_priority(priority: Mapping[str, Any]) -> str:
         extras.append(f"≥{priority['minCores']} cores")
     if priority.get("minMemoryGb"):
         extras.append(f"≥{priority['minMemoryGb']} GB")
-    return f"{text} ({', '.join(extras)})" if extras else text
+    return text, ", ".join(extras)
+
+
+def _format_priorities(
+    priorities: Sequence[Mapping[str, Any]],
+) -> tuple[list[str], Optional[str]]:
+    """Formatted priorities, with constraints shared by all of them split out."""
+    parts = [_priority_parts(p) for p in priorities]
+    shared = {extras for _, extras in parts}
+    if len(parts) > 1 and len(shared) == 1 and parts[0][1]:
+        return [text for text, _ in parts], parts[0][1]
+    return [f"{text} ({extras})" if extras else text for text, extras in parts], None
 
 
 def _total_bound(autoscaling: Mapping[str, Any], key: str, zones: int) -> Optional[int]:
@@ -286,10 +304,14 @@ def build_cluster_nodepools(
         name = (cc.get("metadata") or {}).get("name", "")
         spec = cc.get("spec") or {}
         members = [p for p in pools if p.compute_class == name]
+        priorities, shared_constraints = _format_priorities(
+            spec.get("priorities") or []
+        )
         classes.append(
             ComputeClass(
                 name=name,
-                priorities=[_format_priority(p) for p in spec.get("priorities", [])],
+                priorities=priorities,
+                shared_constraints=shared_constraints,
                 auto_create=bool(
                     (spec.get("nodePoolAutoCreation") or {}).get("enabled")
                 ),
@@ -379,6 +401,23 @@ def build_cluster_nodepools(
         notes.append(
             "Empty node pools outside any compute class (0 nodes, min 0), "
             f"possibly removable: {_names(empty_legacy)}"
+        )
+    held_idle = [
+        f"{p.name} ({p.nodes} nodes, {p.cpu_utilization:.0%} CPU / "
+        f"{p.memory_utilization:.0%} memory)"
+        for p in pools
+        if p.autoscaling
+        and p.min_nodes
+        and 0 < p.nodes <= p.min_nodes
+        and p.cpu_utilization is not None
+        and p.memory_utilization is not None
+        and max(p.cpu_utilization, p.memory_utilization) < LOW_UTILIZATION
+    ]
+    if held_idle:
+        notes.append(
+            "Node pools held at their autoscaling minimum with under "
+            f"{LOW_UTILIZATION:.0%} of CPU and memory requested; the minimum "
+            f"keeps these nodes running: {_names(held_idle)}"
         )
 
     return ClusterNodePools(
