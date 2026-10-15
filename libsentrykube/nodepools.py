@@ -16,7 +16,7 @@ from kubernetes.client.exceptions import ApiException
 from kubernetes.utils import parse_quantity
 
 from libsentrykube.gcloud import build_api
-from libsentrykube.network import GkeClusterRef
+from libsentrykube.network import GkeClusterRef, pool_pod_range
 
 COMPUTE_CLASS_LABEL = "cloud.google.com/compute-class"
 NODE_POOL_LABEL = "cloud.google.com/gke-nodepool"
@@ -44,6 +44,11 @@ class NodePool:
     cpu_requested: float = 0.0
     memory_allocatable_gib: float = 0.0
     memory_requested_gib: float = 0.0
+    # Secondary range the pool's pods get IPs from, and the block (prefix
+    # length) each node reserves from it, sized by max pods per node.
+    pod_range: Optional[str] = None
+    pod_block_prefix: Optional[int] = None
+    max_pods_per_node: Optional[int] = None
 
     @property
     def cpu_utilization(self) -> Optional[float]:
@@ -230,6 +235,9 @@ def build_cluster_nodepools(
         requested[pool][0] += cpu
         requested[pool][1] += memory
 
+    default_pod_range = (gke_cluster.get("ipAllocationPolicy") or {}).get(
+        "clusterSecondaryRangeName"
+    )
     pools = []
     for gke_pool in gke_cluster.get("nodePools", []):
         name = gke_pool["name"]
@@ -238,6 +246,8 @@ def build_cluster_nodepools(
         autoscaling = gke_pool.get("autoscaling") or {}
         zones = len(gke_pool.get("locations") or []) or 1
         enabled = bool(autoscaling.get("enabled"))
+        block_prefix = gke_pool.get("podIpv4CidrSize")
+        max_pods = (gke_pool.get("maxPodsConstraint") or {}).get("maxPodsPerNode")
         compute_class = (
             pool_classes[name].most_common(1)[0][0]
             if pool_classes[name]
@@ -264,6 +274,9 @@ def build_cluster_nodepools(
                 cpu_requested=float(requested[name][0]),
                 memory_allocatable_gib=float(allocatable[name][1] / GIB),
                 memory_requested_gib=float(requested[name][1] / GIB),
+                pod_range=pool_pod_range(gke_pool, default_pod_range),
+                pod_block_prefix=int(block_prefix) if block_prefix else None,
+                max_pods_per_node=int(max_pods) if max_pods else None,
             )
         )
     pools.sort(key=lambda p: (p.compute_class is None, p.compute_class or "", p.name))

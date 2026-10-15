@@ -199,3 +199,31 @@ def test_no_pools() -> None:
     out = format_text(ClusterNodePools(REF, "1.37.0-gke.3", autoprovisioning=False))
     assert "No node pools" in out
     assert "COMPUTE CLASS" not in out
+
+
+def _pool(name: str, pod_range: str | None, prefix: int | None = 24) -> NodePool:
+    return NodePool(
+        name=name,
+        compute_class=None,
+        sentry_name=None,
+        machine_type="n4-standard-8",
+        autoprovisioned=False,
+        version="1.37.0-gke.3",
+        nodes=1,
+        autoscaling=False,
+        pod_range=pod_range,
+        pod_block_prefix=prefix,
+    )
+
+
+def test_pod_range_column_only_with_multiple_ranges() -> None:
+    one = [_pool("pool-a", "pods-a"), _pool("pool-b", "pods-a")]
+    out = format_text(ClusterNodePools(REF, "1.37.0-gke.3", False, pools=one))
+    assert "POD RANGE" not in out
+
+    two = [_pool("pool-a", "pods-a"), _pool("pool-b", "pods-b", 26)]
+    out = format_text(ClusterNodePools(REF, "1.37.0-gke.3", False, pools=two))
+    assert "POD RANGE" in out
+    lines = out.splitlines()
+    assert "pods-a (/24)" in next(line for line in lines if "pool-a" in line)
+    assert "pods-b (/26)" in next(line for line in lines if "pool-b" in line)

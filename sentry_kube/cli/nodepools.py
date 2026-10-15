@@ -115,7 +115,18 @@ def _pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.0%}"
 
 
+def _pod_range(pool: NodePool) -> str:
+    if not pool.pod_range:
+        return "-"
+    if pool.pod_block_prefix is None:
+        return pool.pod_range
+    return f"{pool.pod_range} (/{pool.pod_block_prefix})"
+
+
 def _pool_table(pools: list[NodePool]) -> str:
+    # Most clusters put every pool on the default pod range; only show the
+    # column once pools are spread across more than one.
+    show_pod_range = len({p.pod_range for p in pools if p.pod_range}) > 1
     rows = [
         [
             pool.compute_class or "-",
@@ -129,6 +140,7 @@ def _pool_table(pools: list[NodePool]) -> str:
             else "off",
             _pct(pool.cpu_utilization),
             _pct(pool.memory_utilization),
+            *([_pod_range(pool)] if show_pod_range else []),
             pool.version,
         ]
         for pool in pools
@@ -144,6 +156,7 @@ def _pool_table(pools: list[NodePool]) -> str:
             "AUTOSCALING",
             "CPU REQ",
             "MEM REQ",
+            *(["POD RANGE"] if show_pod_range else []),
             "VERSION",
         ],
         colalign=(
@@ -155,6 +168,7 @@ def _pool_table(pools: list[NodePool]) -> str:
             "left",
             "right",
             "right",
+            *(["left"] if show_pod_range else []),
             "left",
         ),
     )

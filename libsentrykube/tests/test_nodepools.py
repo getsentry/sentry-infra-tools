@@ -187,6 +187,28 @@ def test_compute_class_from_pool_labels_without_nodes() -> None:
     assert result.pools[0].compute_class == "high-performance"
 
 
+def test_pod_ranges() -> None:
+    pools = [
+        {
+            **gke_pool("on-additional"),
+            "networkConfig": {"podRange": "pods-b"},
+            "podIpv4CidrSize": 26,
+            "maxPodsConstraint": {"maxPodsPerNode": "32"},
+        },
+        {**gke_pool("on-default"), "networkConfig": {}, "podIpv4CidrSize": 24},
+    ]
+    cluster = gke_cluster(
+        pools, ipAllocationPolicy={"clusterSecondaryRangeName": "pods-a"}
+    )
+    result = by_name(build(gke_cluster=cluster, nodes=[], pods=[]))
+    additional, default = result["on-additional"], result["on-default"]
+    assert (additional.pod_range, additional.pod_block_prefix) == ("pods-b", 26)
+    assert additional.max_pods_per_node == 32
+    # No podRange on the pool: it uses the cluster's default pod range.
+    assert (default.pod_range, default.pod_block_prefix) == ("pods-a", 24)
+    assert default.max_pods_per_node is None
+
+
 def test_compute_classes() -> None:
     classes = {c.name: c for c in build().compute_classes}
     gp = classes["general-purpose"]
