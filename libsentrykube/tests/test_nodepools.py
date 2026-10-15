@@ -315,6 +315,15 @@ def test_shared_priority_constraints() -> None:
     assert classes["single"].shared_constraints is None
 
 
+def test_resource_limits_ignored_without_autoprovisioning() -> None:
+    # The fixture's 40-core limit is exceeded by 5 x 8-core nodes.
+    gke = gke_cluster([gke_pool("pool-a")])
+    gke["autoscaling"]["enableNodeAutoprovisioning"] = False
+    result = build(gke_cluster=gke, nodes=[node(f"n{i}", "pool-a") for i in range(5)])
+    assert not result.autoprovisioning
+    assert not any("auto-provisioning" in f for f in result.findings)
+
+
 def test_version_skew_beyond_supported() -> None:
     pools = [
         gke_pool("ok", version="1.36.4-gke.2"),

@@ -341,7 +341,9 @@ def build_cluster_nodepools(
             )
 
     findings = []
-    for res in limits:
+    # GKE only enforces these limits while node auto-provisioning is enabled;
+    # they can be left behind after it's turned off.
+    for res in limits if autoprovisioning else []:
         if res.utilization is not None and res.utilization >= warn_threshold:
             findings.append(
                 f"Node auto-provisioning {res.resource} limit is "
