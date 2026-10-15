@@ -193,3 +193,9 @@ def test_long_priority_lists_are_truncated() -> None:
     )
     assert "family-6" not in out
     assert "→ … (+4 more)" in out
+
+
+def test_no_pools() -> None:
+    out = format_text(ClusterNodePools(REF, "1.37.0-gke.3", autoprovisioning=False))
+    assert "No node pools" in out
+    assert "COMPUTE CLASS" not in out

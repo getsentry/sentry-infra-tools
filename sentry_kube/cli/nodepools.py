@@ -9,7 +9,11 @@ from kubernetes.client.exceptions import ApiException
 from tabulate import tabulate
 
 from libsentrykube.iap import ensure_iap_tunnel
-from libsentrykube.nodepools import ClusterNodePools, fetch_cluster_nodepools
+from libsentrykube.nodepools import (
+    ClusterNodePools,
+    NodePool,
+    fetch_cluster_nodepools,
+)
 from libsentrykube.utils import kube_get_client, kube_set_context
 
 from .network import gke_cluster_ref
@@ -111,6 +115,51 @@ def _pct(value: float | None) -> str:
     return "-" if value is None else f"{value:.0%}"
 
 
+def _pool_table(pools: list[NodePool]) -> str:
+    rows = [
+        [
+            pool.compute_class or "-",
+            pool.name,
+            pool.sentry_name or "-",
+            pool.machine_type,
+            pool.nodes,
+            f"{_bound(pool.min_nodes)}-{_bound(pool.max_nodes)}"
+            + (" (max)" if pool.at_max else "")
+            if pool.autoscaling
+            else "off",
+            _pct(pool.cpu_utilization),
+            _pct(pool.memory_utilization),
+            pool.version,
+        ]
+        for pool in pools
+    ]
+    return tabulate(
+        rows,
+        headers=[
+            "COMPUTE CLASS",
+            "POOL",
+            "SENTRY NAME",
+            "MACHINE",
+            "NODES",
+            "AUTOSCALING",
+            "CPU REQ",
+            "MEM REQ",
+            "VERSION",
+        ],
+        colalign=(
+            "left",
+            "left",
+            "left",
+            "left",
+            "right",
+            "left",
+            "right",
+            "right",
+            "left",
+        ),
+    )
+
+
 def format_text(result: ClusterNodePools) -> str:
     cluster = result.cluster
     lines = [
@@ -133,50 +182,8 @@ def format_text(result: ClusterNodePools) -> str:
         lines.append("Node auto-provisioning: disabled")
     lines.append("")
 
-    rows = [
-        [
-            pool.compute_class or "-",
-            pool.name,
-            pool.sentry_name or "-",
-            pool.machine_type,
-            pool.nodes,
-            f"{_bound(pool.min_nodes)}-{_bound(pool.max_nodes)}"
-            + (" (max)" if pool.at_max else "")
-            if pool.autoscaling
-            else "off",
-            _pct(pool.cpu_utilization),
-            _pct(pool.memory_utilization),
-            pool.version,
-        ]
-        for pool in result.pools
-    ]
-    lines.append(
-        tabulate(
-            rows,
-            headers=[
-                "COMPUTE CLASS",
-                "POOL",
-                "SENTRY NAME",
-                "MACHINE",
-                "NODES",
-                "AUTOSCALING",
-                "CPU REQ",
-                "MEM REQ",
-                "VERSION",
-            ],
-            colalign=(
-                "left",
-                "left",
-                "left",
-                "left",
-                "right",
-                "left",
-                "right",
-                "right",
-                "left",
-            ),
-        )
-    )
+    # tabulate < 0.10 raises on colalign with no rows.
+    lines.append(_pool_table(result.pools) if result.pools else "No node pools")
     lines.append("")
 
     used = [cc for cc in result.compute_classes if cc.nodes]
