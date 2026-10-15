@@ -1,3 +1,9 @@
+## 1.35.1
+
+### Bug Fixes 🐛
+
+- (sentry-kube) Print the credential fetch command to stderr by @mwarkentin in [#261](https://github.com/getsentry/sentry-infra-tools/pull/261)
+
 ## 1.35.0
 
 ### New Features ✨
