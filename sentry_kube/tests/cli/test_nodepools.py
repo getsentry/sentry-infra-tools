@@ -180,6 +180,27 @@ def test_autoprovisioning_disabled_but_classes_create_pools() -> None:
     ) in out
 
 
+def test_limits_shown_only_when_they_apply() -> None:
+    limits = [ResourceLimit("cpu", "cores", 30, 40)]
+    creating = [ComputeClass("cc", ["n4"], True, pools=0, nodes=0)]
+    shown = format_text(
+        ClusterNodePools(
+            REF,
+            "1.37.0-gke.3",
+            autoprovisioning=False,
+            resource_limits=limits,
+            compute_classes=creating,
+        )
+    )
+    assert "cpu     30 / 40 cores (75%)" in shown
+    hidden = format_text(
+        ClusterNodePools(
+            REF, "1.37.0-gke.3", autoprovisioning=False, resource_limits=limits
+        )
+    )
+    assert "30 / 40 cores" not in hidden
+
+
 def test_long_priority_lists_are_truncated() -> None:
     priorities = [f"family-{i}" for i in range(10)]
     classes = [ComputeClass("cc", priorities, True, pools=1, nodes=1)]

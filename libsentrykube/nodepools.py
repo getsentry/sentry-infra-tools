@@ -105,6 +105,15 @@ class ClusterNodePools:
     findings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
+    @property
+    def limits_apply(self) -> bool:
+        """
+        Whether the auto-provisioning resource limits constrain the cluster:
+        they apply to auto-provisioned pools and to pools compute classes
+        auto-create, and can be left behind when neither is in use.
+        """
+        return self.autoprovisioning or any(c.auto_create for c in self.compute_classes)
+
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         for item, pool in zip(data["pools"], self.pools):
@@ -341,9 +350,8 @@ def build_cluster_nodepools(
             )
 
     findings = []
-    # GKE only enforces these limits while node auto-provisioning is enabled;
-    # they can be left behind after it's turned off.
-    for res in limits if autoprovisioning else []:
+    limits_apply = autoprovisioning or any(c.auto_create for c in classes)
+    for res in limits if limits_apply else []:
         if res.utilization is not None and res.utilization >= warn_threshold:
             findings.append(
                 f"Node auto-provisioning {res.resource} limit is "

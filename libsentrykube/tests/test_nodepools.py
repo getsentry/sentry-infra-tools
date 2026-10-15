@@ -315,13 +315,29 @@ def test_shared_priority_constraints() -> None:
     assert classes["single"].shared_constraints is None
 
 
-def test_resource_limits_ignored_without_autoprovisioning() -> None:
+@pytest.mark.parametrize(
+    "compute_classes, reported",
+    [
+        # Leftover limits with nothing auto-creating pools don't constrain anything.
+        ([UNUSED_CLASS], False),
+        # Pools that compute classes auto-create are still subject to them.
+        ([GENERAL_PURPOSE], True),
+    ],
+)
+def test_resource_limits_without_autoprovisioning(
+    compute_classes: list[dict[str, Any]], reported: bool
+) -> None:
     # The fixture's 40-core limit is exceeded by 5 x 8-core nodes.
     gke = gke_cluster([gke_pool("pool-a")])
     gke["autoscaling"]["enableNodeAutoprovisioning"] = False
-    result = build(gke_cluster=gke, nodes=[node(f"n{i}", "pool-a") for i in range(5)])
+    result = build(
+        gke_cluster=gke,
+        nodes=[node(f"n{i}", "pool-a") for i in range(5)],
+        compute_classes=compute_classes,
+    )
     assert not result.autoprovisioning
-    assert not any("auto-provisioning" in f for f in result.findings)
+    assert result.limits_apply is reported
+    assert any("auto-provisioning" in f for f in result.findings) is reported
 
 
 def test_version_skew_beyond_supported() -> None:

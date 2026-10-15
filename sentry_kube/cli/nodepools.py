@@ -182,18 +182,19 @@ def format_text(result: ClusterNodePools) -> str:
     ]
     if result.autoprovisioning:
         lines.append("Node auto-provisioning: enabled")
-        for limit in result.resource_limits:
-            lines.append(
-                f"  {limit.resource:<7} {limit.used:.0f} / {limit.maximum:.0f} "
-                f"{limit.unit} ({_pct(limit.utilization)})"
-            )
-    elif any(cc.auto_create for cc in result.compute_classes):
+    elif result.limits_apply:
         lines.append(
             "Node auto-provisioning: disabled cluster-wide "
             "(compute classes still auto-create node pools)"
         )
     else:
         lines.append("Node auto-provisioning: disabled")
+    if result.limits_apply:
+        for limit in result.resource_limits:
+            lines.append(
+                f"  {limit.resource:<7} {limit.used:.0f} / {limit.maximum:.0f} "
+                f"{limit.unit} ({_pct(limit.utilization)})"
+            )
     lines.append("")
 
     # tabulate < 0.10 raises on colalign with no rows.
