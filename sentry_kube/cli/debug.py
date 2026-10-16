@@ -136,14 +136,17 @@ def debug(ctx, container, image, namespace, privileged, quiet):
             "runAsNonRoot": False,
             "runAsUser": 0,
             "runAsGroup": 0,
+            # access the target's filesystem via /proc/<pid>/root (e.g. chroot),
+            # as the target usually runs as a different user
+            "capabilities": {"add": ["SYS_PTRACE"]},
         },
     }
 
     if privileged:
         custom_debug_profile["securityContext"]["privileged"] = True
-        custom_debug_profile["securityContext"]["capabilities"] = {
-            "add": ["CAP_SYS_ADMIN"]
-        }
+        custom_debug_profile["securityContext"]["capabilities"]["add"].append(
+            "CAP_SYS_ADMIN"
+        )
 
     # write the custom debug profile
     tmp.write(json.dumps(custom_debug_profile).encode("utf-8"))
