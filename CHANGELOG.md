@@ -1,3 +1,9 @@
+## 1.36.0
+
+### Bug Fixes 🐛
+
+- (sentry-kube) Make debug containers usable for getsentry pods by @oioki in [#262](https://github.com/getsentry/sentry-infra-tools/pull/262)
+
 ## 1.35.1
 
 ### Bug Fixes 🐛
