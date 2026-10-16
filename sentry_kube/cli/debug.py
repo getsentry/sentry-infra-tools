@@ -88,6 +88,10 @@ def debug(ctx, container, image, namespace, privileged, quiet):
         f"--custom={tmp.name}",
     ]
     cmd += list(args)
+    if len(args) == 1:
+        # no command given: start a shell instead of the image entrypoint,
+        # which fails until the subPath files are linked in place
+        cmd += ["--", "sh"]
 
     if not quiet:
         click.echo(
@@ -97,9 +101,9 @@ def debug(ctx, container, image, namespace, privileged, quiet):
         )
         click.echo()
 
-    volume_mounts = container_spec["volumeMounts"]
+    volume_mounts = []
     mount_instructions = ""
-    for vm in volume_mounts:
+    for vm in container_spec["volumeMounts"]:
         if "subPath" in vm:
             del vm["subPath"]
             original_mount_path = vm["mountPath"]
@@ -108,6 +112,10 @@ def debug(ctx, container, image, namespace, privileged, quiet):
             vm["mountPath"] = new_mount_path
             mount_instructions += f"  mkdir -p {original_mount_dir}\n"
             mount_instructions += f"  ln -sf /subPathMounts/{vm['name']}/{original_mount_path} {original_mount_path}\n"
+        # subPath mounts of the same volume into the same directory collapse
+        # into one whole-volume mount; mountPaths must be unique
+        if vm not in volume_mounts:
+            volume_mounts.append(vm)
 
     if mount_instructions:
         click.echo("Subpath mounts are not allowed for ephemeral containers.")
@@ -128,14 +136,17 @@ def debug(ctx, container, image, namespace, privileged, quiet):
             "runAsNonRoot": False,
             "runAsUser": 0,
             "runAsGroup": 0,
+            # access the target's filesystem via /proc/<pid>/root (e.g. chroot),
+            # as the target usually runs as a different user
+            "capabilities": {"add": ["SYS_PTRACE"]},
         },
     }
 
     if privileged:
         custom_debug_profile["securityContext"]["privileged"] = True
-        custom_debug_profile["securityContext"]["capabilities"] = {
-            "add": ["CAP_SYS_ADMIN"]
-        }
+        custom_debug_profile["securityContext"]["capabilities"]["add"].append(
+            "CAP_SYS_ADMIN"
+        )
 
     # write the custom debug profile
     tmp.write(json.dumps(custom_debug_profile).encode("utf-8"))
