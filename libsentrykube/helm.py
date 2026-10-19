@@ -558,11 +558,17 @@ def render(
     kctx=None,
     bg_swap=True,
 ):
-    from libsentrykube.service import get_service_path
+    from libsentrykube.service import get_service_flags, get_service_path
 
     outputs = []
 
     service_path = get_service_path(service_name, namespace="helm")
+    # `helm template` leaves out the chart's crds/ directory unless asked, and
+    # `helm upgrade` never updates CRDs, so opting in is the only way a chart's
+    # CRDs reach the rendered output.
+    include_crds = get_service_flags(service_name, namespace="helm").get(
+        "include_crds", False
+    )
     for helm_release, targets in helm_release_ctx(
         region_name,
         service_name,
@@ -579,6 +585,8 @@ def render(
             "--namespace",
             helm_release.namespace,
         ]
+        if include_crds:
+            helm_params.append("--include-crds")
         if kctx:
             helm_params.extend(["--kube-context", kctx])
         if not helm_release.chart.is_local and not helm_release.chart.is_oci:
