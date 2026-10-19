@@ -646,6 +646,14 @@ def build_helm_materialized_path(
     )
 
 
+def offline_image_default(default: str) -> str:
+    if not os.getenv("SENTRY_KUBE_IMAGE_PLACEHOLDER"):
+        return default
+    repo = default.split("@", 1)[0]
+    head, sep, last = repo.rpartition("/")
+    return f"{head}{sep}{last.split(':', 1)[0]}:_TAG_DOES_NOT_EXIST"
+
+
 def get_deployment_image(
     deployment: str, container: str, default: str, quiet: bool = False
 ):
@@ -653,7 +661,7 @@ def get_deployment_image(
         click.echo(f"Getting deployment image for {deployment}:{container}")
 
     if "KUBERNETES_OFFLINE" in os.environ:
-        return default
+        return offline_image_default(default)
 
     if "DEPLOYMENT_IMAGE" in os.environ:
         return os.getenv("DEPLOYMENT_IMAGE")
