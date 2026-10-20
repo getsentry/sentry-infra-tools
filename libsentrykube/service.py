@@ -530,8 +530,6 @@ def get_service_flags(
 
     flags = _load_flags_file(service_dir / "_sk_flags.yaml")
     if region_name is not None:
-        if region_name == "saas":
-            region_name = "us"
         # assert_customer_is_defined_at_most_once keeps this to one directory.
         for region_dir in [
             *service_dir.glob(f"region_overrides/{region_name}"),

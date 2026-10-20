@@ -753,8 +753,7 @@ def test_get_service_flags_region_override_without_service_flags(tmp_path):
     _write_flags(tmp_path / "region_overrides" / "us", "include_crds: true\n")
 
     with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
-        # The saas region reads the us overrides, like values do.
-        assert get_service_flags("test-service", region_name="saas") == {
+        assert get_service_flags("test-service", region_name="us") == {
             "include_crds": True
         }
         assert get_service_flags("test-service", region_name="de") == {}
