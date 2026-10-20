@@ -39,7 +39,8 @@ def _services_to_materialize(resource) -> tuple[list[str], bool]:
     to_render = []
     removed = False
     for s in services:
-        if (DEFAULT_FLAGS | get_service_flags(s))["legacy_materialization"]:
+        flags = DEFAULT_FLAGS | get_service_flags(s, region_name=resource.customer_name)
+        if flags["legacy_materialization"]:
             to_render.append(s)
             continue
         path = _materialized_directory(resource.customer_name, resource.cluster_name, s)

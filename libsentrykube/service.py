@@ -504,18 +504,39 @@ def write_managed_values_overrides(
     clear_consolidated_variables_cache()
 
 
-def get_service_flags(service_name: str, namespace: str | None = None) -> dict:
+def _load_flags_file(flags_file: Path) -> dict:
+    if flags_file.exists():
+        with open(flags_file, "rb") as f:
+            return yaml.safe_load(f) or {}
+    return {}
+
+
+def get_service_flags(
+    service_name: str,
+    namespace: str | None = None,
+    region_name: str | None = None,
+) -> dict:
+    """Return the service's _sk_flags.yaml, with the region's overrides on top.
+
+    A region overrides individual flags with an _sk_flags.yaml in its
+    region_overrides directory, either region_overrides/<region>/ or
+    region_overrides/<group>/<region>/. Callers that don't pass a region get
+    the service-wide flags only.
+    """
     service_dir = get_service_path(service_name, namespace=namespace)
     if not service_dir.is_dir():
         click.echo(f"Service directory {service_dir} not found.", err=True)
         raise click.Abort()
 
-    flags_file = service_dir / "_sk_flags.yaml"
-    if flags_file.exists():
-        with open(flags_file, "rb") as f:
-            flags = yaml.safe_load(f) or {}
-            return flags
-    return {}
+    flags = _load_flags_file(service_dir / "_sk_flags.yaml")
+    if region_name is not None:
+        # assert_customer_is_defined_at_most_once keeps this to one directory.
+        for region_dir in [
+            *service_dir.glob(f"region_overrides/{region_name}"),
+            *service_dir.glob(f"region_overrides/*/{region_name}"),
+        ]:
+            flags = flags | _load_flags_file(region_dir / "_sk_flags.yaml")
+    return flags
 
 
 def get_service_data(

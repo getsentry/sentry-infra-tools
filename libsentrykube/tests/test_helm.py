@@ -22,7 +22,7 @@ def _release() -> HelmRelease:
     )
 
 
-def _render_helm_params(service_dir: Path) -> list[str]:
+def _render_helm_params(service_dir: Path, region: str = "us") -> list[str]:
     calls: list[list[str]] = []
 
     def fake_run_helm(cmd: list[str], raise_on_err: bool = False) -> str:
@@ -37,7 +37,7 @@ def _render_helm_params(service_dir: Path) -> list[str]:
         ),
         patch("libsentrykube.helm._run_helm", side_effect=fake_run_helm),
     ):
-        render("us", "kro")
+        render(region, "kro")
 
     assert len(calls) == 1
     return calls[0]
@@ -60,3 +60,12 @@ def test_render_include_crds_flag(tmp_path: Path, flags: str | None, expected: b
 
     assert helm_params[0] == "template"
     assert ("--include-crds" in helm_params) is expected
+
+
+def test_render_include_crds_region_override(tmp_path: Path):
+    overrides = tmp_path / "region_overrides" / "s4s2"
+    overrides.mkdir(parents=True)
+    (overrides / "_sk_flags.yaml").write_text("include_crds: true\n")
+
+    assert "--include-crds" in _render_helm_params(tmp_path, region="s4s2")
+    assert "--include-crds" not in _render_helm_params(tmp_path, region="us")

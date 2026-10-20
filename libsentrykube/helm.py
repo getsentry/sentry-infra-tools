@@ -566,9 +566,9 @@ def render(
     # `helm template` leaves out the chart's crds/ directory unless asked, and
     # `helm upgrade` never updates CRDs, so opting in is the only way a chart's
     # CRDs reach the rendered output.
-    include_crds = get_service_flags(service_name, namespace="helm").get(
-        "include_crds", False
-    )
+    include_crds = get_service_flags(
+        service_name, namespace="helm", region_name=region_name
+    ).get("include_crds", False)
     for helm_release, targets in helm_release_ctx(
         region_name,
         service_name,

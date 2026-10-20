@@ -34,7 +34,9 @@ def test_apply_uses_service_flag_when_cli_not_set():
             allow_jobs=False,
             use_canary=False,
         )
-        mock_resolve.assert_called_once_with(["my-service"], None, None)
+        mock_resolve.assert_called_once_with(
+            ["my-service"], None, None, region_name="test-region"
+        )
         # _diff_kubectl should receive resolved True values
         mock_diff.assert_called_once()
         call_args = mock_diff.call_args
@@ -71,7 +73,9 @@ def test_apply_passes_cli_flags_to_resolve():
             allow_jobs=False,
             use_canary=False,
         )
-        mock_resolve.assert_called_once_with(["my-service"], False, False)
+        mock_resolve.assert_called_once_with(
+            ["my-service"], False, False, region_name="test-region"
+        )
 
 
 def test_apply_conflict_raises():

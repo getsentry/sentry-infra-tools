@@ -756,7 +756,7 @@ def test_resolve_ssa_flags_multiple_services_consistent():
 def test_resolve_ssa_flags_multiple_services_conflict_errors():
     """Multiple services with conflicting flags raise ClickException."""
 
-    def fake_flags(service_name):
+    def fake_flags(service_name, region_name=None):
         if service_name == "svc-a":
             return {"server_side_apply": True}
         return {}
@@ -771,7 +771,7 @@ def test_resolve_ssa_flags_multiple_services_conflict_errors():
 def test_resolve_ssa_flags_cli_overrides_conflict():
     """CLI flag resolves what would otherwise be a conflict."""
 
-    def fake_flags(service_name):
+    def fake_flags(service_name, region_name=None):
         if service_name == "svc-a":
             return {"server_side_apply": True}
         return {}

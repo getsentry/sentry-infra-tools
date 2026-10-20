@@ -19,7 +19,7 @@ FLAGS = {"svc-argo": {"legacy_materialization": False}}
 def mock_service_flags():
     with patch(
         "sentry_kube.render_services.get_service_flags",
-        side_effect=lambda s: FLAGS.get(s, {}),
+        side_effect=lambda s, region_name=None: FLAGS.get(s, {}),
     ):
         yield
 

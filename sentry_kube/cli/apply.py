@@ -217,7 +217,7 @@ def _apply(
     resources, so this can be used as a workaround.
     """
     effective_server_side, effective_force_conflicts = resolve_ssa_flags(
-        services, server_side, force_conflicts
+        services, server_side, force_conflicts, region_name=ctx.obj.customer_name
     )
 
     if not quiet:
