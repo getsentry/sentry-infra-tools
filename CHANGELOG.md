@@ -1,3 +1,13 @@
+## 1.38.0
+
+### New Features ✨
+
+- (sentry-kube) Support region overrides in \_sk_flags.yaml by @mwarkentin in [#266](https://github.com/getsentry/sentry-infra-tools/pull/266)
+
+### Internal Changes 🔧
+
+- (sentry-kube) Remove detect-drift command and Linear/Jira drift clients by @sentry-junior in [#263](https://github.com/getsentry/sentry-infra-tools/pull/263)
+
 ## 1.37.0
 
 ### New Features ✨
