@@ -6,7 +6,6 @@ import yaml
 import operator
 import logging
 import re
-from copy import deepcopy
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -68,9 +67,9 @@ DEFAULT_FLAGS = {
 }
 
 
-def get_service_apply_flags(service_name: str) -> dict:
+def get_service_apply_flags(service_name: str, region_name: str | None = None) -> dict:
     """Return the effective server-side apply flags for a service."""
-    flags = DEFAULT_FLAGS | get_service_flags(service_name)
+    flags = DEFAULT_FLAGS | get_service_flags(service_name, region_name=region_name)
     return {
         "server_side_apply": flags["server_side_apply"],
         "force_conflicts": flags["force_conflicts"],
@@ -81,6 +80,7 @@ def resolve_ssa_flags(
     services: Sequence[str],
     cli_server_side: bool | None,
     cli_force_conflicts: bool | None,
+    region_name: str | None = None,
 ) -> tuple[bool, bool]:
     """
     Resolve effective server-side apply settings.
@@ -92,7 +92,7 @@ def resolve_ssa_flags(
     if cli_server_side is not None:
         return (cli_server_side, bool(cli_force_conflicts))
 
-    flags_per_service = {s: get_service_apply_flags(s) for s in services}
+    flags_per_service = {s: get_service_apply_flags(s, region_name) for s in services}
     ssa_values = {f["server_side_apply"] for f in flags_per_service.values()}
     fc_values = {f["force_conflicts"] for f in flags_per_service.values()}
 
@@ -373,7 +373,7 @@ def render_templates(
     filters: Optional[List[str]] = None,
 ) -> str:
     service_path = get_service_path(service_name)
-    service_flags = get_service_flags(service_name)
+    service_flags = get_service_flags(service_name, region_name=customer_name)
     flags = DEFAULT_FLAGS | service_flags
     template_files = sorted(list(get_service_template_files(service_name)))
 

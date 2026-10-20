@@ -33,7 +33,9 @@ def test_diff_uses_service_flag_when_cli_not_set():
             force_conflicts=None,
             important_diffs_only=False,
         )
-        mock_resolve.assert_called_once_with(["my-service"], None, None)
+        mock_resolve.assert_called_once_with(
+            ["my-service"], None, None, region_name="test-region"
+        )
         _, kwargs = mock_kubectl.call_args
         assert kwargs.get("server_side") is True or mock_kubectl.call_args[0][2] is True
 
@@ -63,7 +65,9 @@ def test_diff_passes_cli_flags_to_resolve():
             force_conflicts=False,
             important_diffs_only=False,
         )
-        mock_resolve.assert_called_once_with(["my-service"], True, False)
+        mock_resolve.assert_called_once_with(
+            ["my-service"], True, False, region_name="test-region"
+        )
 
 
 def test_diff_conflict_raises():

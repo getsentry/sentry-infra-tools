@@ -718,3 +718,43 @@ def test_write_managed_file_invalidates_the_values_cache(config_structure) -> No
     assert after["patched"] == "value"
 
     set_workspace_root_start(start_workspace_root)
+
+
+def _write_flags(path: Path, text: str) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "_sk_flags.yaml").write_text(text)
+
+
+@pytest.mark.parametrize(
+    "region, expected",
+    [
+        (None, {"server_side_apply": False, "jinja_whitespace_easymode": False}),
+        ("us", {"server_side_apply": False, "jinja_whitespace_easymode": False}),
+        ("s4s2", {"server_side_apply": True, "jinja_whitespace_easymode": False}),
+        ("de", {"server_side_apply": False, "jinja_whitespace_easymode": True}),
+    ],
+)
+def test_get_service_flags_region_overrides(tmp_path, region, expected):
+    """A region's _sk_flags.yaml overrides individual service-wide flags."""
+    _write_flags(
+        tmp_path, "server_side_apply: false\njinja_whitespace_easymode: false\n"
+    )
+    _write_flags(tmp_path / "region_overrides" / "s4s2", "server_side_apply: true\n")
+    _write_flags(
+        tmp_path / "region_overrides" / "saas" / "de",
+        "jinja_whitespace_easymode: true\n",
+    )
+
+    with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
+        assert get_service_flags("test-service", region_name=region) == expected
+
+
+def test_get_service_flags_region_override_without_service_flags(tmp_path):
+    _write_flags(tmp_path / "region_overrides" / "us", "include_crds: true\n")
+
+    with patch("libsentrykube.service.get_service_path", return_value=tmp_path):
+        # The saas region reads the us overrides, like values do.
+        assert get_service_flags("test-service", region_name="saas") == {
+            "include_crds": True
+        }
+        assert get_service_flags("test-service", region_name="de") == {}
