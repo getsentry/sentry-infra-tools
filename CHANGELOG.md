@@ -1,3 +1,9 @@
+## 1.37.0
+
+### New Features ✨
+
+- (helm) Opt helm services into rendering CRDs via \_sk_flags.yaml by @mwarkentin in [#265](https://github.com/getsentry/sentry-infra-tools/pull/265)
+
 ## 1.36.0
 
 ### Bug Fixes 🐛
