@@ -1,8 +1,10 @@
 import base64
 import copy
+import shutil
 import subprocess
 import tempfile
 
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
@@ -377,25 +379,28 @@ def render_values(
 def materialize_values(
     region_name, service_name, cluster_name="default", release=None, namespace=None
 ):
-    from libsentrykube.service import build_helm_materialized_path
+    from libsentrykube.service import build_helm_materialized_directory
 
     rv = False
+    expected_files: dict[str | bool, set[str]] = defaultdict(set)
+    output_dirs = {}
+    # Releases sharing a name across namespaces share a directory, so render all.
     for helm_release, rendered_contents in _render_values(
-        region_name,
-        service_name,
-        cluster_name,
-        release=release,
-        namespace=namespace,
+        region_name, service_name, cluster_name
     ):
         materialize_rel_path = helm_release.name != service_name and helm_release.name
-        for src_path, rendered_content in rendered_contents:
-            output_path = build_helm_materialized_path(
-                region_name,
-                cluster_name,
-                service_name,
-                release=materialize_rel_path,
-                target=src_path,
+        expected_files[materialize_rel_path].update(p for p, _ in rendered_contents)
+        if release is not None and helm_release.name != release:
+            continue
+        if namespace is not None and helm_release.namespace != namespace:
+            continue
+        output_dir = output_dirs[materialize_rel_path] = (
+            build_helm_materialized_directory(
+                region_name, cluster_name, service_name, release=materialize_rel_path
             )
+        )
+        for src_path, rendered_content in rendered_contents:
+            output_path = output_dir / src_path
             rendered_content = pretty(rendered_content)
             try:
                 existing_content = open(output_path).read()
@@ -405,6 +410,21 @@ def materialize_values(
             if existing_content != rendered_content:
                 with open(output_path, "w") as f:
                     f.write(rendered_content)
+                rv = True
+
+    for materialize_rel_path, output_dir in output_dirs.items():
+        for file in output_dir.iterdir():
+            if file.is_file() and file.name not in expected_files[materialize_rel_path]:
+                file.unlink()
+                rv = True
+
+    if release is None and namespace is None:
+        service_dir = build_helm_materialized_directory(
+            region_name, cluster_name, service_name
+        )
+        for path in service_dir.iterdir():
+            if path.is_dir() and path.name not in expected_files:
+                shutil.rmtree(path)
                 rv = True
     return rv
 
