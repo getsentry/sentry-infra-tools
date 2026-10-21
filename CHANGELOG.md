@@ -1,3 +1,9 @@
+## 1.39.0
+
+### Internal Changes 🔧
+
+- (iap-service) Allow to specify service labels by @dmajere in [#268](https://github.com/getsentry/sentry-infra-tools/pull/268)
+
 ## 1.38.0
 
 ### New Features ✨
