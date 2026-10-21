@@ -20,9 +20,9 @@ class IAPService(SimpleExtension):
         domain: str,
         port: int,
         selector: Mapping[str, str],
-        labels: Optional[Mapping[str, str]] = None,
         health_check_path: str = "/",
         namespace: str = "default",
+        labels: Optional[Mapping[str, str]] = None,
     ) -> str:
         labels = labels or {"service": service_name}
         service = {
