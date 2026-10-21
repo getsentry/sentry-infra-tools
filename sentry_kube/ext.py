@@ -49,7 +49,7 @@ class IAPService(SimpleExtension):
         backend_config = {
             "apiVersion": "cloud.google.com/v1",
             "kind": "BackendConfig",
-            "metadata": {"name": service_name, "labels": {"service": service_name}},
+            "metadata": {"name": service_name, "labels": labels},
             "spec": {
                 "iap": {
                     "enabled": True,
@@ -66,7 +66,7 @@ class IAPService(SimpleExtension):
             "kind": "ManagedCertificate",
             "metadata": {
                 "name": f"cert-{domain.replace('.', '-')}",
-                "labels": {"service": service_name},
+                "labels": labels,
             },
             "spec": {"domains": [domain]},
         }
