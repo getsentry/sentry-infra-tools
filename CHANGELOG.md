@@ -1,3 +1,9 @@
+## 1.40.0
+
+### Internal Changes 🔧
+
+- (iap-service) Missed labels override in additional resources by @dmajere in [#269](https://github.com/getsentry/sentry-infra-tools/pull/269)
+
 ## 1.39.0
 
 ### Internal Changes 🔧
