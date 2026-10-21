@@ -1,5 +1,5 @@
 import json
-from typing import Literal, Mapping
+from typing import Literal, Mapping, Optional
 
 from yaml import safe_dump_all
 
@@ -22,14 +22,16 @@ class IAPService(SimpleExtension):
         selector: Mapping[str, str],
         health_check_path: str = "/",
         namespace: str = "default",
+        labels: Optional[Mapping[str, str]] = None,
     ) -> str:
+        labels = labels or {"service": service_name}
         service = {
             "apiVersion": "v1",
             "kind": "Service",
             "metadata": {
                 "name": service_name,
                 "namespace": namespace,
-                "labels": {"service": service_name},
+                "labels": labels,
                 "annotations": {
                     "cloud.google.com/backend-config": json.dumps(
                         {"default": service_name}, separators=(",", ":")
