@@ -21,6 +21,7 @@ from libsentrykube.service import (
     KUBE_API_TIMEOUT_DEFAULT,
     KUBE_API_TIMEOUT_ENV_NAME,
     get_deployment_image,
+    offline_image_default,
 )
 from libsentrykube.utils import (
     deep_merge_dict,
@@ -74,7 +75,7 @@ class StatefulSetImage(SimpleExtension):
 
     def run(self, stateful_set_name: str, container: str, default: str):
         if os.getenv("KUBERNETES_OFFLINE"):
-            return default
+            return offline_image_default(default)
 
         if "DEPLOYMENT_IMAGE" in os.environ:
             return os.getenv("DEPLOYMENT_IMAGE")
@@ -110,7 +111,7 @@ class CronJobImage(SimpleExtension):
 
     def run(self, cron_job_name: str, container: str, default: str):
         if os.getenv("KUBERNETES_OFFLINE"):
-            return default
+            return offline_image_default(default)
 
         if "DEPLOYMENT_IMAGE" in os.environ:
             return os.getenv("DEPLOYMENT_IMAGE")

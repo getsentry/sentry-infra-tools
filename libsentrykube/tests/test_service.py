@@ -20,6 +20,8 @@ from libsentrykube.service import (
     write_managed_values_overrides,
     merge_values_files_no_conflict,
     get_service_flags,
+    get_deployment_image,
+    offline_image_default,
 )
 from libsentrykube.utils import set_workspace_root_start
 from libsentrykube.utils import workspace_root
@@ -757,3 +759,43 @@ def test_get_service_flags_region_override_without_service_flags(tmp_path):
             "include_crds": True
         }
         assert get_service_flags("test-service", region_name="de") == {}
+
+
+@pytest.mark.parametrize(
+    "default,expected",
+    [
+        (
+            "us-docker.pkg.dev/sentryio/snuba-mr/image:latest",
+            "us-docker.pkg.dev/sentryio/snuba-mr/image:_TAG_DOES_NOT_EXIST",
+        ),
+        (
+            "us-docker.pkg.dev/sentryio/snuba-mr/image:_TAG_DOES_NOT_EXIST",
+            "us-docker.pkg.dev/sentryio/snuba-mr/image:_TAG_DOES_NOT_EXIST",
+        ),
+        ("localhost:5000/vroom", "localhost:5000/vroom:_TAG_DOES_NOT_EXIST"),
+        ("gcr.io/x/y@sha256:" + "a" * 64, "gcr.io/x/y:_TAG_DOES_NOT_EXIST"),
+    ],
+)
+def test_offline_image_default_with_placeholder_mode(monkeypatch, default, expected):
+    monkeypatch.setenv("SENTRY_KUBE_IMAGE_PLACEHOLDER", "1")
+    assert offline_image_default(default) == expected
+
+
+def test_offline_image_default_without_placeholder_mode(monkeypatch):
+    monkeypatch.delenv("SENTRY_KUBE_IMAGE_PLACEHOLDER", raising=False)
+    assert offline_image_default("r/x:latest") == "r/x:latest"
+
+
+def test_helpers_use_placeholder_mode_offline(monkeypatch):
+    from libsentrykube.ext import CronJobImage, StatefulSetImage
+
+    monkeypatch.setenv("KUBERNETES_OFFLINE", "1")
+    monkeypatch.setenv("SENTRY_KUBE_IMAGE_PLACEHOLDER", "1")
+    assert (
+        get_deployment_image("d", "c", "r/x:latest", quiet=True)
+        == "r/x:_TAG_DOES_NOT_EXIST"
+    )
+    assert (
+        StatefulSetImage.run(None, "s", "c", "r/x:latest") == "r/x:_TAG_DOES_NOT_EXIST"
+    )
+    assert CronJobImage.run(None, "j", "c", "r/x:latest") == "r/x:_TAG_DOES_NOT_EXIST"
