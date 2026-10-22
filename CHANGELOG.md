@@ -1,3 +1,7 @@
+## 1.40.1
+
+- sentry-kube: opt-in placeholder tag for offline image helpers by @tnt-sentry in [#264](https://github.com/getsentry/sentry-infra-tools/pull/264)
+
 ## 1.40.0
 
 ### Internal Changes 🔧
