@@ -168,6 +168,13 @@ Valid regions for stage '{stage}':
         context_name = cluster.services_data["context"]
         service_class = customer_config.k8s_config.service_class
 
+        if ctx.invoked_subcommand == "argocd-sync":
+            # ArgoCD runs on the region's default cluster and manages the others as spokes.
+            context_name = load_cluster_configuration(
+                customer_config.k8s_config,
+                customer_config.k8s_config.cluster_name or "default",
+            ).services_data["context"]
+
         if ctx.invoked_subcommand == "ssh":
             ctx.obj = CliContext(
                 context_name=context_name,
