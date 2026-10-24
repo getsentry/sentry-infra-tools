@@ -21,6 +21,30 @@ import yaml
 DEFAULT_DIFF_COMMAND = "diff -u -N"
 
 
+def _can_use_literal_block(value: str) -> bool:
+    return "\n" in value and all(char == "\n" or " " <= char <= "~" for char in value)
+
+
+class _ReadableMultilineDumper(yaml.SafeDumper):
+    def analyze_scalar(self, scalar: str) -> Any:
+        analysis = super().analyze_scalar(scalar)
+
+        # PyYAML rejects literal blocks when a line has trailing spaces, even
+        # though YAML supports them. Restrict the override to printable text.
+        if _can_use_literal_block(scalar):
+            analysis.allow_block = True
+
+        return analysis
+
+
+def _represent_string(dumper: yaml.SafeDumper, value: str) -> yaml.nodes.ScalarNode:
+    style = "|" if _can_use_literal_block(value) else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", value, style=style)
+
+
+_ReadableMultilineDumper.add_representer(str, _represent_string)
+
+
 @dataclasses.dataclass(frozen=True, eq=True)
 class ApplyResult:
     original_values: Any
@@ -204,7 +228,7 @@ def process_file(
         ) from e
 
     apply_results = [rule.apply(data) for rule in RULES if rule.should_apply(data)]
-    yaml.safe_dump(data, output_stream)
+    yaml.dump(data, output_stream, Dumper=_ReadableMultilineDumper)
 
     return apply_results
 
