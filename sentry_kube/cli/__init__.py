@@ -168,7 +168,7 @@ Valid regions for stage '{stage}':
         context_name = cluster.services_data["context"]
         service_class = customer_config.k8s_config.service_class
 
-        if ctx.invoked_subcommand == "argocd-sync":
+        if ctx.invoked_subcommand in ("argocd-sync", "argonaut"):
             # ArgoCD runs on the region's default cluster and manages the others as spokes.
             context_name = load_cluster_configuration(
                 customer_config.k8s_config,
