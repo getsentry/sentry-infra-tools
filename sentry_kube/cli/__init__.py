@@ -117,6 +117,7 @@ Get kubed.
         "options",
         "datadog-log-terragrunt",
         "datadog-log",
+        "depgraph",
         "get-regions",
         "get-clusters",
     ):
