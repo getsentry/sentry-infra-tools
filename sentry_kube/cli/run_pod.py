@@ -27,11 +27,11 @@ By default the getsentry worker deployment and sentry container is used.
 
 \b
 # Execute getsentry command
-$ sentry-kube run-pod --exec -- envdir++ getsentry killswitches list
+$ sentry-kube run-pod --exec -- envdir++ getsentry-server killswitches list
 
 \b
 # Or jump into getsentry shell using specified version as you'd do on garbage
-$ sentry-kube run-pod --version a2dc0147c8ae235162215ee905c01ed00107e950  --exec -it -- envdir++ getsentry shell
+$ sentry-kube run-pod --version a2dc0147c8ae235162215ee905c01ed00107e950  --exec -it -- envdir++ getsentry-server shell
 
 \b
 # Enter shell of a relay container in relay-pop deployment
