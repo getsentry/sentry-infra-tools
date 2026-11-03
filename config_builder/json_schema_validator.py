@@ -7,8 +7,8 @@ import yaml
 from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
-# TODO: this should not be hardcoded. Find a dynamic way to specify schema files, maybe in _config_generator.json?
-SCHEMAS = {
+# TODO: Delete this and only use `JsonSchemaValidator.__load_schema_legend()` to map files to schemas
+DEFAULT_SCHEMAS = {
     "kafka/topics/regional_overrides/*/*.yaml": "kafka_topic_overrides.schema.json",
     "kafka/consumer_groups/regional_overrides/*/*.yaml": "consumer_groups/regional_override_consumer_group.schema.json",
     "kafka/consumer_groups/*.yaml": "consumer_groups/default_consumer_group.schema.json",
@@ -16,9 +16,8 @@ SCHEMAS = {
     "kafka/consumer_types/*.yaml": "consumer_groups/consumer_type.schema.json",
 }
 
-ROOT = Path("shared_config")
-SCHEMAS_DIR = "schemas"
-REGIONAL_OVERRIDE_DIR = "regional_overrides"
+DEFAULT_ROOT = Path("shared_config")
+DEFAULT_SCHEMAS_DIR = "schemas"
 
 
 class ValidationException(Exception):
@@ -31,16 +30,32 @@ class JsonSchemaValidator:
     def __init__(
         self,
         root: Optional[Path] = None,
-        schemas: Optional[Mapping[str, str]] = None,
+        schema_legend: Optional[Path] = None,
         schemas_dir: Optional[str] = None,
     ) -> None:
-        self.root = ROOT if root is None else root
+        """
+        Used to validate the JSON schema of a file.
+        Works by mapping the file's path to a schema file via a legend.
+
+        Args:
+            root: Optional root dir to look in for schemas. Defaults to `DEFAULT_ROOT`.
+            schema_legend: Optional legend file containing a JSON mapping of filepaths to schema files.
+                           Filepath keys are globs (matched with `Path.match`), relative to `root`.
+                           Defaults to `DEFAULT_SCHEMAS`.
+            schemas_dir: Optional dir containing schema files. Defaults to `DEFAULT_SCHEMAS_DIR`.
+        """
+
+        self.root = DEFAULT_ROOT if root is None else root
         self.schema_root = (
-            (self.root / SCHEMAS_DIR)
+            (self.root / DEFAULT_SCHEMAS_DIR)
             if schemas_dir is None
             else (self.root / schemas_dir)
         )
-        self.schemas = SCHEMAS if schemas is None else schemas
+        self.schemas = (
+            DEFAULT_SCHEMAS
+            if schema_legend is None
+            else self.__load_schema_legend(schema_legend)
+        )
         self.registry = self.__build_registry()
 
     def __build_registry(self) -> Registry[Mapping[str, Resource[Mapping[str, Any]]]]:
@@ -66,6 +81,15 @@ class JsonSchemaValidator:
             if file.match(str(self.root / glob)):
                 return self.schema_root / schema
         return None
+
+    def __load_schema_legend(self, file: Path) -> dict[str, str]:
+        """
+        Takes a path to a file which maps filepath globs to schema files.
+        Overrides the hardcoded `DEFAULT_SCHEMAS` mapping.
+        """
+        with open(file) as f:
+            schema_mapping: dict[str, str] = json.load(f)
+        return schema_mapping
 
     def validate_yaml(self, file: Path) -> int | None:
         schema = self.__get_schema(file)

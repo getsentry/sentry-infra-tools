@@ -77,6 +77,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         """,
     )
     parser.add_argument(
+        "--schema-legend",
+        type=str,
+        default="",
+        help="""
+            Optional filepath to a schema legend file: a JSON object mapping
+            file path globs (relative to shared_config) to schema files.
+        """,
+    )
+    parser.add_argument(
         "-p",
         "--ext-packages",
         action="append",
@@ -87,10 +96,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
+    legend = None if args.schema_legend == "" else Path(args.schema_legend)
     if args.combine_sources:
         print("Validating yaml file schemas", file=stderr)
         try:
-            validate_all_files(Path(args.root_dir))
+            validate_all_files(
+                root_directory=Path(args.root_dir),
+                schema_legend=legend,
+            )
         except ValidationException as e:
             print(
                 f"{RED}Schema validation failed in {e.file}, please refer to the schema file {e.schema}{RESET}"
