@@ -14,22 +14,28 @@ EXCLUDED_CONTAINERS = {"envoy", "pgbouncer"}
 
 
 @click.command(
-    add_help_option=False,
     context_settings=dict(
         allow_extra_args=True,
         allow_interspersed_args=False,
+        help_option_names=["-h", "--help"],
         ignore_unknown_options=True,
     ),
 )
-@click.option("--container", "-c")
-@click.option("--image", "-i")
-@click.option("--namespace", "-n", default="default")
-@click.option("--privileged", "-p", is_flag=True)
-@click.option("--quiet", "-q", is_flag=True)
+@click.argument("pod_name", metavar="POD")
+@click.option("--container", "-c", help="Target container. Auto-selected if omitted.")
+@click.option("--image", "-i", help="Debug image. Defaults to the target's image.")
+@click.option("--namespace", "-n", default="default", show_default=True)
+@click.option(
+    "--privileged", "-p", is_flag=True, help="Run the debug container as privileged."
+)
+@click.option("--quiet", "-q", is_flag=True, help="Don't print the kubectl command.")
 @click.pass_context
-def debug(ctx, container, image, namespace, privileged, quiet):
+def debug(ctx, pod_name, container, image, namespace, privileged, quiet):
     """
     Convenient wrapper for running "kubectl debug" with env and volume mounts
+
+    Anything after POD is passed to "kubectl debug" as is. Without any extra
+    arguments, a shell is started in the debug container.
     """
     args = ctx.args
     context = ctx.obj.context_name
@@ -39,8 +45,6 @@ def debug(ctx, container, image, namespace, privileged, quiet):
     cmd = [f"{ensure_kubectl()}"]
     if not should_run_with_empty_context():
         cmd += ["--context", context]
-
-    pod_name = args[0]
 
     from kubernetes import client as k8s_client
     from libsentrykube.kube import kube_get_client
@@ -87,8 +91,8 @@ def debug(ctx, container, image, namespace, privileged, quiet):
         f"--target={container}",
         f"--custom={tmp.name}",
     ]
-    cmd += list(args)
-    if len(args) == 1:
+    cmd += [pod_name, *args]
+    if not args:
         # no command given: start a shell instead of the image entrypoint,
         # which fails until the subPath files are linked in place
         cmd += ["--", "sh"]
