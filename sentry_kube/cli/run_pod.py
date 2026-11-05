@@ -6,6 +6,7 @@ import click
 from libsentrykube.events import report_event_for_service
 from libsentrykube.kube import render_templates
 from libsentrykube.utils import die
+from sentry_kube.cli.util import getsentry_debug_image
 
 __all__ = ("run_pod",)
 
@@ -89,7 +90,10 @@ _DEFAULT_STR = "__default__"
 )
 @click.option(
     "--version",
-    help="Override for the image version to use for the selected container.",
+    help=(
+        "Override for the image version to use for the selected container. "
+        "Without it, getsentry images use their -debug variant."
+    ),
 )
 @click.option(
     "--command",
@@ -355,6 +359,8 @@ def run_pod(
 
     if version:
         container["image"] = f"{container['image'].split(':', maxsplit=1)[0]}:{version}"
+    else:
+        container["image"] = getsentry_debug_image(container["image"])
 
     # Prevent restart
     pod_template["spec"]["restartPolicy"] = "Never"

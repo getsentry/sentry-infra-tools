@@ -5,6 +5,7 @@ import json
 import tempfile
 
 from libsentrykube.utils import ensure_kubectl, should_run_with_empty_context
+from sentry_kube.cli.util import getsentry_debug_image
 
 
 __all__ = ("debug",)
@@ -23,7 +24,11 @@ EXCLUDED_CONTAINERS = {"envoy", "pgbouncer"}
 )
 @click.argument("pod_name", metavar="POD")
 @click.option("--container", "-c", help="Target container. Auto-selected if omitted.")
-@click.option("--image", "-i", help="Debug image. Defaults to the target's image.")
+@click.option(
+    "--image",
+    "-i",
+    help="Debug image. Defaults to the target's image, or its -debug variant for getsentry.",
+)
 @click.option("--namespace", "-n", default="default", show_default=True)
 @click.option(
     "--privileged", "-p", is_flag=True, help="Run the debug container as privileged."
@@ -81,7 +86,7 @@ def debug(ctx, pod_name, container, image, namespace, privileged, quiet):
 
     # use the target pod image by default
     if not image:
-        image = container_spec["image"]
+        image = getsentry_debug_image(container_spec["image"])
 
     cmd += [
         "debug",
