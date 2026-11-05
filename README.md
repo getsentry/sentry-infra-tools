@@ -50,6 +50,15 @@ US and control clusters. Run it from the checkout that contains the fleet
 configuration (normally `ops`), or pass that checkout with the global
 `--root` option.
 
+Options starting with `feature.` are feature flags. They are read from and
+written to the `sentry-options-getsentry-features` ConfigMaps, and their value
+is a full `Feature` object. The schema accepts any `feature.` name, so check
+that a dry run shows the flag's current value rather than `<unset>`.
+
+Pass `--namespace` to target any other `sentry-options` namespace, such as
+`seer`. Only `getsentry` and `getsentry-features` have control-silo ConfigMaps,
+so other namespaces select the regional ConfigMaps only.
+
 Use `get` to inspect ConfigMap values across the fleet. `<unset>` means the
 ConfigMap does not declare the option.
 

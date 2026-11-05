@@ -41,6 +41,11 @@ __all__ = ("options",)
 
 DEFAULT_KUBERNETES_NAMESPACE = "default"
 DEFAULT_OPTIONS_NAMESPACE = "getsentry"
+FEATURES_OPTIONS_NAMESPACE = "getsentry-features"
+FEATURE_OPTION_PREFIX = "feature."
+CONTROL_SILO_OPTIONS_NAMESPACES = frozenset(
+    {DEFAULT_OPTIONS_NAMESPACE, FEATURES_OPTIONS_NAMESPACE}
+)
 GETSENTRY_SERVICE = "getsentry"
 GETSENTRY_CONTROL_SERVICE = "getsentry-control"
 CONTROL_SILO_CONFIGMAP_SUFFIX = "control-silo"
@@ -61,6 +66,7 @@ class ConfigMapTarget:
     service: str
     context: str
     configmap_suffix: str | None = None
+    options_namespace: str = DEFAULT_OPTIONS_NAMESPACE
 
     @property
     def name(self) -> str:
@@ -92,9 +98,17 @@ class PreparedPatch:
     previous_value_description: str
 
 
+def _resolve_options_namespace(namespace: str | None, option_key: str) -> str:
+    if namespace is not None:
+        return namespace
+    if option_key.startswith(FEATURE_OPTION_PREFIX):
+        return FEATURES_OPTIONS_NAMESPACE
+    return DEFAULT_OPTIONS_NAMESPACE
+
+
 def _configmap_name(target: ConfigMapTarget) -> str:
     suffix = f"-{target.configmap_suffix}" if target.configmap_suffix else ""
-    return f"sentry-options-{DEFAULT_OPTIONS_NAMESPACE}{suffix}"
+    return f"sentry-options-{target.options_namespace}{suffix}"
 
 
 def _find_targets(
@@ -102,6 +116,7 @@ def _find_targets(
     regions: Iterable[str],
     excluded_regions: Iterable[str],
     services: Iterable[str],
+    options_namespace: str = DEFAULT_OPTIONS_NAMESPACE,
 ) -> list[ConfigMapTarget]:
     """Find mounted Getsentry ConfigMaps from sentry-kube's live topology.
 
@@ -127,7 +142,9 @@ def _find_targets(
                     "context"
                 )
             targets.extend(
-                _targets_for_cluster(region, cluster, context, wanted_services)
+                _targets_for_cluster(
+                    region, cluster, context, wanted_services, options_namespace
+                )
             )
 
     if not targets:
@@ -188,12 +205,24 @@ def _resolve_region_names(config: Config, requested_regions: set[str]) -> set[st
 
 
 def _targets_for_cluster(
-    region: str, cluster: Cluster, context: str, wanted_services: set[str]
+    region: str,
+    cluster: Cluster,
+    context: str,
+    wanted_services: set[str],
+    options_namespace: str,
 ) -> list[ConfigMapTarget]:
     targets = []
     service_names = set(cluster.service_names)
     if GETSENTRY_SERVICE in wanted_services and GETSENTRY_SERVICE in service_names:
-        targets.append(ConfigMapTarget(region, cluster.name, GETSENTRY_SERVICE, context))
+        targets.append(
+            ConfigMapTarget(
+                region,
+                cluster.name,
+                GETSENTRY_SERVICE,
+                context,
+                options_namespace=options_namespace,
+            )
+        )
     if (
         GETSENTRY_CONTROL_SERVICE in wanted_services
         and GETSENTRY_CONTROL_SERVICE in service_names
@@ -205,6 +234,7 @@ def _targets_for_cluster(
                 GETSENTRY_CONTROL_SERVICE,
                 context,
                 CONTROL_SILO_CONFIGMAP_SUFFIX,
+                options_namespace,
             )
         )
     return targets
@@ -836,11 +866,10 @@ def _describe_option(values: dict[str, Any], option_key: str) -> str:
     return json.dumps(values[option_key], separators=(",", ":"), ensure_ascii=False)
 
 
-def _report_option_type(schemas_dir: Path, option_key: str) -> None:
-    schema = json.loads(
-        (schemas_dir / DEFAULT_OPTIONS_NAMESPACE / "schema.json").read_text()
-    )
-    property_schema = schema["properties"].get(option_key)
+def _report_option_type(schemas_dir: Path, namespace: str, option_key: str) -> None:
+    schema = json.loads((schemas_dir / namespace / "schema.json").read_text())
+    # getsentry-features declares its flags with patternProperties only.
+    property_schema = schema.get("properties", {}).get(option_key)
     if property_schema is None:
         return
     # Namespace schemas use local references for shared property definitions.
@@ -861,7 +890,10 @@ def _report_option_type(schemas_dir: Path, option_key: str) -> None:
 
 
 def _validate_against_schema(
-    schemas_dir: Path, option_key: str, value: OptionValue
+    schemas_dir: Path,
+    option_key: str,
+    value: OptionValue,
+    namespace: str = DEFAULT_OPTIONS_NAMESPACE,
 ) -> None:
     """Validate one prospective write with sentry-options' canonical validator.
 
@@ -888,9 +920,9 @@ def _validate_against_schema(
         ) from exc
 
     try:
-        registry.validate_option(DEFAULT_OPTIONS_NAMESPACE, option_key, value)
+        registry.validate_option(namespace, option_key, value)
     except SchemaError as exc:
-        _report_option_type(schemas_dir, option_key)
+        _report_option_type(schemas_dir, namespace, option_key)
         raise click.ClickException(
             f"Schema validation failed for {option_key}: {exc}. "
             "No ConfigMaps were read or patched."
@@ -901,7 +933,7 @@ def _validate_against_schema(
             "No clusters were contacted."
         ) from exc
     else:
-        _report_option_type(schemas_dir, option_key)
+        _report_option_type(schemas_dir, namespace, option_key)
     finally:
         # Exceptions retain this frame through their tracebacks. Release the
         # registry now so later garbage collection in a worker cannot drop it.
@@ -944,7 +976,11 @@ run against it unless `--include`, `--exclude`, or the explicit
 
 The target is fixed to the Getsentry values ConfigMaps in Kubernetes'
 `default` namespace: `sentry-options-getsentry`, plus
-`sentry-options-getsentry-control-silo` for control workloads.
+`sentry-options-getsentry-control-silo` for control workloads. Options starting
+with `feature.` are feature flags and use `sentry-options-getsentry-features`
+and `sentry-options-getsentry-features-control-silo` instead. Pass `--namespace`
+for any other sentry-options namespace, such as `seer`. Those have no
+control-silo ConfigMaps, so only the regional ConfigMaps are selected.
 
 Examples:
 
@@ -973,6 +1009,14 @@ $ sentry-kube --root ~/dev/ops options set \\
 # Apply to the entire fleet; --all-regions confirms the wide blast radius.
 $ sentry-kube --root ~/dev/ops options set \\
     billing.quotas.exceeded.enabled false --all-regions --apply
+
+\b
+# Inspect a feature flag. Its value is a full Feature object.
+$ sentry-kube --root ~/dev/ops options get feature.organizations:my-flag
+
+\b
+# Inspect an option in another namespace.
+$ sentry-kube --root ~/dev/ops options get --namespace seer my.option
 """
 
 
@@ -1003,6 +1047,10 @@ VALUE is parsed as JSON when possible (numbers, `true`/`false`/`null`,
 quoted strings, objects, arrays). Anything else, such as `on`, is treated
 as a plain string, equivalent to `'"on"'`. The option and value must be
 valid for the supplied schema snapshot.
+
+A `feature.` option is a feature flag, and VALUE must be its full Feature
+object. The schema accepts any `feature.` name, so a misspelled flag is not
+rejected: check that the plan shows the flag's current value, not `<unset>`.
 
 Examples:
 
@@ -1064,6 +1112,14 @@ def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
     """Apply the shared fleet-targeting interface to an options subcommand."""
 
     command = click.option(
+        "--namespace",
+        "options_namespace",
+        help=(
+            "sentry-options namespace to target (default: getsentry-features for "
+            "`feature.` options, otherwise getsentry)."
+        ),
+    )(command)
+    command = click.option(
         "--service",
         "services",
         type=click.Choice((GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)),
@@ -1097,10 +1153,22 @@ def _target_scope_options(command: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _selected_targets(
-    regions: Iterable[str], excluded_regions: Iterable[str], services: Iterable[str]
+    regions: Iterable[str],
+    excluded_regions: Iterable[str],
+    services: Iterable[str],
+    options_namespace: str = DEFAULT_OPTIONS_NAMESPACE,
 ) -> list[ConfigMapTarget]:
-    selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
-    return _find_targets(Config(), regions, excluded_regions, selected_services)
+    if options_namespace in CONTROL_SILO_OPTIONS_NAMESPACES:
+        selected_services = services or (GETSENTRY_SERVICE, GETSENTRY_CONTROL_SERVICE)
+    elif GETSENTRY_CONTROL_SERVICE in services:
+        raise click.UsageError(
+            f"Namespace {options_namespace} has no control-silo ConfigMaps."
+        )
+    else:
+        selected_services = (GETSENTRY_SERVICE,)
+    return _find_targets(
+        Config(), regions, excluded_regions, selected_services, options_namespace
+    )
 
 
 def _ensure_cluster_access() -> str:
@@ -1176,6 +1244,7 @@ def set_option(
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
+    options_namespace: str | None,
     apply: bool,
     all_regions: bool,
 ) -> None:
@@ -1190,13 +1259,14 @@ def set_option(
         _report("dry-run; no changes will be made (pass --apply to apply)")
 
     value = _parse_json_value(value_json)
+    namespace = _resolve_options_namespace(options_namespace, option_key)
 
     # Invalid values should fail before cluster access or ConfigMap reads.
     with _schema_directory(schemas_dir, repos_config, refresh=refresh) as schema_path:
-        _validate_against_schema(schema_path, option_key, value)
+        _validate_against_schema(schema_path, option_key, value, namespace)
 
     kubectl = _ensure_cluster_access()
-    targets = _selected_targets(regions, excluded_regions, services)
+    targets = _selected_targets(regions, excluded_regions, services, namespace)
     value_description = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
     _report(f"Preflighting {len(targets)} ConfigMap target(s)")
@@ -1300,9 +1370,11 @@ def get_option(
     regions: tuple[str, ...],
     excluded_regions: tuple[str, ...],
     services: tuple[str, ...],
+    options_namespace: str | None,
     verbose: bool,
 ) -> None:
-    targets = _selected_targets(regions, excluded_regions, services)
+    namespace = _resolve_options_namespace(options_namespace, option_key)
+    targets = _selected_targets(regions, excluded_regions, services, namespace)
     kubectl = _ensure_cluster_access()
     _report(f"Reading {len(targets)} ConfigMap target(s)")
     _read_and_print_option(kubectl, targets, option_key, verbose)
