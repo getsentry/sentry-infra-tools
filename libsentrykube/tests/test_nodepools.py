@@ -410,10 +410,7 @@ def _response(items: list[dict[str, Any]]) -> MagicMock:
 
 
 def test_fetch_cluster_nodepools() -> None:
-    container = MagicMock()
-    container.projects().locations().clusters().get().execute.return_value = (
-        gke_cluster([gke_pool("nap-n4-a")])
-    )
+    cluster = gke_cluster([gke_pool("nap-n4-a")])
     core = MagicMock()
     core.list_node.return_value = _response([node("n1", "nap-n4-a", "general-purpose")])
     core.list_pod_for_all_namespaces.return_value = _response([pod("n1")])
@@ -421,7 +418,9 @@ def test_fetch_cluster_nodepools() -> None:
     custom.list_cluster_custom_object.return_value = {"items": [GENERAL_PURPOSE]}
 
     with (
-        patch("libsentrykube.nodepools.build_api", return_value=container),
+        patch(
+            "libsentrykube.nodepools.get_gke_cluster", return_value=cluster
+        ) as get_gke_cluster,
         patch("libsentrykube.nodepools.kubernetes.client.CoreV1Api", return_value=core),
         patch(
             "libsentrykube.nodepools.kubernetes.client.CustomObjectsApi",
@@ -430,9 +429,7 @@ def test_fetch_cluster_nodepools() -> None:
     ):
         result = fetch_cluster_nodepools(REF, MagicMock())
 
-    container.projects().locations().clusters().get.assert_called_with(
-        name="projects/test-project/locations/region-a/clusters/cluster-a"
-    )
+    get_gke_cluster.assert_called_once_with("test-project", "region-a", "cluster-a")
     assert core.list_pod_for_all_namespaces.call_args.kwargs["field_selector"] == (
         "status.phase!=Succeeded,status.phase!=Failed"
     )
@@ -445,10 +442,7 @@ def test_fetch_cluster_nodepools() -> None:
 
 
 def test_fetch_without_compute_class_crd() -> None:
-    container = MagicMock()
-    container.projects().locations().clusters().get().execute.return_value = (
-        gke_cluster([])
-    )
+    cluster = gke_cluster([])
     core = MagicMock()
     core.list_node.return_value = _response([])
     core.list_pod_for_all_namespaces.return_value = _response([])
@@ -456,7 +450,7 @@ def test_fetch_without_compute_class_crd() -> None:
     custom.list_cluster_custom_object.side_effect = ApiException(status=404)
 
     with (
-        patch("libsentrykube.nodepools.build_api", return_value=container),
+        patch("libsentrykube.nodepools.get_gke_cluster", return_value=cluster),
         patch("libsentrykube.nodepools.kubernetes.client.CoreV1Api", return_value=core),
         patch(
             "libsentrykube.nodepools.kubernetes.client.CustomObjectsApi",
@@ -468,7 +462,7 @@ def test_fetch_without_compute_class_crd() -> None:
 
     custom.list_cluster_custom_object.side_effect = ApiException(status=403)
     with (
-        patch("libsentrykube.nodepools.build_api", return_value=container),
+        patch("libsentrykube.nodepools.get_gke_cluster", return_value=cluster),
         patch("libsentrykube.nodepools.kubernetes.client.CoreV1Api", return_value=core),
         patch(
             "libsentrykube.nodepools.kubernetes.client.CustomObjectsApi",

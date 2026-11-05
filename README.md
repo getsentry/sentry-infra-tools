@@ -174,6 +174,53 @@ This is intentionally temporary. The next normal `sentry-options-automator`
 deployment restores the declarative value from `option-values/`; make the
 corresponding normal change if the emergency value should remain in effect.
 
+## GKE cluster upgrades
+
+`sentry-kube cluster` works on the GKE cluster behind the selected region and
+cluster (`-C <region> [-c <cluster>]`). Versions are not managed in Terraform,
+so this is how control planes and node pools move.
+
+```shell
+sentry-kube -C us cluster versions                 # what the release channel offers
+sentry-kube -C us cluster upgrade 1.35.9-gke.1505000
+sentry-kube -C us cluster watch                    # follow a rollout from another terminal
+```
+
+`cluster upgrade` does the control plane first, then node pools one at a
+time. Each step is started with `--async` and polled through the API, so
+gcloud's one hour wait and your terminal's auth session don't matter once a
+step has started. A pool is only done when every node's kubelet reports the
+target version: the pool's own version flips the moment its operation starts
+and stays there even if the operation fails. A failed operation (zone
+stockout, autoscaler racing it) is retried on the same pool, which only
+touches the nodes still behind. Pools that already have an upgrade running
+are picked up after the rest, and pools the autoscaler deleted mid-run are
+skipped.
+
+Useful flags:
+
+- `--pool NAME` (repeatable) limits the run to those pools, in that order.
+  Put the big autoscaled pool first: fixed-capacity drains push pods into
+  pools that haven't started yet and the autoscaler grows those on the old
+  image.
+- `--pools-only` / `--control-plane-only` split the two halves. With
+  `--pools-only` the target may be older than the control plane (node pools
+  are allowed to trail it), which is how pools on a 1.37 cluster catch up to
+  a 1.35 patch.
+- `--fixed-capacity` upgrades each pool with max surge 0 / max unavailable 1.
+  Nodes are reimaged in place, no spare VM is needed, which is the way
+  through a zone stockout. The pool's original surge settings are restored
+  after its operation finishes (GKE refuses the change while one runs).
+  Avoid it on one or two node pools that carry a real workload.
+- `--dry-run` prints the gcloud commands. `--max-attempts` and `--interval`
+  tune retries and polling.
+
+If the run is interrupted, operations already started keep going. Re-running
+the same command resumes: finished pools are skipped, running ones are waited
+on. `cluster watch` shows running operations with elapsed time, live new/old
+kubelet counts, cordoned nodes and PDB delay, plus any pool that reports the
+target version but still runs old nodes.
+
 ## Environment Variables
 
 `sentry-kube` can be further configured by setting environment variables.

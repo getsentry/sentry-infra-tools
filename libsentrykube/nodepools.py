@@ -15,7 +15,7 @@ import kubernetes.client
 from kubernetes.client.exceptions import ApiException
 from kubernetes.utils import parse_quantity
 
-from libsentrykube.gcloud import build_api
+from libsentrykube.gcloud import get_gke_cluster
 from libsentrykube.network import GkeClusterRef, pool_pod_range
 
 COMPUTE_CLASS_LABEL = "cloud.google.com/compute-class"
@@ -455,14 +455,7 @@ def fetch_cluster_nodepools(
     warn_threshold: float = DEFAULT_WARN_THRESHOLD,
 ) -> ClusterNodePools:
     """Look up node pools via GKE and nodes, pods and ComputeClasses via Kubernetes."""
-    gke_cluster = (
-        build_api("container", "v1")
-        .projects()
-        .locations()
-        .clusters()
-        .get(name=cluster.resource_name)
-        .execute()
-    )
+    gke_cluster = get_gke_cluster(cluster.project, cluster.location, cluster.name)
     core = kubernetes.client.CoreV1Api(kube_client)
     nodes = _list_json(core.list_node)
     pods = _list_json(

@@ -130,3 +130,27 @@ def get_channel_versions(project: str, zone: str, channel: str) -> List[str]:
         return get_release_channel(project, zone, channel)["validVersions"]
     except KeyError:
         raise Exception("Bad channel API response")
+
+
+def get_gke_cluster(project: str, location: str, name: str) -> Mapping[str, Any]:
+    container_resource = build_api("container", "v1")
+    return (
+        container_resource.projects()
+        .locations()
+        .clusters()
+        .get(name=f"projects/{project}/locations/{location}/clusters/{name}")
+        .execute()
+    )
+
+
+def list_gke_operations(project: str, location: str) -> List[Mapping[str, Any]]:
+    """Recent operations in the location; GKE keeps them for a few days."""
+    container_resource = build_api("container", "v1")
+    response = (
+        container_resource.projects()
+        .locations()
+        .operations()
+        .list(parent=f"projects/{project}/locations/{location}")
+        .execute()
+    )
+    return response.get("operations", [])

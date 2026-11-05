@@ -327,8 +327,6 @@ def test_fetch_cluster_network_wires_api_calls() -> None:
             "subnetwork": "projects/test-project/regions/region-a/subnetworks/subnet-a",
         }
     )
-    container = MagicMock()
-    container.projects().locations().clusters().get().execute.return_value = cluster
     compute = MagicMock()
     compute.subnetworks().get().execute.return_value = subnet()
     compute.regions().get().execute.return_value = {
@@ -349,16 +347,16 @@ def test_fetch_cluster_network_wires_api_calls() -> None:
     compute.addresses.return_value = paged([[]])
     compute.firewalls.return_value = paged([FIREWALLS])
 
-    with patch("libsentrykube.network.build_api") as build_api:
-        build_api.side_effect = lambda api, version: {
-            "container": container,
-            "compute": compute,
-        }[api]
+    with (
+        patch("libsentrykube.network.build_api", return_value=compute) as build_api,
+        patch(
+            "libsentrykube.network.get_gke_cluster", return_value=cluster
+        ) as get_gke_cluster,
+    ):
         result = fetch_cluster_network(REF)
 
-    container.projects().locations().clusters().get.assert_called_with(
-        name="projects/test-project/locations/region-a-b/clusters/cluster-a"
-    )
+    build_api.assert_called_once_with("compute", "v1")
+    get_gke_cluster.assert_called_once_with("test-project", "region-a-b", "cluster-a")
     compute.subnetworks().get.assert_called_with(
         project="test-project", region="region-a", subnetwork="subnet-a"
     )
