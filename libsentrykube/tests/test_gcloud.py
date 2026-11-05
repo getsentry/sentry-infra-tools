@@ -4,7 +4,13 @@ import pytest
 
 import logging
 
-from libsentrykube.gcloud import build_api, get_channel_versions, get_release_channel
+from libsentrykube.gcloud import (
+    build_api,
+    get_channel_versions,
+    get_gke_cluster,
+    get_release_channel,
+    list_gke_operations,
+)
 
 
 @pytest.fixture
@@ -77,3 +83,25 @@ def test_build_api_silences_missing_project_warning(mock_container_resource, cap
         build_api("compute", "v1")
 
     assert "No project ID" not in caplog.text
+
+
+def test_get_gke_cluster_by_resource_name(mock_container_resource):
+    clusters = mock_container_resource.return_value.projects.return_value.locations.return_value.clusters.return_value
+    clusters.get.return_value.execute.return_value = {"name": "cluster-a"}
+
+    assert get_gke_cluster("test-project", "region-a", "cluster-a") == {
+        "name": "cluster-a"
+    }
+    clusters.get.assert_called_once_with(
+        name="projects/test-project/locations/region-a/clusters/cluster-a"
+    )
+
+
+def test_list_gke_operations_empty(mock_container_resource):
+    operations = mock_container_resource.return_value.projects.return_value.locations.return_value.operations.return_value
+    operations.list.return_value.execute.return_value = {}
+
+    assert list_gke_operations("test-project", "region-a") == []
+    operations.list.assert_called_once_with(
+        parent="projects/test-project/locations/region-a"
+    )
