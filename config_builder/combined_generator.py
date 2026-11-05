@@ -1,8 +1,9 @@
+import json
 import os
 from enum import Enum
 from pathlib import Path
 from shutil import rmtree
-from typing import Generator, Sequence, Tuple
+from typing import Generator, Optional, Sequence, Tuple
 
 from config_builder.loaders import YamlFileLoader
 from config_builder.merger import FileMerger
@@ -15,6 +16,7 @@ DEFAULT_LIBSONNET_OUTPUT_FILE_NAME = "_generated.libsonnet"
 DEFAULT_JSON_OUTPUT_FILE_NAME = "_generated.json"
 CONFIG_GENERATOR_SETTINGS = "_config_generator.json"
 GENERATED_DIR = "generated"
+DEFAULT_REGIONAL_DIR = "regional_overrides"
 
 
 class Outcome(Enum):
@@ -107,6 +109,26 @@ def iterate_config_directories(root_dir: Path) -> Generator[Path, None, None]:
             yield item
 
 
+def regional_dir_name(config_root: Path) -> str:
+    """
+    Reads the name of the regional subdirectory from the config root's
+    CONFIG_GENERATOR_SETTINGS file (`regional_dir` key). An empty file or a
+    missing key uses DEFAULT_REGIONAL_DIR.
+    """
+    settings_file = config_root / CONFIG_GENERATOR_SETTINGS
+    content = settings_file.read_text().strip()
+    try:
+        settings = json.loads(content) if content else {}
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{settings_file} is not valid JSON: {e}") from e
+    if not isinstance(settings, dict):
+        raise ValueError(f"{settings_file} must contain a JSON object")
+    regional_dir = settings.get("regional_dir", DEFAULT_REGIONAL_DIR)
+    if not isinstance(regional_dir, str) or not regional_dir:
+        raise ValueError(f"{settings_file}: regional_dir must be a non-empty string")
+    return regional_dir
+
+
 def iterate_roots_and_regions(
     root_dir: Path,
 ) -> Generator[Tuple[Path, bool | None], None, None]:
@@ -114,22 +136,22 @@ def iterate_roots_and_regions(
     Extends `iterate_config_directories` by managing properly region
     subdirectories.
 
-    If a root_directory (a directory with containing a CONFIG_GENERATOR_SETTINGS
-    file) contains a `regional_overrides` subdirectory, the root_directory
-    is also returned, as well as each dir inside 'regional_overrides'.
+    If a root_directory contains a regional subdirectory (indicated by `regional_dir` in
+    the settings file, dirname `regional_overrides` by default), the root_directory is also
+    returned, as well as each dir inside the regional subdirectory.
     """
 
     for config_root in iterate_config_directories(root_dir):
         yield (config_root, False)
-        regions_path = Path(config_root / "regional_overrides")
+        regions_path = config_root / regional_dir_name(config_root)
         if regions_path.exists() and regions_path.is_dir():
             for region_root in regions_path.iterdir():
                 if region_root.is_dir():
                     yield (region_root, True)
 
 
-def validate_all_files(root_directory: Path) -> None:
-    validator = JsonSchemaValidator()
+def validate_all_files(root_directory: Path, schema_legend: Optional[Path]) -> None:
+    validator = JsonSchemaValidator(schema_legend=schema_legend)
     for config_root, _ in iterate_roots_and_regions(root_directory):
         input_files = [
             x

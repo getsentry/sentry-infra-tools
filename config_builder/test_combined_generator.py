@@ -1,6 +1,6 @@
 import os
 import tempfile
-from json import loads
+from json import dumps, loads
 from pathlib import Path
 from typing import Callable, Generator
 
@@ -12,9 +12,13 @@ from config_builder.combined_generator import (
     clean_all,
     combine_and_write,
     combine_files,
+    generate_all_files,
     iterate_config_directories,
     iterate_roots_and_regions,
+    regional_dir_name,
+    validate_all_files,
 )
+from config_builder.json_schema_validator import ValidationException
 from config_builder.merger import FileMerger
 from config_builder.merger.libsonnet import LibsonnetMerger
 from config_builder.merger.yamljson import YamlMerger
@@ -199,3 +203,89 @@ def test_cleanup(valid_structure: str) -> None:
     assert not (feature1 / "generated2").exists()
     assert not feature2_s4s.exists()
     assert not (feature2_s4s / "generated1").exists()
+
+
+@pytest.fixture
+def custom_regional_dir(tmp_path: Path) -> Path:
+    """
+    `dir1` renames its regional dir to `custom_regions`, `dir2` keeps the
+    default `regional_overrides`.
+    """
+    root = tmp_path / "shared_config"
+    dir1 = root / "dir1"
+    os.makedirs(dir1 / "custom_regions" / "region1")
+    # A leftover default dir must be ignored once the root renamed it.
+    os.makedirs(dir1 / "regional_overrides" / "stale")
+    (dir1 / CONFIG_GENERATOR_SETTINGS).write_text(
+        dumps({"regional_dir": "custom_regions"})
+    )
+
+    dir2 = root / "dir2"
+    os.makedirs(dir2 / "regional_overrides" / "region2")
+    # A JSON object spread over lines must parse as the default.
+    (dir2 / CONFIG_GENERATOR_SETTINGS).write_text("{\n}")
+    return root
+
+
+def test_iteration_custom_regional_dir(custom_regional_dir: Path) -> None:
+    dir1 = custom_regional_dir / "dir1"
+    dir2 = custom_regional_dir / "dir2"
+    assert set(iterate_roots_and_regions(custom_regional_dir)) == {
+        (dir1, False),
+        (dir1 / "custom_regions" / "region1", True),
+        (dir2, False),
+        (dir2 / "regional_overrides" / "region2", True),
+    }
+
+
+@pytest.mark.parametrize(
+    "settings, expected",
+    [
+        ("", "regional_overrides"),
+        ("{}", "regional_overrides"),
+        ('{"regional_dir": "custom_regions"}', "custom_regions"),
+        ('{"regional_dir": ""}', None),
+        ('{"regional_dir": 1}', None),
+        ("[]", None),
+        ("not json", None),
+    ],
+)
+def test_regional_dir_name(tmp_path: Path, settings: str, expected: str | None) -> None:
+    (tmp_path / CONFIG_GENERATOR_SETTINGS).write_text(settings)
+    if expected is None:
+        with pytest.raises(ValueError):
+            regional_dir_name(tmp_path)
+    else:
+        assert regional_dir_name(tmp_path) == expected
+
+
+def test_generate_custom_regional_dir(custom_regional_dir: Path) -> None:
+    region1 = custom_regional_dir / "dir1" / "custom_regions" / "region1"
+    (region1 / "new-item.yaml").write_text("enabled: true\n")
+
+    generate_all_files(custom_regional_dir)
+
+    generated = loads((region1 / "generated" / "_generated.json").read_text())
+    assert generated == {"new-item": {"enabled": True}}
+
+
+def test_validate_custom_regional_dir(
+    custom_regional_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shared_config = custom_regional_dir
+    os.makedirs(shared_config / "schemas")
+    (shared_config / "schemas" / "item.schema.json").write_text(
+        dumps({"type": "object", "properties": {"count": {"type": "integer"}}})
+    )
+    legend = shared_config / "legend.json"
+    legend.write_text(dumps({"dir1/custom_regions/*/*.yaml": "item.schema.json"}))
+    item = shared_config / "dir1" / "custom_regions" / "region1" / "item.yaml"
+    # JsonSchemaValidator resolves globs and schemas relative to ./shared_config
+    monkeypatch.chdir(shared_config.parent)
+
+    item.write_text("count: 1\n")
+    validate_all_files(Path("shared_config"), legend)
+
+    item.write_text("count: not-an-int\n")
+    with pytest.raises(ValidationException):
+        validate_all_files(Path("shared_config"), legend)
