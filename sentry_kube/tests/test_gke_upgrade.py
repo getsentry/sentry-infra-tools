@@ -244,6 +244,24 @@ def test_gives_up_after_max_attempts() -> None:
     assert "2 nodes still behind after 2 attempts" in r.results[0].detail
 
 
+def test_empty_pool_still_gets_its_version_upgraded() -> None:
+    gke = FakeGke({"empty": 0})
+    r = runner(gke)
+    r.upgrade_pools(["empty"])
+    assert outcomes(r) == [("empty", "done")]
+    assert gke.pool_versions["empty"] == TARGET
+    assert any("--node-pool" in c for c in gke.commands)
+
+
+def test_empty_pool_at_target_is_skipped() -> None:
+    gke = FakeGke({"empty": 0})
+    gke.pool_versions["empty"] = TARGET
+    r = runner(gke)
+    r.upgrade_pools(["empty"])
+    assert outcomes(r) == [("empty", "done")]
+    assert gke.commands == []
+
+
 def test_vanished_pool_is_noted_not_fatal() -> None:
     gke = FakeGke({"p": 1})
     r = runner(gke)
@@ -309,6 +327,38 @@ def test_control_plane_waits_for_operation() -> None:
     assert gke.master == TARGET
     assert "--master" in gke.commands[0]
     assert gke.log[-1].startswith("control plane done in")
+
+
+def test_control_plane_adopts_running_operation() -> None:
+    gke = FakeGke({"p": 1}, master=OLD)
+    gke.ticks = 2
+    gke.gcloud(["gcloud", "container", "clusters", "upgrade", "cluster-a", "--master"])
+    gke.commands.clear()
+    runner(gke).upgrade_control_plane()
+    assert gke.master == TARGET
+    assert gke.commands == []
+    assert any("already running, waiting" in line for line in gke.log)
+
+
+def test_control_plane_tolerates_operation_lag() -> None:
+    gke = FakeGke({"p": 1}, master=OLD)
+    real_gcloud = gke.gcloud
+
+    def slow_gcloud(argv: Sequence[str]) -> tuple[int, str]:
+        code, err = real_gcloud(argv)
+        gke.ops[-1]["status"] = "PENDING"  # not visible as RUNNING yet
+        return code, err
+
+    def sleep(seconds: float) -> None:
+        if gke.ops[-1]["status"] == "PENDING":
+            gke.ops[-1]["status"] = "RUNNING"
+        else:
+            FakeGke.sleep(gke, seconds)
+
+    gke.gcloud = slow_gcloud  # type: ignore[method-assign]
+    gke.sleep = sleep  # type: ignore[method-assign]
+    runner(gke).upgrade_control_plane()
+    assert gke.master == TARGET
 
 
 def test_control_plane_already_there() -> None:

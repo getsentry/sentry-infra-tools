@@ -195,35 +195,56 @@ class UpgradeRunner:
 
     # control plane -------------------------------------------------------
 
+    def _running_master_op(self) -> Optional[Mapping[str, Any]]:
+        return next(
+            (
+                op
+                for op in self.clients.list_ops()
+                if op.get("status") == "RUNNING"
+                and op.get("operationType") == UPGRADE_MASTER
+                and op_target(op) == self.cluster
+            ),
+            None,
+        )
+
     def upgrade_control_plane(self) -> None:
         cluster = self.clients.get_cluster()
         current = cluster["currentMasterVersion"]
         if current == self.version:
             self.clients.log(f"control plane already at {self.version}")
             return
-        self.clients.log(f"control plane {current} -> {self.version}")
-        code, err = self._run(self._upgrade_argv("--master"))
-        if code != 0:
-            raise RuntimeError(f"control plane upgrade failed to start: {err.strip()}")
-        if self.dry_run:
-            return
+        running = self._running_master_op()
+        if running is not None:
+            self.clients.log(
+                f"control plane upgrade {running.get('name')} already running, waiting"
+            )
+        else:
+            self.clients.log(f"control plane {current} -> {self.version}")
+            code, err = self._run(self._upgrade_argv("--master"))
+            if code != 0:
+                raise RuntimeError(
+                    f"control plane upgrade failed to start: {err.strip()}"
+                )
+            if self.dry_run:
+                return
         started = self.clients.now()
+        # The operation can take a moment to show up after --async returns.
+        grace = 6
         while True:
-            running = [
-                op
-                for op in self.clients.list_ops()
-                if op.get("status") == "RUNNING"
-                and op.get("operationType") == UPGRADE_MASTER
-                and op_target(op) == self.cluster
-            ]
+            running = self._running_master_op()
             got = self.clients.get_cluster()["currentMasterVersion"]
-            if not running and got == self.version:
+            if running is None and got == self.version:
                 self.clients.log(f"control plane done in {self._elapsed(started)}")
                 return
-            if not running and got != self.version:
+            if running is None:
+                if grace:
+                    grace -= 1
+                    self.clients.sleep(5)
+                    continue
                 raise RuntimeError(
                     f"control plane is {got} after upgrade, expected {self.version}"
                 )
+            grace = 0
             self.clients.log(f"control plane upgrading, {self._elapsed(started)}")
             self.clients.sleep(self.interval)
 
@@ -278,7 +299,11 @@ class UpgradeRunner:
             and (original["maxSurge"], original["maxUnavailable"]) != (0, 1)
         )
         counts = pool_nodes(self.clients.list_nodes(), name, self.version)
-        if adopt is None and counts.total and not counts.old:
+        if (
+            adopt is None
+            and not counts.old
+            and (counts.total or pool["version"] == self.version)
+        ):
             self._record(name, "done", detail="all nodes already on target")
             return
         self.clients.log(
@@ -385,8 +410,21 @@ class UpgradeRunner:
         return line
 
     def _verified(self, pool: str) -> bool:
+        """
+        Every node on the target. A pool with no nodes (scaled to zero) only
+        counts once its own version is the target, or nodes the autoscaler
+        adds later come up on the old image.
+        """
         counts = pool_nodes(self.clients.list_nodes(), pool, self.version)
-        return counts.old == 0
+        if counts.old:
+            return False
+        if counts.total:
+            return True
+        versions = {
+            p["name"]: p["version"]
+            for p in self.clients.get_cluster().get("nodePools", [])
+        }
+        return versions.get(pool) == self.version
 
     def _record(
         self, name: str, outcome: str, attempts: int = 0, detail: str = ""
