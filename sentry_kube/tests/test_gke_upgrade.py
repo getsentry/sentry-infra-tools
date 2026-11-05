@@ -262,6 +262,39 @@ def test_empty_pool_at_target_is_skipped() -> None:
     assert gke.commands == []
 
 
+def test_pool_deleted_mid_run_is_recorded_gone() -> None:
+    gke = FakeGke({"nap": 1, "next": 1})
+    gke.script["nap"] = ["fail"]
+    real_sleep = gke.sleep
+
+    def sleep(seconds: float) -> None:
+        real_sleep(seconds)
+        # The autoscaler removes the pool once its failed op has ended.
+        if any(
+            op["status"] == "DONE" and op["targetLink"].endswith("/nap")
+            for op in gke.ops
+        ):
+            gke.pool_versions.pop("nap", None)
+            gke.nodes.pop("nap", None)
+
+    gke.sleep = sleep  # type: ignore[method-assign]
+    r = runner(gke, fixed_capacity=True)
+    r.upgrade_pools(["nap", "next"])
+    assert outcomes(r) == [("nap", "gone"), ("next", "done")]
+    # No restore of surge settings on a pool that is gone.
+    assert [c for c in gke.commands if c[2] == "node-pools" and c[4] == "nap"][1:] == []
+
+
+def test_control_plane_dry_run_does_not_wait_on_live_operation() -> None:
+    gke = FakeGke({"p": 1}, master=OLD)
+    gke.ticks = 100
+    gke.gcloud(["gcloud", "container", "clusters", "upgrade", "cluster-a", "--master"])
+    gke.commands.clear()
+    runner(gke, dry_run=True).upgrade_control_plane()
+    assert gke.commands == []
+    assert gke.clock == 0
+
+
 def test_vanished_pool_is_noted_not_fatal() -> None:
     gke = FakeGke({"p": 1})
     r = runner(gke)

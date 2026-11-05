@@ -218,6 +218,8 @@ class UpgradeRunner:
             self.clients.log(
                 f"control plane upgrade {running.get('name')} already running, waiting"
             )
+            if self.dry_run:
+                return
         else:
             self.clients.log(f"control plane {current} -> {self.version}")
             code, err = self._run(self._upgrade_argv("--master"))
@@ -323,6 +325,14 @@ class UpgradeRunner:
                         f"pool {name}: that operation failed: {op_failure(op)}"
                     )
             while attempts < self.max_attempts:
+                if not self._pool_exists(name):
+                    self._record(
+                        name,
+                        "gone",
+                        attempts,
+                        "pool no longer exists (autoscaler removed it)",
+                    )
+                    return
                 if self._verified(name):
                     self._record(name, "done", attempts)
                     return
@@ -359,7 +369,7 @@ class UpgradeRunner:
                     f"{counts.old} nodes still behind after {attempts} attempts",
                 )
         finally:
-            if flipped:
+            if flipped and self._pool_exists(name):
                 self._run(
                     self._settings_argv(
                         name, original["maxSurge"], original["maxUnavailable"]
@@ -408,6 +418,11 @@ class UpgradeRunner:
         if pdb:
             line += f", pdb delay {pdb // 60}m"
         return line
+
+    def _pool_exists(self, pool: str) -> bool:
+        return any(
+            p["name"] == pool for p in self.clients.get_cluster().get("nodePools", [])
+        )
 
     def _verified(self, pool: str) -> bool:
         """
