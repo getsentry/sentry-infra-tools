@@ -1,3 +1,15 @@
+## 1.40.2
+
+### New Features ✨
+
+- (config_builder) Decouple shared_configs structure from config_builder by @bmckerry in [#273](https://github.com/getsentry/sentry-infra-tools/pull/273)
+- (options) Adds the ability to use the sentry-options breakglass in different namespaces by @kenzoengineer in [#277](https://github.com/getsentry/sentry-infra-tools/pull/277)
+- (sentry-kube) Make `cluster upgrade` serial and verified, add `cluster watch` by @chazdnato in [#275](https://github.com/getsentry/sentry-infra-tools/pull/275)
+
+### Other
+
+- sentry-kube: argocd-sync command for autosync and self-heal by @tnt-sentry in [#270](https://github.com/getsentry/sentry-infra-tools/pull/270)
+
 ## 1.40.1
 
 - sentry-kube: opt-in placeholder tag for offline image helpers by @tnt-sentry in [#264](https://github.com/getsentry/sentry-infra-tools/pull/264)

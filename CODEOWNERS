@@ -1,2 +1,5 @@
 # Ops by default
 * @getsentry/ops
+
+# Streaming team owns the config_builder pipeline
+config_builder/ @getsentry/ops @getsentry/streaming-platform

@@ -180,6 +180,8 @@ def valid_structure() -> Generator[str, None, None]:
             / "consumer_type.yaml"
         )
         unrelated2.write_text(yaml.dump(UNRELATED, indent=4))
+
+        (Path(temp_dir) / "legend.json").write_text(json.dumps(SCHEMAS))
         yield temp_dir
 
 
@@ -220,7 +222,9 @@ def valid_structure() -> Generator[str, None, None]:
 def test_json_schema_validator(
     valid_structure: str, file: Path, return_code: int | None
 ) -> None:
-    validator = JsonSchemaValidator(Path(valid_structure), SCHEMAS)
+    validator = JsonSchemaValidator(
+        Path(valid_structure), Path(valid_structure) / "legend.json"
+    )
     assert validator.validate_yaml(Path(valid_structure) / file) == return_code
 
 
@@ -243,5 +247,7 @@ def test_json_schema_validator(
 )
 def test_json_schema_invalid(valid_structure: str, file: Path) -> None:
     with pytest.raises(ValidationException):
-        validator = JsonSchemaValidator(Path(valid_structure), SCHEMAS)
+        validator = JsonSchemaValidator(
+            Path(valid_structure), Path(valid_structure) / "legend.json"
+        )
         validator.validate_yaml(Path(valid_structure) / file)

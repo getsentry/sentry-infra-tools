@@ -578,7 +578,7 @@ def test_set_treats_unquoted_text_as_a_json_string(
 
     assert result.exit_code != 0
     mock_schema_validation.assert_called_once_with(
-        Path("schemas"), "sample-rate", "foo"
+        Path("schemas"), "sample-rate", "foo", "getsentry"
     )
     mock_config.assert_not_called()
 
@@ -800,7 +800,7 @@ def test_set_schema_loading_failure_stops_before_discovering_targets(
     assert result.exit_code != 0
     assert "schema validation failed" in result.output
     mock_schema_validation.assert_called_once_with(
-        Path("schemas"), "sample-rate", False
+        Path("schemas"), "sample-rate", False, "getsentry"
     )
     mock_config.assert_not_called()
 
@@ -1491,6 +1491,226 @@ def test_validate_against_schema_reports_type_for_valid_value(
         _validate_against_schema(tmp_path, "unknown", 7)
     with pytest.raises(click.ClickException, match="No clusters were contacted"):
         _validate_against_schema(tmp_path / "missing", "option", 7)
+
+
+FEATURE_VALUE = {
+    "owner": {"team": "test"},
+    "created_at": "2026-01-01",
+    "enabled": False,
+    "segments": [],
+}
+
+
+def _write_feature_schema(schemas_dir: Path) -> None:
+    namespace = schemas_dir / "getsentry-features"
+    namespace.mkdir()
+    (namespace / "schema.json").write_text(json.dumps({
+        "version": "1.0",
+        "type": "object",
+        "patternProperties": {"^feature\\.": {"$ref": "#/definitions/Feature"}},
+    }))
+
+
+def test_validate_against_schema_validates_feature_in_features_namespace(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _write_feature_schema(tmp_path)
+    getsentry = tmp_path / "getsentry"
+    getsentry.mkdir()
+    (getsentry / "schema.json").write_text(json.dumps({
+        "version": "1.0", "type": "object", "properties": {},
+    }))
+
+    _validate_against_schema(
+        tmp_path, "feature.organizations:foo", FEATURE_VALUE, "getsentry-features"
+    )
+
+    assert capsys.readouterr().out == ""
+    with pytest.raises(click.ClickException, match="No ConfigMaps were read or patched"):
+        _validate_against_schema(
+            tmp_path, "feature.organizations:foo", False, "getsentry-features"
+        )
+
+
+@pytest.mark.parametrize(
+    ("namespace", "option_key", "expected"),
+    [
+        (None, "sample-rate", "getsentry"),
+        (None, "feature.organizations:foo", "getsentry-features"),
+        ("seer", "sample-rate", "seer"),
+        ("seer", "feature.seer-explorer", "seer"),
+    ],
+)
+def test_resolve_options_namespace(
+    namespace: str | None, option_key: str, expected: str
+) -> None:
+    assert options_module._resolve_options_namespace(namespace, option_key) == expected
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_reads_feature_from_features_configmap(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _kubectl_side_effect(
+        get={
+            ("us-context", "sentry-options-getsentry-features"): _configmap(
+                "1", {"feature.organizations:foo": FEATURE_VALUE}
+            ),
+        }
+    )
+
+    result = CliRunner().invoke(
+        options,
+        ["get", "feature.organizations:foo", "--include", "us", "--service", "getsentry"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert '"created_at":"2026-01-01"' in result.output
+    assert "<unset>" not in result.output
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_apply_patches_feature_in_every_features_configmap(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    targets = (
+        ("control-context", "sentry-options-getsentry-features-control-silo"),
+        ("us-context", "sentry-options-getsentry-features"),
+        ("us-context", "sentry-options-getsentry-features-control-silo"),
+    )
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={target: _success("yes\n") for target in targets},
+        get={
+            target: _configmap("1", {"feature.organizations:foo": {"enabled": True}})
+            for target in targets
+        },
+        patch={target: _success() for target in targets},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "feature.organizations:foo",
+            json.dumps(FEATURE_VALUE),
+            "--schemas",
+            "schemas",
+            "--all-regions",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "APPLIED: set feature.organizations:foo=" in result.output
+    patched = {
+        (
+            args.args[0][args.args[0].index("--context") + 1],
+            args.args[0][args.args[0].index("configmap") + 1],
+        )
+        for args in mock_run.call_args_list
+        if _is_configmap_patch(args.args[0])
+    }
+    assert patched == set(targets)
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_with_namespace_reads_only_regional_configmaps(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    mock_run.side_effect = _kubectl_side_effect(
+        get={("us-context", "sentry-options-seer"): _configmap("1", {"sample-rate": 0.5})}
+    )
+
+    result = CliRunner().invoke(options, ["get", "sample-rate", "--namespace", "seer"])
+
+    assert result.exit_code == 0, result.output
+    assert "us: 0.5" in result.output
+    assert mock_run.call_count == 1
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_get_with_namespace_rejects_control_service(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+
+    result = CliRunner().invoke(
+        options,
+        ["get", "sample-rate", "--namespace", "seer", "--service", "getsentry-control"],
+    )
+
+    assert result.exit_code != 0
+    assert "Namespace seer has no control-silo ConfigMaps" in result.output
+    mock_run.assert_not_called()
+
+
+@patch("sentry_kube.cli.options.ensure_kubectl", return_value="kubectl")
+@patch("sentry_kube.cli.options.subprocess.run")
+@patch("sentry_kube.cli.options.list_clusters_for_customer")
+@patch("sentry_kube.cli.options.Config")
+def test_set_with_namespace_validates_and_patches_that_namespace(
+    mock_config: MagicMock,
+    mock_list_clusters: MagicMock,
+    mock_run: MagicMock,
+    _mock_kubectl: MagicMock,
+    mock_schema_validation: MagicMock,
+) -> None:
+    _mock_clusters(mock_config, mock_list_clusters)
+    target = ("us-context", "sentry-options-seer")
+    mock_run.side_effect = _kubectl_side_effect(
+        can_i={target: _success("yes\n")},
+        get={target: _configmap("1", {"sample-rate": 1.0})},
+        patch={target: _success()},
+    )
+
+    result = CliRunner().invoke(
+        options,
+        [
+            "set",
+            "sample-rate",
+            "0.5",
+            "--namespace",
+            "seer",
+            "--schemas",
+            "schemas",
+            "--include",
+            "us",
+            "--apply",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    mock_schema_validation.assert_called_once_with(
+        Path("schemas"), "sample-rate", 0.5, "seer"
+    )
+    assert "sentry-options-seer" in result.output
 
 
 def test_apply_patch_passes_large_payload_via_temporary_file() -> None:

@@ -11,7 +11,7 @@ from ipaddress import IPv4Address, IPv4Network, collapse_addresses, ip_address
 from ipaddress import ip_network
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
-from libsentrykube.gcloud import build_api
+from libsentrykube.gcloud import build_api, get_gke_cluster
 
 # GCP reserves the network, gateway, second-to-last and broadcast addresses.
 GCP_RESERVED_IPS_PER_SUBNET = 4
@@ -382,16 +382,9 @@ def fetch_cluster_network(
     cluster: GkeClusterRef, warn_threshold: float = DEFAULT_WARN_THRESHOLD
 ) -> ClusterNetwork:
     """Look up a cluster's networking through the GKE and Compute APIs (read-only)."""
-    container = build_api("container", "v1")
     compute = build_api("compute", "v1")
 
-    gke_cluster = (
-        container.projects()
-        .locations()
-        .clusters()
-        .get(name=cluster.resource_name)
-        .execute()
-    )
+    gke_cluster = get_gke_cluster(cluster.project, cluster.location, cluster.name)
     # projects/HOST_PROJECT/regions/REGION/subnetworks/NAME; differs from the
     # cluster's project on Shared VPC.
     subnet_path = _resource_path(gke_cluster["networkConfig"]["subnetwork"])
