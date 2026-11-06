@@ -1,4 +1,4 @@
---index-url https://pypi.devinfra.sentry.io/simple
+--index-url https://sfw.security.sentry.io/pypi/simple
 
 click>=8.1.7
 dictdiffer>=0.9.0
