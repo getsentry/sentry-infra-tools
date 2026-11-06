@@ -1,3 +1,14 @@
+## 1.41.0
+
+### New Features ✨
+
+- (sentry-kube) Use debug image in run-pod and debug by @oioki and @claude in [#276](https://github.com/getsentry/sentry-infra-tools/pull/276)
+
+### Internal Changes 🔧
+
+- (release) Bump craft to 3.9.0 and update config by @BYK with @sentry-junior in [#274](https://github.com/getsentry/sentry-infra-tools/pull/274)
+- Bump Python to 3.11.18 by @oioki in [#278](https://github.com/getsentry/sentry-infra-tools/pull/278)
+
 ## 1.40.2
 
 ### New Features ✨
