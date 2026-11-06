@@ -4,6 +4,23 @@ import os
 from typing import List
 from libsentrykube.service import get_service_names
 
+GETSENTRY_IMAGE_SUFFIX = "/getsentry/backend"
+
+
+def is_getsentry_image(image: str) -> bool:
+    return image.rpartition(":")[0].endswith(GETSENTRY_IMAGE_SUFFIX)
+
+
+def getsentry_debug_image(image: str) -> str:
+    """
+    Returns the `-debug` variant of a getsentry image, which has a shell and
+    debugging tools. Any other image is returned as is.
+    """
+    repo, _, tag = image.rpartition(":")
+    if not is_getsentry_image(image) or tag.endswith("-debug"):
+        return image
+    return f"{repo}:{tag.removesuffix('-distroless')}-debug"
+
 
 def allow_for_all_services(f):
     """
