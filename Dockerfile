@@ -46,7 +46,7 @@ ARG SENTRY_KUBE_KUBECTL_VERSION
 # Persist the version as an environment variable so that subsequent "sentry-kube" calls in the
 # live container would pick it up too.
 ENV SENTRY_KUBE_KUBECTL_VERSION=${SENTRY_KUBE_KUBECTL_VERSION}
-RUN pip install --index-url https://pypi.devinfra.sentry.io/simple sentry-infra-tools==${SENTRY_KUBE_VERSION} && rm -rf /root/.cache
+RUN pip install --index-url https://sfw.security.sentry.io/pypi/simple sentry-infra-tools==${SENTRY_KUBE_VERSION} && rm -rf /root/.cache
 
 ### Prepare the working directory
 WORKDIR /work
