@@ -20,14 +20,16 @@ from libsentrykube.utils import kube_set_context
 from libsentrykube.utils import set_workspace_root_start
 from .sentry_environment import apply_runtime_sentry_tags
 from .sentry_environment import resolve_sentry_environment
+from .sentry_environment import should_enable_sentry
 
 SESSION_FILE = Path("/") / "tmp" / "sentry-kube-session"
-sentry_sdk.init(
-    dsn="https://6b86f72181e2484f949994447137d64d@o1.ingest.sentry.io/4504373448540160",
-    traces_sample_rate=1.0,
-    environment=resolve_sentry_environment(),
-)
-apply_runtime_sentry_tags()
+if should_enable_sentry():
+    sentry_sdk.init(
+        dsn="https://6b86f72181e2484f949994447137d64d@o1.ingest.sentry.io/4504373448540160",
+        traces_sample_rate=1.0,
+        environment=resolve_sentry_environment(),
+    )
+    apply_runtime_sentry_tags()
 
 
 @dataclass(frozen=True)

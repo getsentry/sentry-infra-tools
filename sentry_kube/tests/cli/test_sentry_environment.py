@@ -4,6 +4,7 @@ import pytest
 
 from sentry_kube.cli.sentry_environment import apply_runtime_sentry_tags
 from sentry_kube.cli.sentry_environment import resolve_sentry_environment
+from sentry_kube.cli.sentry_environment import should_enable_sentry
 
 
 @pytest.mark.parametrize(
@@ -118,3 +119,27 @@ def test_apply_runtime_sentry_tags_local_no_extra_tags():
         apply_runtime_sentry_tags(hostname="F6HFPVHVKR.local", environ={})
 
     scope.set_tag.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({}, True),
+        ({"GO_PIPELINE_NAME": "deploy-edge-relay"}, True),
+        ({"CI": ""}, True),
+        ({"CI": "false"}, True),
+        ({"CI": "0"}, True),
+        ({"CI": "true"}, False),
+        ({"CI": "1"}, False),
+        ({"SENTRY_KUBE_NO_SENTRY": "1"}, False),
+        ({"SENTRY_KUBE_NO_SENTRY": "false"}, True),
+    ],
+)
+def test_should_enable_sentry(environ, expected):
+    with patch.dict("sys.modules", {}, clear=False) as modules:
+        modules.pop("pytest", None)
+        assert should_enable_sentry(environ=environ) is expected
+
+
+def test_should_enable_sentry_disabled_under_pytest():
+    assert should_enable_sentry(environ={}) is False
