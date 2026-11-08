@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import os
 import socket
+import sys
 from typing import Mapping, Optional
 
 import sentry_sdk
+
+_FALSY_ENV_VALUES = {"", "0", "false", "no", "off"}
 
 # GoCD injects these on agent jobs. Pipeline is the useful primary identifier.
 _GOCD_TAG_ENV_VARS = (
@@ -13,6 +16,25 @@ _GOCD_TAG_ENV_VARS = (
     ("gocd.stage", "GO_STAGE_NAME"),
     ("gocd.job", "GO_JOB_NAME"),
 )
+
+
+def _env_flag(env: Mapping[str, str], name: str) -> bool:
+    return env.get(name, "").strip().lower() not in _FALSY_ENV_VALUES
+
+
+def should_enable_sentry(environ: Optional[Mapping[str, str]] = None) -> bool:
+    """
+    Decide whether sentry-kube should report to Sentry at all.
+
+    Reporting is off in CI (`CI` is set by GitHub Actions and most other CI
+    providers), under pytest, and when `SENTRY_KUBE_NO_SENTRY` is set. Errors
+    from test runs are noise, not production failures. GoCD does not set `CI`
+    by default, so deploy pipelines keep reporting.
+    """
+    env = os.environ if environ is None else environ
+    if _env_flag(env, "SENTRY_KUBE_NO_SENTRY") or _env_flag(env, "CI"):
+        return False
+    return "pytest" not in sys.modules
 
 
 def resolve_sentry_environment(
