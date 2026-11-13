@@ -34,13 +34,13 @@ def autosync_enabled(automated: Optional[dict[str, Any]]) -> bool:
 def sync_patch(
     automated: Optional[dict[str, Any]],
     autosync: Optional[bool],
-    self_heal: Optional[bool],
+    selfheal: Optional[bool],
 ) -> dict[str, Any]:
     patch: dict[str, Any] = {
         "enabled": autosync_enabled(automated) if autosync is None else autosync
     }
-    if self_heal is not None:
-        patch["selfHeal"] = self_heal
+    if selfheal is not None:
+        patch["selfHeal"] = selfheal
     return {"spec": {"syncPolicy": {"automated": patch}}}
 
 
@@ -64,14 +64,14 @@ def on_off(ctx, param, value: Optional[str]) -> Optional[bool]:
     help="Toggle automated sync.",
 )
 @click.option(
-    "--self-heal",
+    "--selfheal",
     type=click.Choice(["on", "off"]),
     callback=on_off,
     help="Toggle self-heal.",
 )
 @click.pass_context
 def argocd_sync(
-    ctx, service: str, autosync: Optional[bool], self_heal: Optional[bool]
+    ctx, service: str, autosync: Optional[bool], selfheal: Optional[bool]
 ) -> None:
     """
     Show or toggle ArgoCD autosync and self-heal for a service.
@@ -84,11 +84,11 @@ def argocd_sync(
 
     try:
         app = api.get_namespaced_custom_object(name=name, **APPLICATION)
-        if autosync is not None or self_heal is not None:
+        if autosync is not None or selfheal is not None:
             automated = (app["spec"].get("syncPolicy") or {}).get("automated")
             app = api.patch_namespaced_custom_object(
                 name=name,
-                body=sync_patch(automated, autosync, self_heal),
+                body=sync_patch(automated, autosync, selfheal),
                 **APPLICATION,
             )
     except ApiException as e:
