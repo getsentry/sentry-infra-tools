@@ -8,6 +8,8 @@ from click.testing import CliRunner
 
 from libsentrykube.gke_upgrade import Clients, Node
 from sentry_kube.cli.cluster import (
+    _logger,
+    cache_dir,
     cluster,
     old_node_counts,
     plan_upgrade,
@@ -51,6 +53,15 @@ class FakeRunner:
         self.results: list[Any] = []
         FakeRunner.instances.append(self)
 
+    stale_surge: list[str] = []
+    restored = False
+
+    def pending_surge_restores(self) -> list[str]:
+        return list(FakeRunner.stale_surge)
+
+    def restore_surge_settings(self) -> None:
+        self.restored = True
+
     def upgrade_control_plane(self) -> None:
         self.calls.append(("control_plane", None))
 
@@ -60,8 +71,10 @@ class FakeRunner:
 
 
 @pytest.fixture
-def mocks():
+def mocks(monkeypatch, tmp_path):
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
     FakeRunner.instances.clear()
+    monkeypatch.setattr(FakeRunner, "stale_surge", [])
     cluster_obj = gke_cluster()
     state = SimpleNamespace(cluster=cluster_obj, nodes=nodes_for(cluster_obj), ops=[])
     clients = Clients(
@@ -239,18 +252,38 @@ def test_upgrade_confirmed(mocks) -> None:
     assert runner_calls() == [("control_plane", None), ("pools", ["pool-a"])]
     runner = FakeRunner.instances[0]
     assert runner.args == ("project-a", "region-a-b", "cluster-a", "1.2.4")
+    store = runner.kwargs.pop("surge_store")
+    assert store.path.name == "project-a_region-a-b_cluster-a.surge.json"
     assert runner.kwargs == {
         "interval": 60,
         "max_attempts": 3,
         "fixed_capacity": False,
         "dry_run": False,
     }
+    assert runner.restored
 
 
 def test_upgrade_declined(mocks) -> None:
+    FakeRunner.stale_surge = ["pool-b"]
     run = invoke("upgrade", "1.2.4", input="n\n")
     assert run.exit_code == 1
+    assert "node pool pool-b: restore the surge settings" in run.output
     assert runner_calls() == []
+    assert not FakeRunner.instances[0].restored
+
+
+def test_upgrade_already_current_still_restores_surge(mocks) -> None:
+    mocks.state.cluster = gke_cluster(master="1.2.4", nodes="1.2.4")
+    mocks.state.nodes = nodes_for(mocks.state.cluster)
+    FakeRunner.stale_surge = ["pool-b"]
+    run = invoke("upgrade", "1.2.4", input="y\n")
+    assert run.exit_code == 0, run.output
+    assert "already at 1.2.4" in run.output
+    assert "Upgrade plan" not in run.output
+    assert "node pool pool-b: restore the surge settings" in run.output
+    assert "Proceed?" in run.output
+    assert runner_calls() == []
+    assert FakeRunner.instances[0].restored
 
 
 def test_upgrade_yes_skips_prompt(mocks) -> None:
@@ -407,3 +440,40 @@ def test_network_subcommand(mocks) -> None:
         invoke("network", "-o", "json")
     fetch.assert_called_once()
     mocks.listed.assert_not_called()
+
+
+def test_cache_dir_honours_xdg(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    assert cache_dir() == tmp_path / "sentry-kube" / "cluster-upgrade"
+    monkeypatch.delenv("XDG_CACHE_HOME")
+    assert cache_dir().parts[-3:] == (".cache", "sentry-kube", "cluster-upgrade")
+
+
+def test_logger_appends_to_file(tmp_path, capsys) -> None:
+    path = tmp_path / "nested" / "run.log"
+    log = _logger(path)
+    log("first")
+    log("second")
+    lines = path.read_text().splitlines()
+    assert [line.split(" ", 1)[1] for line in lines] == ["first", "second"]
+    assert lines[0][4] == "-" and lines[0].split(" ")[0].endswith("Z")
+    assert "first" in capsys.readouterr().out
+
+
+def test_logger_survives_unwritable_path(tmp_path, capsys) -> None:
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    _logger(blocker / "run.log")("still printed")
+    assert "still printed" in capsys.readouterr().out
+
+
+def test_upgrade_logs_to_cache_dir(mocks, tmp_path) -> None:
+    run = invoke("upgrade", "1.2.4", "--yes")
+    assert run.exit_code == 0, run.output
+    assert f"Logging to {tmp_path}/sentry-kube/cluster-upgrade/" in run.output
+
+
+def test_upgrade_dry_run_does_not_log_to_file(mocks) -> None:
+    run = invoke("upgrade", "1.2.4", "--dry-run")
+    assert run.exit_code == 0, run.output
+    assert "Logging to" not in run.output
