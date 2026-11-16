@@ -1,10 +1,12 @@
 import json
+import os
 import re
 import subprocess
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import click
 import kubernetes.client
@@ -18,9 +20,11 @@ from libsentrykube.gcloud import (
 )
 from libsentrykube.gke_upgrade import (
     Clients,
+    FileSurgeStore,
     Node,
     UpgradeRunner,
     watch_report,
+    with_retries,
 )
 from libsentrykube.network import GkeClusterRef
 
@@ -181,8 +185,33 @@ def _gcloud(argv: Sequence[str]) -> tuple[int, str]:
     return proc.returncode, proc.stderr
 
 
-def _log(msg: str) -> None:
-    click.echo(f"[{datetime.now(timezone.utc):%H:%M:%SZ}] {msg}")
+def cache_dir() -> Path:
+    """Where upgrade run logs and saved surge settings live."""
+    base = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(base) / "sentry-kube" / "cluster-upgrade"
+
+
+def _cluster_slug(ref: GkeClusterRef) -> str:
+    return f"{ref.project}_{ref.location}_{ref.name}"
+
+
+def _logger(path: Optional[Path] = None) -> Callable[[str], None]:
+    """Log to the terminal and, for the record, to `path` when given."""
+
+    def log(msg: str) -> None:
+        now = datetime.now(timezone.utc)
+        click.echo(f"[{now:%H:%M:%SZ}] {msg}")
+        if path is None:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a") as f:
+                f.write(f"{now:%Y-%m-%dT%H:%M:%SZ} {msg}\n")
+        except OSError:
+            # The log is a keepsake, never a reason to stop an upgrade.
+            pass
+
+    return log
 
 
 def _kube_nodes(kube_client: kubernetes.client.ApiClient) -> List[Node]:
@@ -206,14 +235,18 @@ def _kube_nodes(kube_client: kubernetes.client.ApiClient) -> List[Node]:
     return nodes
 
 
-def make_clients(ctx: click.Context, ref: GkeClusterRef) -> Clients:
+def make_clients(
+    ctx: click.Context, ref: GkeClusterRef, log_path: Optional[Path] = None
+) -> Clients:
     kube_client = connect_kube(ctx)
-    return Clients(
-        get_cluster=lambda: get_gke_cluster(ref.project, ref.location, ref.name),
-        list_ops=lambda: list_gke_operations(ref.project, ref.location),
-        list_nodes=lambda: _kube_nodes(kube_client),
-        gcloud=_gcloud,
-        log=_log,
+    return with_retries(
+        Clients(
+            get_cluster=lambda: get_gke_cluster(ref.project, ref.location, ref.name),
+            list_ops=lambda: list_gke_operations(ref.project, ref.location),
+            list_nodes=lambda: _kube_nodes(kube_client),
+            gcloud=_gcloud,
+            log=_logger(log_path),
+        )
     )
 
 
@@ -314,13 +347,23 @@ def upgrade(
     picked up after the rest, pools removed by the autoscaler mid-run are
     skipped. VERSION must be in the cluster's release channel and not older
     than the control plane; see `cluster versions`.
+
+    Transient API errors are retried. Every run is logged, node by node, to
+    ~/.cache/sentry-kube/cluster-upgrade/ (or under $XDG_CACHE_HOME). A pool's
+    surge settings are saved there before --fixed-capacity changes them, so a
+    run that is interrupted mid-pool is put right by the next `cluster
+    upgrade` on that cluster, with or without the flag.
     """
     if pools_only and control_plane_only:
         raise click.UsageError(
             "--pools-only and --control-plane-only exclude each other"
         )
     ref = gke_cluster_ref(ctx)
-    clients = make_clients(ctx, ref)
+    log_path = None
+    if not dry_run:
+        stamp = f"{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}"
+        log_path = cache_dir() / f"{_cluster_slug(ref)}_{stamp}.log"
+    clients = make_clients(ctx, ref, log_path)
     cluster_obj = clients.get_cluster()
     available = get_channel_versions(
         ref.project, ref.location, cluster_obj["releaseChannel"]["channel"]
@@ -331,6 +374,20 @@ def upgrade(
             f"Available: {', '.join(available)}",
             param_hint="VERSION",
         )
+
+    runner = UpgradeRunner(
+        clients,
+        ref.project,
+        ref.location,
+        ref.name,
+        version,
+        interval=interval,
+        max_attempts=max_attempts,
+        fixed_capacity=fixed_capacity,
+        dry_run=dry_run,
+        surge_store=FileSurgeStore(cache_dir() / f"{_cluster_slug(ref)}.surge.json"),
+    )
+    stale_surge = runner.pending_surge_restores()
 
     plan = plan_upgrade(
         cluster_obj,
@@ -344,25 +401,34 @@ def upgrade(
         plan.newer_node_pools = []
     if plan.empty:
         click.echo(f"{ref.name} is already at {version}.")
-        return
-    click.echo(f"Upgrade plan for {ref.name} ({ref.location}, project {ref.project}):")
-    for line in plan.describe():
-        click.echo(f"  {line}")
-    if fixed_capacity:
-        click.echo("  node pools upgraded in place (max surge 0 / max unavailable 1)")
+        if not stale_surge:
+            return
+    else:
+        click.echo(
+            f"Upgrade plan for {ref.name} ({ref.location}, project {ref.project}):"
+        )
+        for line in plan.describe():
+            click.echo(f"  {line}")
+        if fixed_capacity:
+            click.echo(
+                "  node pools upgraded in place (max surge 0 / max unavailable 1)"
+            )
+    for name in stale_surge:
+        click.echo(
+            f"  node pool {name}: restore the surge settings an interrupted run left"
+        )
     if not yes and not dry_run:
         click.confirm("Proceed?", abort=True)
-
-    runner = UpgradeRunner(
-        clients,
-        ref.project,
-        ref.location,
-        ref.name,
-        version,
-        interval=interval,
-        max_attempts=max_attempts,
-        fixed_capacity=fixed_capacity,
-        dry_run=dry_run,
+    if log_path is not None:
+        click.echo(f"Logging to {log_path}")
+    runner.restore_surge_settings()
+    if plan.empty:
+        return
+    clients.log(
+        f"upgrade {ref.name} ({ref.location}, project {ref.project}) to {version}"
+        + (", fixed capacity" if fixed_capacity else "")
+        + ": "
+        + "; ".join(plan.describe())
     )
     try:
         if plan.control_plane:
@@ -374,7 +440,8 @@ def upgrade(
     except KeyboardInterrupt:
         raise click.ClickException(
             "interrupted; operations already started keep running, "
-            "`cluster watch` shows them and re-running `cluster upgrade` resumes"
+            "`cluster watch` shows them and re-running `cluster upgrade` resumes "
+            "(and restores any surge settings this run left flipped)"
         )
     failed = [r for r in runner.results if r.outcome == "failed"]
     if failed:

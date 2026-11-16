@@ -17,19 +17,32 @@ Lessons from the CVE-2026-98432 rollout (ops#24956) that shape this module:
 - Fixed-capacity upgrades (max surge 0, max unavailable 1) reimage nodes in
   place and need no spare VM, which is the way through a stockout. The pool's
   original settings are put back once its operation has finished; the API
-  refuses the change while one is running.
+  refuses the change while one is running. The originals are written down
+  before the flip, so a run that dies mid-pool is put right by the next one.
+- A rollout takes hours and the APIs it polls have bad minutes. One 503 from
+  the GKE API killed a run mid-upgrade, so every read is retried.
+- An operation can sit in PENDING for a while after it is started. It holds
+  the pool just like a RUNNING one.
 """
 
 from __future__ import annotations
 
+import dataclasses
+import json
+import socket
+import ssl
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Optional, Protocol, TypeVar
 
 UPGRADE_NODES = "UPGRADE_NODES"
 UPGRADE_MASTER = "UPGRADE_MASTER"
 INCOMPATIBLE_OPERATION = "incompatible operation"
+IN_FLIGHT = ("PENDING", "RUNNING")
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -91,11 +104,14 @@ def op_failure(op: Mapping[str, Any]) -> str:
 def running_pool_ops(
     ops: Iterable[Mapping[str, Any]], cluster: str
 ) -> dict[str, Mapping[str, Any]]:
-    """RUNNING node pool upgrade operations of `cluster`, keyed by pool name."""
+    """
+    Node pool upgrade operations of `cluster` that are pending or running,
+    keyed by pool name.
+    """
     return {
         op_target(op): op
         for op in ops
-        if op.get("status") == "RUNNING"
+        if op.get("status") in IN_FLIGHT
         and op.get("operationType") == UPGRADE_NODES
         and f"/clusters/{cluster}/" in op.get("targetLink", "")
     }
@@ -108,6 +124,79 @@ def surge_settings(pool: Mapping[str, Any]) -> dict[str, Any]:
         "maxSurge": int(settings.get("maxSurge", 0)),
         "maxUnavailable": int(settings.get("maxUnavailable", 0)),
     }
+
+
+def is_transient(exc: BaseException) -> bool:
+    """
+    Whether an API error is worth retrying: a 5xx or 429 from the GKE or
+    Kubernetes API (their clients carry the status in different places), or
+    the network giving out underneath them.
+    """
+    status = getattr(getattr(exc, "resp", None), "status", None)
+    if status is None:
+        status = getattr(exc, "status", None)
+    try:
+        code = int(status)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        code = 0
+    if code:
+        return code == 429 or code >= 500
+    if isinstance(exc, (ConnectionError, TimeoutError, socket.gaierror, ssl.SSLError)):
+        return True
+    if type(exc).__name__ == "TransportError":  # google.auth wraps the socket error
+        return True
+    return type(exc).__module__.split(".")[0] in ("urllib3", "httplib2", "requests")
+
+
+class SurgeStore(Protocol):
+    """Where a pool's original surge settings wait while it runs fixed-capacity."""
+
+    def get(self, pool: str) -> Optional[dict[str, int]]: ...
+
+    def put(self, pool: str, settings: Mapping[str, int]) -> None: ...
+
+    def drop(self, pool: str) -> None: ...
+
+    def pools(self) -> list[str]: ...
+
+
+class FileSurgeStore:
+    """A SurgeStore in one JSON file, one per cluster."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def _load(self) -> dict[str, dict[str, int]]:
+        try:
+            return dict(json.loads(self.path.read_text()))
+        except (FileNotFoundError, ValueError):
+            return {}
+
+    def _save(self, data: Mapping[str, Mapping[str, int]]) -> None:
+        if not data:
+            self.path.unlink(missing_ok=True)
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+    def get(self, pool: str) -> Optional[dict[str, int]]:
+        return self._load().get(pool)
+
+    def put(self, pool: str, settings: Mapping[str, int]) -> None:
+        data = self._load()
+        data[pool] = {
+            "maxSurge": int(settings["maxSurge"]),
+            "maxUnavailable": int(settings["maxUnavailable"]),
+        }
+        self._save(data)
+
+    def drop(self, pool: str) -> None:
+        data = self._load()
+        if data.pop(pool, None) is not None:
+            self._save(data)
+
+    def pools(self) -> list[str]:
+        return sorted(self._load())
 
 
 @dataclass
@@ -134,6 +223,40 @@ class Clients:
     now: Callable[[], float] = time.monotonic
 
 
+def with_retries(clients: Clients, attempts: int = 8) -> Clients:
+    """
+    `clients` with its three reads retried on transient errors, backing off
+    from 5s to a minute between tries (about four minutes in all by default).
+    """
+
+    def retried(what: str, fn: Callable[[], T]) -> Callable[[], T]:
+        def call() -> T:
+            delay = 5.0
+            for attempt in range(1, attempts + 1):
+                try:
+                    return fn()
+                except Exception as e:
+                    if attempt == attempts or not is_transient(e):
+                        raise
+                    summary = " ".join(str(e).split())[:160]
+                    clients.log(
+                        f"{what} failed ({type(e).__name__}: {summary}), "
+                        f"retry {attempt}/{attempts - 1} in {int(delay)}s"
+                    )
+                    clients.sleep(delay)
+                    delay = min(delay * 2, 60.0)
+            raise AssertionError("unreachable")
+
+        return call
+
+    return dataclasses.replace(
+        clients,
+        get_cluster=retried("reading the cluster", clients.get_cluster),
+        list_ops=retried("listing operations", clients.list_ops),
+        list_nodes=retried("listing nodes", clients.list_nodes),
+    )
+
+
 @dataclass
 class UpgradeRunner:
     clients: Clients
@@ -145,6 +268,7 @@ class UpgradeRunner:
     max_attempts: int = 3
     fixed_capacity: bool = False
     dry_run: bool = False
+    surge_store: Optional[SurgeStore] = None
     results: list[PoolResult] = field(default_factory=list)
 
     # gcloud --------------------------------------------------------------
@@ -200,7 +324,7 @@ class UpgradeRunner:
             (
                 op
                 for op in self.clients.list_ops()
-                if op.get("status") == "RUNNING"
+                if op.get("status") in IN_FLIGHT
                 and op.get("operationType") == UPGRADE_MASTER
                 and op_target(op) == self.cluster
             ),
@@ -281,6 +405,55 @@ class UpgradeRunner:
             self._upgrade_pool(current[name], adopt=busy.get(name))
         return self.results
 
+    def pending_surge_restores(self) -> list[str]:
+        """Pools whose surge settings an earlier run flipped and never restored."""
+        return self.surge_store.pools() if self.surge_store is not None else []
+
+    def restore_surge_settings(self) -> None:
+        """
+        Put back surge settings a previous run flipped and never restored
+        (interrupted, or crashed, while the pool's operation was running).
+        Pools still being upgraded are left for `_upgrade_pool`.
+        """
+        if self.surge_store is None or self.dry_run:
+            return
+        saved_pools = self.surge_store.pools()
+        if not saved_pools:
+            return
+        live = {p["name"]: p for p in self.clients.get_cluster().get("nodePools", [])}
+        busy = running_pool_ops(self.clients.list_ops(), self.cluster)
+        for name in saved_pools:
+            saved = self.surge_store.get(name)
+            if saved is None:
+                continue
+            if name not in live:
+                self.surge_store.drop(name)
+                continue
+            if name in busy:
+                self.clients.log(
+                    f"pool {name}: surge settings from an earlier run are still "
+                    "flipped, restoring once its upgrade finishes"
+                )
+                continue
+            self._restore_surge(name, saved, surge_settings(live[name]))
+
+    def _restore_surge(
+        self, name: str, saved: Mapping[str, int], live: Mapping[str, Any]
+    ) -> None:
+        wanted = (int(saved["maxSurge"]), int(saved["maxUnavailable"]))
+        if self.dry_run or (live["maxSurge"], live["maxUnavailable"]) != wanted:
+            argv = self._settings_argv(name, *wanted)
+            code, err = self._run(argv)
+            if code != 0:
+                self.clients.log(
+                    f"pool {name}: could not restore surge settings "
+                    f"({' '.join(err.split())[:160]}). The next run retries, or run: "
+                    + " ".join(argv)
+                )
+                return
+        if self.surge_store is not None and not self.dry_run:
+            self.surge_store.drop(name)
+
     def _pools_behind(self) -> list[str]:
         nodes = self.clients.list_nodes()
         behind = []
@@ -294,11 +467,20 @@ class UpgradeRunner:
         self, pool: Mapping[str, Any], adopt: Optional[Mapping[str, Any]] = None
     ) -> None:
         name = pool["name"]
-        original = surge_settings(pool)
+        live = surge_settings(pool)
+        original = dict(live)
+        saved = (
+            self.surge_store.get(name)
+            if self.surge_store is not None and not self.dry_run
+            else None
+        )
+        if saved is not None:
+            # An earlier run flipped this pool and died before restoring it.
+            original.update(saved)
         flip = (
             self.fixed_capacity
-            and original["strategy"] == "SURGE"
-            and (original["maxSurge"], original["maxUnavailable"]) != (0, 1)
+            and live["strategy"] == "SURGE"
+            and (live["maxSurge"], live["maxUnavailable"]) != (0, 1)
         )
         counts = pool_nodes(self.clients.list_nodes(), name, self.version)
         if (
@@ -307,13 +489,15 @@ class UpgradeRunner:
             and (counts.total or pool["version"] == self.version)
         ):
             self._record(name, "done", detail="all nodes already on target")
+            if saved is not None:
+                self._restore_surge(name, saved, live)
             return
         self.clients.log(
             f"pool {name}: {pool['version']} -> {self.version}, "
             f"{counts.new} new / {counts.old} old nodes"
         )
         attempts = 0
-        flipped = False
+        flipped = saved is not None
         try:
             if adopt is not None:
                 self.clients.log(
@@ -336,9 +520,26 @@ class UpgradeRunner:
                 if self._verified(name):
                     self._record(name, "done", attempts)
                     return
-                if flip and not flipped:
-                    self._run(self._settings_argv(name, 0, 1))
-                    flipped = True
+                if flip:
+                    flip = False
+                    if self.surge_store is not None and not self.dry_run:
+                        if saved is None:
+                            self.surge_store.put(name, original)
+                    code, err = self._run(self._settings_argv(name, 0, 1))
+                    if code == 0:
+                        flipped = True
+                    else:
+                        self.clients.log(
+                            f"pool {name}: could not set fixed capacity "
+                            f"({' '.join(err.split())[:160]}), upgrading with "
+                            "its current surge settings"
+                        )
+                        if (
+                            saved is None
+                            and self.surge_store is not None
+                            and not self.dry_run
+                        ):
+                            self.surge_store.drop(name)
                 attempts += 1
                 started = self._start_pool_op(name)
                 if started is None:
@@ -369,12 +570,13 @@ class UpgradeRunner:
                     f"{counts.old} nodes still behind after {attempts} attempts",
                 )
         finally:
-            if flipped and self._pool_exists(name):
-                self._run(
-                    self._settings_argv(
-                        name, original["maxSurge"], original["maxUnavailable"]
+            if flipped:
+                if self._pool_exists(name):
+                    self._restore_surge(
+                        name, original, surge_settings(self._pool(name))
                     )
-                )
+                elif self.surge_store is not None and not self.dry_run:
+                    self.surge_store.drop(name)
 
     def _start_pool_op(self, name: str) -> Optional[str]:
         """Start the pool's upgrade; the operation name, or None if the pool is busy."""
@@ -395,23 +597,54 @@ class UpgradeRunner:
 
     def _wait_for_op(self, pool: str, op_name: str) -> Mapping[str, Any]:
         started = self.clients.now()
+        seen = self._pool_versions(pool, self.clients.list_nodes())
         while True:
             ops = self.clients.list_ops()
             op = next((o for o in ops if o.get("name") == op_name), None)
             if op is None and not op_name:
                 op = running_pool_ops(ops, self.cluster).get(pool)
-            if op is None or op.get("status") != "RUNNING":
+            nodes = self.clients.list_nodes()
+            seen = self._log_node_changes(pool, seen, nodes)
+            if op is None or op.get("status") not in IN_FLIGHT:
                 return op or {}
-            self.clients.log(self.progress_line(pool, op, started))
+            self.clients.log(self.progress_line(pool, op, started, nodes))
             self.clients.sleep(self.interval)
 
-    def progress_line(self, pool: str, op: Mapping[str, Any], started: float) -> str:
+    @staticmethod
+    def _pool_versions(pool: str, nodes: Iterable[Node]) -> dict[str, str]:
+        return {n.name: n.kubelet_version for n in nodes if n.pool == pool}
+
+    def _log_node_changes(
+        self, pool: str, before: Mapping[str, str], nodes: Iterable[Node]
+    ) -> dict[str, str]:
+        after = self._pool_versions(pool, nodes)
+        for name in sorted(after):
+            if name not in before:
+                self.clients.log(f"pool {pool}: node {name} joined on {after[name]}")
+            elif after[name] != before[name]:
+                self.clients.log(
+                    f"pool {pool}: node {name} {before[name]} -> {after[name]}"
+                )
+        for name in sorted(set(before) - set(after)):
+            self.clients.log(f"pool {pool}: node {name} removed (was {before[name]})")
+        return after
+
+    def progress_line(
+        self,
+        pool: str,
+        op: Mapping[str, Any],
+        started: float,
+        nodes: Optional[Iterable[Node]] = None,
+    ) -> str:
         metrics = op_metrics(op)
-        counts = pool_nodes(self.clients.list_nodes(), pool, self.version)
+        if nodes is None:
+            nodes = self.clients.list_nodes()
+        counts = pool_nodes(nodes, pool, self.version)
         total = metrics.get("NODES_TOTAL", 0)
         done = min(metrics.get("NODES_COMPLETE", 0), total)
+        state = "pending, " if op.get("status") == "PENDING" else ""
         line = (
-            f"pool {pool}: {self._elapsed(started)}, op {done}/{total}, "
+            f"pool {pool}: {self._elapsed(started)}, {state}op {done}/{total}, "
             f"live {counts.new} new / {counts.old} old, {counts.cordoned} cordoned"
         )
         pdb = metrics.get("NODE_PDB_DELAY_SECONDS", 0)
@@ -419,10 +652,18 @@ class UpgradeRunner:
             line += f", pdb delay {pdb // 60}m"
         return line
 
-    def _pool_exists(self, pool: str) -> bool:
-        return any(
-            p["name"] == pool for p in self.clients.get_cluster().get("nodePools", [])
+    def _pool(self, pool: str) -> Mapping[str, Any]:
+        return next(
+            (
+                p
+                for p in self.clients.get_cluster().get("nodePools", [])
+                if p["name"] == pool
+            ),
+            {},
         )
+
+    def _pool_exists(self, pool: str) -> bool:
+        return bool(self._pool(pool))
 
     def _verified(self, pool: str) -> bool:
         """

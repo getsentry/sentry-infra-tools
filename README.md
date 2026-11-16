@@ -224,6 +224,25 @@ Useful flags:
 - `--dry-run` prints the gcloud commands. `--max-attempts` and `--interval`
   tune retries and polling.
 
+A run is built to be left alone and to be resumed:
+
+- Reads of the GKE and Kubernetes APIs are retried with backoff on 5xx, 429
+  and network errors, so one bad minute doesn't end an upgrade that takes
+  hours.
+- An operation that is still `PENDING` holds its pool the same as a running
+  one, and is waited on.
+- Every run is logged to `~/.cache/sentry-kube/cluster-upgrade/` (under
+  `$XDG_CACHE_HOME` if set), one file per run named for the project,
+  location, cluster and start time. It has what the terminal showed plus a
+  line for each node that joins, leaves or changes version. It's a record
+  for later, not an audit trail.
+- Before `--fixed-capacity` changes a pool, its surge settings are saved next
+  to the logs. If the run dies mid-pool (Ctrl-C, laptop, auth) the pool is
+  left at 0/1. The next `cluster upgrade` on that cluster lists it in the
+  plan and, after you confirm, restores it once the pool's operation has
+  finished. That works with or without the flag, and also when the cluster
+  is already at the target version.
+
 If the run is interrupted, operations already started keep going. Re-running
 the same command resumes: finished pools are skipped, running ones are waited
 on. `cluster watch` shows running operations with elapsed time, live new/old
