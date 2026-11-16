@@ -526,20 +526,15 @@ class UpgradeRunner:
                         if saved is None:
                             self.surge_store.put(name, original)
                     code, err = self._run(self._settings_argv(name, 0, 1))
-                    if code == 0:
-                        flipped = True
-                    else:
+                    # A failed call may still have landed (timeout, 503), so
+                    # the record stays and the restore below checks the pool.
+                    flipped = True
+                    if code != 0:
                         self.clients.log(
                             f"pool {name}: could not set fixed capacity "
                             f"({' '.join(err.split())[:160]}), upgrading with "
                             "its current surge settings"
                         )
-                        if (
-                            saved is None
-                            and self.surge_store is not None
-                            and not self.dry_run
-                        ):
-                            self.surge_store.drop(name)
                 attempts += 1
                 started = self._start_pool_op(name)
                 if started is None:

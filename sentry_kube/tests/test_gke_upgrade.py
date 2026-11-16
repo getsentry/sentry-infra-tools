@@ -35,6 +35,9 @@ class FakeGke:
             for name, count in pools.items()
         }
         self.settings: dict[str, tuple[int, int]] = {name: (1, 0) for name in pools}
+        # Settings updates that fail without landing / fail after landing.
+        self.settings_refused = 0
+        self.settings_timeouts = 0
         self.ops: list[dict[str, Any]] = []
         self.commands: list[list[str]] = []
         self.log: list[str] = []
@@ -82,10 +85,16 @@ class FakeGke:
         if argv[2] == "node-pools":
             if self._in_flight(argv[4]):
                 return 1, "ERROR: (gcloud) Cluster is running incompatible operation"
+            if self.settings_refused:
+                self.settings_refused -= 1
+                return 1, "ERROR: (gcloud) PERMISSION_DENIED"
             self.settings[argv[4]] = (
                 int(argv[argv.index("--max-surge-upgrade") + 1]),
                 int(argv[argv.index("--max-unavailable-upgrade") + 1]),
             )
+            if self.settings_timeouts:
+                self.settings_timeouts -= 1
+                return 1, "ERROR: (gcloud) 503 The service is currently unavailable"
             return 0, ""
         if "--master" in argv:
             self.ops.append(
@@ -366,6 +375,28 @@ def test_fixed_capacity_flips_and_restores_settings() -> None:
     # Flipped once, before the first attempt, restored once after the pool finished.
     order = [c[2] + ("/" + c[4] if c[2] == "node-pools" else "") for c in gke.commands]
     assert order == ["node-pools/p", "clusters", "clusters", "node-pools/p"]
+
+
+def test_fixed_capacity_flip_that_fails_after_landing_is_restored(tmp_path) -> None:
+    gke = FakeGke({"p": 2})
+    gke.settings["p"] = (5, 0)
+    gke.settings_timeouts = 1
+    store = FileSurgeStore(tmp_path / "c.surge.json")
+    runner(gke, fixed_capacity=True, surge_store=store).upgrade_pools(["p"])
+    assert any("could not set fixed capacity" in line for line in gke.log)
+    assert gke.settings["p"] == (5, 0)
+    assert store.pools() == []
+
+
+def test_fixed_capacity_flip_that_never_lands_leaves_no_record(tmp_path) -> None:
+    gke = FakeGke({"p": 2})
+    gke.settings["p"] = (5, 0)
+    gke.settings_refused = 1
+    store = FileSurgeStore(tmp_path / "c.surge.json")
+    runner(gke, fixed_capacity=True, surge_store=store).upgrade_pools(["p"])
+    assert gke.settings["p"] == (5, 0)
+    assert store.pools() == []
+    assert len([c for c in gke.commands if c[2] == "node-pools"]) == 1
 
 
 def test_fixed_capacity_leaves_already_fixed_pool_alone() -> None:
