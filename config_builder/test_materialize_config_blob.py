@@ -101,14 +101,23 @@ def test_load_physical_topics(config_dirs: Path) -> None:
 def test_load_physical_topics_producer_override(tmp_path: Path) -> None:
     write_yaml(
         tmp_path / "region1" / "topic-a-new.yaml",
-        {"cluster": "cluster2", "producer_logical_topic": True},
+        {
+            "cluster": "cluster2",
+            "logical_topic": "topic-a",
+            "producer_logical_topic": True,
+        },
     )
-    topic = LogicalTopicEntry(name="topic-a", physical_topics=[])
-    topic.load_physical_topics(tmp_path, "region1")
-    assert topic.physical_topics == []
-    assert topic.producer_physical_topic_override == [
+    topic_a = LogicalTopicEntry(name="topic-a", physical_topics=[])
+    topic_a.load_physical_topics(tmp_path, "region1")
+    assert topic_a.physical_topics == []
+    assert topic_a.producer_physical_topic_override == [
         PhysicalTopicEntry(cluster="cluster2", topic_name_override="topic-a-new")
     ]
+
+    # A producer cutover for topic-a must not redirect other topics' producers
+    topic_b = LogicalTopicEntry(name="topic-b", physical_topics=[])
+    topic_b.load_physical_topics(tmp_path, "region1")
+    assert topic_b.producer_physical_topic_override == []
 
 
 def test_load_physical_topics_missing_region(tmp_path: Path) -> None:
@@ -132,14 +141,14 @@ def test_config_blob(config_dirs: Path) -> None:
             "producer_config": {"acks": "1"},
         },
     }
-    assert set(blob["topic"]) == {"topic-a", "topic-b"}
-    assert blob["topic"]["topic-b"] == {
+    assert set(blob["topics"]) == {"topic-a", "topic-b"}
+    assert blob["topics"]["topic-b"] == {
         "producer_config": {"compression.type": "lz4"},
         "producer_config_overrides": {},
         "physical_topics": [{"cluster": "cluster2", "topic_name_override": None}],
         "producer_physical_topic_override": [],
     }
-    assert len(blob["topic"]["topic-a"]["physical_topics"]) == 2
+    assert len(blob["topics"]["topic-a"]["physical_topics"]) == 2
 
 
 def test_config_blob_missing_region(config_dirs: Path) -> None:

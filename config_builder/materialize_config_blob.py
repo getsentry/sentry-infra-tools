@@ -130,27 +130,19 @@ class LogicalTopicEntry:
             topic_name_override: str | None = (
                 topic.stem if topic.stem != self.name else None
             )
-            cluster_name = resolve_default(defaults, data, "cluster", "")
-            if data.get("producer_logical_topic", False):
-                self.producer_physical_topic_override.append(
-                    PhysicalTopicEntry(
-                        cluster=cluster_name,
-                        topic_name_override=topic_name_override,
-                    )
-                )
-                continue
             # If there's no explicit logical topic, assume its the physical topic name
             logical_topic_name = data.get("logical_topic", None) or topic.stem
+            if logical_topic_name != self.name:
+                continue
+            cluster_name = resolve_default(defaults, data, "cluster", "")
+            entry = PhysicalTopicEntry(
+                cluster=cluster_name, topic_name_override=topic_name_override
+            )
+            if data.get("producer_logical_topic", False):
+                self.producer_physical_topic_override.append(entry)
             # Disabled physical topics are not appended to the physical topic backend
-            if logical_topic_name == self.name and not resolve_default(
-                defaults, data, "disabled", False
-            ):
-                self.physical_topics.append(
-                    PhysicalTopicEntry(
-                        cluster=cluster_name,
-                        topic_name_override=topic_name_override,
-                    )
-                )
+            elif not resolve_default(defaults, data, "disabled", False):
+                self.physical_topics.append(entry)
         return self
 
 
@@ -189,7 +181,7 @@ class ConfigBlob:
             # Only include logical topics which have a physical topic backend in this region
             if t_dict is not None:
                 dict_topics[name] = t_dict
-        return {"clusters": dict_clusters, "topic": dict_topics}
+        return {"clusters": dict_clusters, "topics": dict_topics}
 
     def _load_clusters(self, cluster_dir: Path, region: str) -> dict[str, ClusterEntry]:
         """
@@ -291,6 +283,8 @@ def materialize_config_blob(
             physical_topic_dir,
             region,
         )
-        with open(output_dir / region / "_arroyo_config_generated.yaml", "w") as f:
+        regional_output = output_dir / region
+        regional_output.mkdir(exist_ok=True)
+        with open(regional_output / "_arroyo_config_generated.yaml", "w") as f:
             f.write("# This is a generated file. Please do not edit directly.\n")
             yaml.safe_dump(blob.to_dict(), f)
