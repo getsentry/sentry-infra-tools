@@ -212,7 +212,7 @@ def get_service_ctx(
         service_path_root = get_service_path(service_name, namespace=namespace)
 
     ctx: dict[str, dict[str, Any]] = {}
-    for file in service_path_root.glob(f"{src_files_prefix}*.yaml"):
+    for file in sorted(service_path_root.glob(f"{src_files_prefix}*.yaml")):
         try:
             with open(file, "rb") as f:
                 values = deep_copy_without_refs(yaml.safe_load(f) or {})
@@ -279,7 +279,7 @@ def get_service_ctx_overrides(
     keyword_to_merge_files = (
         f"{src_files_prefix}*.yaml" if cluster_as_folder else f"{cluster_name}*.yaml"
     )
-    for file in service_override_file_root.glob(keyword_to_merge_files):
+    for file in sorted(service_override_file_root.glob(keyword_to_merge_files)):
         try:
             if file.name.endswith("managed.yaml"):
                 continue
@@ -327,7 +327,9 @@ def get_common_regional_override(
         service_name, region_name, external, namespace=namespace
     )
     ctx: dict[str, dict[str, Any]] = {}
-    for file in common_service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
+    for file in sorted(
+        common_service_override_file_root.glob(f"{src_files_prefix}*.yaml")
+    ):
         try:
             with open(file, "rb") as f:
                 values = deep_copy_without_refs(yaml.safe_load(f) or {})
@@ -379,14 +381,16 @@ def get_hierarchical_value_overrides(
     if not service_regions_path.exists():
         return {}
 
-    for override_group in service_regions_path.iterdir():
+    for override_group in sorted(service_regions_path.iterdir()):
         if not override_group.is_dir():
             continue
 
         service_override_file_root = service_regions_path / override_group.name
         base_values: dict[str, dict[str, Any]] = {}
         try:
-            for file in service_override_file_root.glob(f"{src_files_prefix}*.yaml"):
+            for file in sorted(
+                service_override_file_root.glob(f"{src_files_prefix}*.yaml")
+            ):
                 with open(file, "rb") as f:
                     values = deep_copy_without_refs(yaml.safe_load(f) or {})
                 base_values = merge_values_files_no_conflict(
