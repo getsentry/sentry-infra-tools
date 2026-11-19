@@ -139,7 +139,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     config: MutableSequence[Tuple[str, diff_approver]] = []
     with open(config_path, "r") as f:
         for line in f.readlines():
-            if line and not line.startswith("#"):
+            if line.strip() and not line.startswith("#"):
                 match = config_parser.search(line)
                 assert match is not None
                 pattern = match.group("pattern")
