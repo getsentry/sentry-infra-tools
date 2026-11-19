@@ -53,6 +53,7 @@ setup(
         "console_scripts": [
             "sentry-kube=sentry_kube.cli:main",
             "materialize-config=config_builder.materialize_all:main",
+            "materialize-config-blob=config_builder.materialize_config_blob:materialize_config_blob",
             "pr-docs=assistant.prdocs:main",
             "pr-approver=pr_approver.approver:main",
         ],
