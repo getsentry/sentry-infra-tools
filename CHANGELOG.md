@@ -1,3 +1,20 @@
+## 1.42.0
+
+### New Features ✨
+
+- (config) Add script for materializing Arroyo config blob by @bmckerry in [#283](https://github.com/getsentry/sentry-infra-tools/pull/283)
+- (sentry-kube) Cluster upgrade survives API blips and interrupted runs by @chazdnato in [#282](https://github.com/getsentry/sentry-infra-tools/pull/282)
+
+### Bug Fixes 🐛
+
+- (pr-approver) Skip whitespace-only lines in approver config by @dmajere in [#285](https://github.com/getsentry/sentry-infra-tools/pull/285)
+- (sentry-kube) Don't report to Sentry in CI or under pytest by @sentry-junior in [#280](https://github.com/getsentry/sentry-infra-tools/pull/280)
+- Align autosync and selfheal hyphenation by @markstory in [#281](https://github.com/getsentry/sentry-infra-tools/pull/281)
+
+### Documentation 📚
+
+- (run-pod) Drop envdir++ from the getsentry examples by @oioki in [#284](https://github.com/getsentry/sentry-infra-tools/pull/284)
+
 ## 1.41.0
 
 ### New Features ✨
