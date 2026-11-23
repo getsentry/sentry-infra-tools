@@ -71,7 +71,7 @@ def test_secret_does_not_exist(mock_stdout):
 
     assert core_api_mock.create_namespaced_secret.call_count == 1
     assert (
-        core_api_mock.create_namespaced_secret.call_args[1]["body"].metadata["name"]
+        core_api_mock.create_namespaced_secret.call_args[1]["body"].metadata.name
         == "example"
     )
     assert core_api_mock.create_namespaced_secret.call_args[1]["body"].data == {}
