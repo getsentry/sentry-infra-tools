@@ -141,14 +141,13 @@ def test_config_blob(config_dirs: Path) -> None:
             "producer_config": {"acks": "1"},
         },
     }
-    assert set(blob["topics"]) == {"topic-a", "topic-b"}
+    assert set(blob["topics"]) == {"topic-a", "topic-a-2", "topic-b"}
     assert blob["topics"]["topic-b"] == {
         "producer_config": {"compression.type": "lz4"},
         "producer_config_overrides": {},
         "physical_topics": [{"cluster": "cluster2", "topic_name_override": None}],
         "producer_physical_topic_override": [],
     }
-    assert len(blob["topics"]["topic-a"]["physical_topics"]) == 2
 
 
 def test_config_blob_missing_region(config_dirs: Path) -> None:
@@ -160,3 +159,28 @@ def test_config_blob_unregistered_schema(config_dirs: Path) -> None:
     write_yaml(config_dirs / "logical" / "topic-c.yaml", {})
     with pytest.raises(ValueError, match="not registered"):
         make_blob(config_dirs)
+
+
+def test_split_sliced_topics(config_dirs: Path) -> None:
+    blob = make_blob(config_dirs)
+    out = blob.to_dict()["topics"]
+    # topic-a had two physical topics, so it becomes one logical topic per physical topic
+    assert set(out) == {"topic-a", "topic-a-2", "topic-b"}
+    for name, cluster in [("topic-a", "cluster1"), ("topic-a-2", "cluster2")]:
+        assert out[name]["physical_topics"] == [
+            {"cluster": cluster, "topic_name_override": None}
+        ]
+        assert out[name]["producer_config"] == {"compression.type": "lz4"}
+    assert out["topic-a"]["producer_config"] is not out["topic-a-2"]["producer_config"]
+    # Calling it again must not change anything
+    assert blob.to_dict()["topics"] == out
+
+
+def test_split_sliced_topics_name_collision(config_dirs: Path) -> None:
+    write_yaml(
+        config_dirs / "physical" / "region1" / "topic-b-2.yaml",
+        {"cluster": "cluster1", "logical_topic": "topic-b"},
+    )
+    write_yaml(config_dirs / "logical" / "topic-b-2.yaml", {"schema": "schema-b"})
+    with pytest.raises(ValueError):
+        make_blob(config_dirs).to_dict()
