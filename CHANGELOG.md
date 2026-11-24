@@ -1,3 +1,7 @@
+## 1.42.1
+
+- temp(config_blob): add shim for splitting sliced topics into separate… by @bmckerry in [#287](https://github.com/getsentry/sentry-infra-tools/pull/287)
+
 ## 1.42.0
 
 ### New Features ✨
