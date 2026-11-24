@@ -172,6 +172,9 @@ class ConfigBlob:
         """
         Returns the `ConfigBlob` in dict form.
         """
+        # FIXME(bmckerry): Delete after slicing is supported by Arroyo reloading clients.
+        self._split_sliced_topics()
+
         dict_clusters = {
             name: asdict(cluster) for name, cluster in self.clusters.items()
         }
@@ -236,6 +239,44 @@ class ConfigBlob:
                 ),
             ).load_physical_topics(physical_topic_dir, region)
         return all_topics
+
+    def _split_sliced_topics(self) -> None:
+        """
+        TODO: Delete this shim once Arroyo reloading clients support slicing.
+
+        This checks the ConfigBlob for all logical topics with multiple physical topics,
+        and creates a separate logical topic for each physical topic.
+        Currently needed because Arroyo reloading clients don't support having multiple physical
+        topics in a logical topic, but we want to start implementing these clients in our services.
+        """
+        topics_to_split = {
+            name: topic
+            for name, topic in self.topics.items()
+            # Ignore `producer_physical_topic_overrides` since we aren't doing cutovers yet
+            if len(topic.physical_topics) > 1
+        }
+        # Delete logical topics from config
+        for name in topics_to_split:
+            del self.topics[name]
+        # Add split logical topics to config
+        for name, topic in topics_to_split.items():
+            for pt in topic.physical_topics:
+                pt_name = pt.topic_name_override or name
+                if pt_name in self.topics:
+                    raise ValueError(
+                        f"Splitting logical topic {name}: {pt_name} is already a logical topic"
+                    )
+                # We need to make a deepcopy per entry because PyYAML writes
+                # shared dicts as YAML anchors
+                self.topics[pt_name] = LogicalTopicEntry(
+                    name=pt_name,
+                    physical_topics=[PhysicalTopicEntry(cluster=pt.cluster)],
+                    producer_config=deepcopy(topic.producer_config),
+                    producer_config_overrides=deepcopy(topic.producer_config_overrides),
+                    producer_physical_topic_override=deepcopy(
+                        topic.producer_physical_topic_override
+                    ),
+                )
 
 
 @click.command()
