@@ -1,3 +1,9 @@
+## 1.42.2
+
+### Bug Fixes 🐛
+
+- (config_blob) Add top-level key by @bmckerry in [#288](https://github.com/getsentry/sentry-infra-tools/pull/288)
+
 ## 1.42.1
 
 - temp(config_blob): add shim for splitting sliced topics into separate… by @bmckerry in [#287](https://github.com/getsentry/sentry-infra-tools/pull/287)
