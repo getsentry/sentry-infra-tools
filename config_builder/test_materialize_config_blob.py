@@ -128,7 +128,7 @@ def test_load_physical_topics_missing_region(tmp_path: Path) -> None:
 
 
 def test_config_blob(config_dirs: Path) -> None:
-    blob = make_blob(config_dirs).to_dict()
+    blob = make_blob(config_dirs).to_dict()["arroyo_config_blob"]
     assert blob["clusters"] == {
         "cluster1": {
             "config": {"bootstrap.servers": "b1:9092,b2:9092"},
@@ -163,7 +163,7 @@ def test_config_blob_unregistered_schema(config_dirs: Path) -> None:
 
 def test_split_sliced_topics(config_dirs: Path) -> None:
     blob = make_blob(config_dirs)
-    out = blob.to_dict()["topics"]
+    out = blob.to_dict()["arroyo_config_blob"]["topics"]
     # topic-a had two physical topics, so it becomes one logical topic per physical topic
     assert set(out) == {"topic-a", "topic-a-2", "topic-b"}
     for name, cluster in [("topic-a", "cluster1"), ("topic-a-2", "cluster2")]:
@@ -173,7 +173,7 @@ def test_split_sliced_topics(config_dirs: Path) -> None:
         assert out[name]["producer_config"] == {"compression.type": "lz4"}
     assert out["topic-a"]["producer_config"] is not out["topic-a-2"]["producer_config"]
     # Calling it again must not change anything
-    assert blob.to_dict()["topics"] == out
+    assert blob.to_dict()["arroyo_config_blob"]["topics"] == out
 
 
 def test_split_sliced_topics_name_collision(config_dirs: Path) -> None:

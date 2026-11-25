@@ -184,7 +184,9 @@ class ConfigBlob:
             # Only include logical topics which have a physical topic backend in this region
             if t_dict is not None:
                 dict_topics[name] = t_dict
-        return {"clusters": dict_clusters, "topics": dict_topics}
+        return {
+            "arroyo_config_blob": {"clusters": dict_clusters, "topics": dict_topics}
+        }
 
     def _load_clusters(self, cluster_dir: Path, region: str) -> dict[str, ClusterEntry]:
         """
