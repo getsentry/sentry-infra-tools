@@ -1,4 +1,3 @@
-from dataclasses import asdict
 from pathlib import Path
 from typing import Generator
 from unittest.mock import patch
@@ -71,9 +70,10 @@ def test_cluster_entry_defaults_not_shared() -> None:
 
 
 def test_physical_topic_entry() -> None:
-    assert asdict(PhysicalTopicEntry(cluster="c1")) == {
+    assert PhysicalTopicEntry(cluster="c1").to_dict() == {"cluster": "c1"}
+    assert PhysicalTopicEntry(cluster="c1", topic_name_override="t").to_dict() == {
         "cluster": "c1",
-        "topic_name_override": None,
+        "topic_name_override": "t",
     }
 
 
@@ -84,7 +84,7 @@ def test_logical_topic_to_dict_omits_name() -> None:
     assert topic.to_dict() == {
         "producer_config": {},
         "producer_config_overrides": {},
-        "physical_topics": [{"cluster": "c1", "topic_name_override": None}],
+        "physical_topics": [{"cluster": "c1"}],
         "producer_physical_topic_override": [],
     }
 
@@ -145,7 +145,7 @@ def test_config_blob(config_dirs: Path) -> None:
     assert blob["topics"]["topic-b"] == {
         "producer_config": {"compression.type": "lz4"},
         "producer_config_overrides": {},
-        "physical_topics": [{"cluster": "cluster2", "topic_name_override": None}],
+        "physical_topics": [{"cluster": "cluster2"}],
         "producer_physical_topic_override": [],
     }
 
@@ -167,9 +167,7 @@ def test_split_sliced_topics(config_dirs: Path) -> None:
     # topic-a had two physical topics, so it becomes one logical topic per physical topic
     assert set(out) == {"topic-a", "topic-a-2", "topic-b"}
     for name, cluster in [("topic-a", "cluster1"), ("topic-a-2", "cluster2")]:
-        assert out[name]["physical_topics"] == [
-            {"cluster": cluster, "topic_name_override": None}
-        ]
+        assert out[name]["physical_topics"] == [{"cluster": cluster}]
         assert out[name]["producer_config"] == {"compression.type": "lz4"}
     assert out["topic-a"]["producer_config"] is not out["topic-a-2"]["producer_config"]
     # Calling it again must not change anything

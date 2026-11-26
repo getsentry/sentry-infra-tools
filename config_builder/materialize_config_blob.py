@@ -71,6 +71,10 @@ class PhysicalTopicEntry:
     cluster: str
     topic_name_override: str | None = None
 
+    def to_dict(self) -> dict[str, str]:
+        # sentry-options doesn't allow null types in option schemas
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
 
 @dataclass
 class LogicalTopicEntry:
@@ -101,9 +105,9 @@ class LogicalTopicEntry:
         return {
             "producer_config": self.producer_config,
             "producer_config_overrides": self.producer_config_overrides,
-            "physical_topics": [asdict(pt) for pt in self.physical_topics],
+            "physical_topics": [pt.to_dict() for pt in self.physical_topics],
             "producer_physical_topic_override": [
-                asdict(pt) for pt in self.producer_physical_topic_override
+                pt.to_dict() for pt in self.producer_physical_topic_override
             ],
         }
 
