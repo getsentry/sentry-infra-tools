@@ -5,6 +5,7 @@ from base64 import b64encode
 
 import click
 from kubernetes.client import CoreV1Api
+from kubernetes.client import V1ObjectMeta
 from kubernetes.client import V1Secret
 from kubernetes.client.rest import ApiException
 from libsentrykube.events import report_event_for_service
@@ -80,7 +81,7 @@ def edit_secret(ctx, secret_name, namespace, no_backup):
         except ApiException as exc:
             if exc.status == 404:
                 body = V1Secret()
-                body.metadata = {"name": backup_secret_name}
+                body.metadata = V1ObjectMeta(name=backup_secret_name)
                 body.data = backup_data
                 api.create_namespaced_secret(namespace, body)
             else:

@@ -8,7 +8,7 @@ from secrets import token_urlsafe
 import click
 from google.api_core import exceptions
 from google.cloud import secretmanager
-from kubernetes.client import CoreV1Api, V1Secret
+from kubernetes.client import CoreV1Api, V1ObjectMeta, V1Secret
 from kubernetes.client.rest import ApiException
 
 from libsentrykube.utils import kube_get_client
@@ -136,7 +136,7 @@ def upload_plaintext_to_k8s_secret(
         if exc.status == 404:
             print(f"Secret `{namespace}/{secret_name}` does not exist, creating...")
             body = V1Secret()
-            body.metadata = {"name": secret_name}
+            body.metadata = V1ObjectMeta(name=secret_name)
             body.data = {}
             secret = api.create_namespaced_secret(namespace=namespace, body=body)
         else:
@@ -302,7 +302,7 @@ def upload_userlist_to_k8s_secret(
         if exc.status == 404:
             print(f"Secret `default/{secret_name}` does not exist, creating...")
             body = V1Secret()
-            body.metadata = {"name": secret_name}
+            body.metadata = V1ObjectMeta(name=secret_name)
             body.data = {"userlist": ""}
             api.create_namespaced_secret(namespace="default", body=body)
             secret = api.read_namespaced_secret(namespace="default", name=secret_name)
