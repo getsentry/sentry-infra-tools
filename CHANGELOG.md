@@ -1,3 +1,9 @@
+## 1.42.3
+
+### Bug Fixes 🐛
+
+- (config_blob) Remove null keys from blob dict by @bmckerry in [#289](https://github.com/getsentry/sentry-infra-tools/pull/289)
+
 ## 1.42.2
 
 ### Bug Fixes 🐛
