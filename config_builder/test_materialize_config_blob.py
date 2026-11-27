@@ -34,10 +34,19 @@ def config_dirs(tmp_path: Path) -> Generator[Path, None, None]:
     )
     write_yaml(
         tmp_path / "logical" / "defaults" / "defaults.yaml",
-        {"producer_config": {"compression.type": "lz4"}},
+        {
+            "producer_config": {"compression.type": "lz4"},
+            "consumer_config": {"auto.offset.reset": "latest"},
+        },
     )
-    write_yaml(tmp_path / "logical" / "topic-a.yaml", {})
-    write_yaml(tmp_path / "logical" / "topic-b.yaml", {"schema": "schema-b"})
+    write_yaml(
+        tmp_path / "logical" / "topic-a.yaml",
+        {"consumer_config_overrides": {"snuba": {"max.poll.interval.ms": "60000"}}},
+    )
+    write_yaml(
+        tmp_path / "logical" / "topic-b.yaml",
+        {"schema": "schema-b", "consumer_config": {"auto.offset.reset": "earliest"}},
+    )
     physical = tmp_path / "physical" / "region1"
     write_yaml(physical / "topic-a.yaml", {"cluster": "cluster1"})
     write_yaml(
@@ -84,6 +93,8 @@ def test_logical_topic_to_dict_omits_name() -> None:
     assert topic.to_dict() == {
         "producer_config": {},
         "producer_config_overrides": {},
+        "consumer_config": {},
+        "consumer_config_overrides": {},
         "physical_topics": [{"cluster": "c1"}],
         "producer_physical_topic_override": [],
     }
@@ -145,6 +156,8 @@ def test_config_blob(config_dirs: Path) -> None:
     assert blob["topics"]["topic-b"] == {
         "producer_config": {"compression.type": "lz4"},
         "producer_config_overrides": {},
+        "consumer_config": {"auto.offset.reset": "earliest"},
+        "consumer_config_overrides": {},
         "physical_topics": [{"cluster": "cluster2"}],
         "producer_physical_topic_override": [],
     }
@@ -169,7 +182,16 @@ def test_split_sliced_topics(config_dirs: Path) -> None:
     for name, cluster in [("topic-a", "cluster1"), ("topic-a-2", "cluster2")]:
         assert out[name]["physical_topics"] == [{"cluster": cluster}]
         assert out[name]["producer_config"] == {"compression.type": "lz4"}
+        assert out[name]["consumer_config"] == {"auto.offset.reset": "latest"}
+        assert out[name]["consumer_config_overrides"] == {
+            "snuba": {"max.poll.interval.ms": "60000"}
+        }
     assert out["topic-a"]["producer_config"] is not out["topic-a-2"]["producer_config"]
+    assert out["topic-a"]["consumer_config"] is not out["topic-a-2"]["consumer_config"]
+    assert (
+        out["topic-a"]["consumer_config_overrides"]
+        is not out["topic-a-2"]["consumer_config_overrides"]
+    )
     # Calling it again must not change anything
     assert blob.to_dict()["arroyo_config_blob"]["topics"] == out
 
