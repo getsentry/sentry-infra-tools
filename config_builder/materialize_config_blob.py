@@ -5,6 +5,11 @@ import click
 from typing import Any, TypeVar, Self
 from dataclasses import dataclass, asdict, field
 from sentry_kafka_schemas import list_topics
+from sentry_options import OptionsError, SchemaRegistry
+
+# The sentry-options option that apps read the blob from.
+OPTIONS_NAMESPACE = "ops-kafka"
+OPTIONS_KEY = "config_blob"
 
 
 def is_yaml_file(f: Path) -> bool:
@@ -326,24 +331,46 @@ class ConfigBlob:
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     help="Dir to write the output materialized config file to.",
 )
+@click.option(
+    "--schema-dir",
+    "-s",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Dir containing the schema for the config blob.",
+)
 def materialize_config_blob(
     cluster_dir: Path,
     logical_topic_dir: Path,
     physical_topic_dir: Path,
     output_dir: Path,
+    schema_dir: Path,
 ) -> None:
+    registry = SchemaRegistry.from_directory(schema_dir)
     # We derive our prod regions from the cluster config files we have
     regions = [f.stem for f in get_yaml_files(cluster_dir)]
 
+    blobs: dict[str, dict[str, Any]] = {}
     for region in regions:
-        blob = ConfigBlob(
+        blob_dict = ConfigBlob(
             cluster_dir,
             logical_topic_dir,
             physical_topic_dir,
             region,
-        )
+        ).to_dict()
+        try:
+            registry.validate_option(
+                OPTIONS_NAMESPACE, OPTIONS_KEY, blob_dict["arroyo_config_blob"]
+            )
+        except OptionsError as e:
+            raise click.ClickException(
+                f"Config blob for region {region} fails the "
+                f"{OPTIONS_NAMESPACE} sentry-options schema:\n{e}"
+            ) from e
+        blobs[region] = blob_dict
+
+    for region, blob_dict in blobs.items():
         regional_output = output_dir / region
         regional_output.mkdir(exist_ok=True)
         with open(regional_output / "_arroyo_config_generated.yaml", "w") as f:
             f.write("# This is a generated file. Please do not edit directly.\n")
-            yaml.safe_dump(blob.to_dict(), f)
+            yaml.safe_dump(blob_dict, f)
