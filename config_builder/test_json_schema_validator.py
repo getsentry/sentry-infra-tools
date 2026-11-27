@@ -223,7 +223,7 @@ def test_json_schema_validator(
     valid_structure: str, file: Path, return_code: int | None
 ) -> None:
     validator = JsonSchemaValidator(
-        Path(valid_structure), Path(valid_structure) / "legend.json"
+        schema_legend=Path(valid_structure) / "legend.json", root=Path(valid_structure)
     )
     assert validator.validate_yaml(Path(valid_structure) / file) == return_code
 
@@ -248,6 +248,7 @@ def test_json_schema_validator(
 def test_json_schema_invalid(valid_structure: str, file: Path) -> None:
     with pytest.raises(ValidationException):
         validator = JsonSchemaValidator(
-            Path(valid_structure), Path(valid_structure) / "legend.json"
+            schema_legend=Path(valid_structure) / "legend.json",
+            root=Path(valid_structure),
         )
         validator.validate_yaml(Path(valid_structure) / file)
