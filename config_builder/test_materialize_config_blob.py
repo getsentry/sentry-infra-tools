@@ -1,15 +1,18 @@
+import json
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 from unittest.mock import patch
 
 import pytest
 import yaml
+from click.testing import CliRunner, Result
 
 from config_builder.materialize_config_blob import (
     ClusterEntry,
     ConfigBlob,
     LogicalTopicEntry,
     PhysicalTopicEntry,
+    materialize_config_blob,
     resolve_default,
 )
 
@@ -182,3 +185,112 @@ def test_split_sliced_topics_name_collision(config_dirs: Path) -> None:
     write_yaml(config_dirs / "logical" / "topic-b-2.yaml", {"schema": "schema-b"})
     with pytest.raises(ValueError):
         make_blob(config_dirs).to_dict()
+
+
+STR_MAP = {"type": "object", "additionalProperties": {"type": "string"}}
+OPTIONAL_STR_MAP = {**STR_MAP, "optional": True}
+OPTIONAL_OVERRIDES = {
+    "type": "object",
+    "optional": True,
+    "additionalProperties": STR_MAP,
+}
+PHYSICAL_TOPICS = {
+    "type": "array",
+    "optional": True,
+    "items": {
+        "type": "object",
+        "properties": {
+            "cluster": {"type": "string"},
+            "topic_name_override": {"type": "string", "optional": True},
+        },
+    },
+}
+TOPIC_FIELDS: dict[str, Any] = {
+    "physical_topics": PHYSICAL_TOPICS,
+    "producer_physical_topic_override": PHYSICAL_TOPICS,
+    "producer_config": OPTIONAL_STR_MAP,
+    "producer_config_overrides": OPTIONAL_OVERRIDES,
+    "consumer_config": OPTIONAL_STR_MAP,
+    "consumer_config_overrides": OPTIONAL_OVERRIDES,
+}
+
+
+def write_schema(root: Path, topic_fields: dict[str, Any]) -> Path:
+    """Writes a sentry-options `ops-kafka` schema for the blob, returning the schemas dir."""
+    schema = {
+        "version": "1.0",
+        "type": "object",
+        "properties": {
+            "config_blob": {
+                "type": "object",
+                "description": "Arroyo config blob",
+                "default": {"clusters": {}, "topics": {}},
+                "properties": {
+                    "clusters": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                                "config": OPTIONAL_STR_MAP,
+                                "env_config": OPTIONAL_STR_MAP,
+                                "producer_config": OPTIONAL_STR_MAP,
+                            },
+                        },
+                    },
+                    "topics": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "object",
+                            "properties": topic_fields,
+                        },
+                    },
+                },
+            }
+        },
+    }
+    schemas_dir = root / "schemas"
+    (schemas_dir / "ops-kafka").mkdir(parents=True)
+    (schemas_dir / "ops-kafka" / "schema.json").write_text(json.dumps(schema))
+    return schemas_dir
+
+
+def run_materialize(root: Path, schemas_dir: Path) -> Result:
+    (root / "output").mkdir()
+    return CliRunner().invoke(
+        materialize_config_blob,
+        [
+            *("-c", str(root / "clusters")),
+            *("-l", str(root / "logical")),
+            *("-p", str(root / "physical")),
+            *("-o", str(root / "output")),
+            *("-s", str(schemas_dir)),
+        ],
+    )
+
+
+def test_materialize_validates_and_writes(config_dirs: Path) -> None:
+    result = run_materialize(config_dirs, write_schema(config_dirs, TOPIC_FIELDS))
+    assert result.exit_code == 0, result.output
+    written = yaml.safe_load(
+        (
+            config_dirs / "output" / "region1" / "_arroyo_config_generated.yaml"
+        ).read_text()
+    )
+    assert written == make_blob(config_dirs).to_dict()
+
+
+def test_materialize_rejects_blob_failing_schema(config_dirs: Path) -> None:
+    # A second region, so we can check a failure in one region writes nothing at all
+    write_yaml(
+        config_dirs / "clusters" / "region2.yaml", {"cluster1": {"brokers": ["b"]}}
+    )
+    write_yaml(
+        config_dirs / "physical" / "region2" / "topic-b.yaml", {"cluster": "cluster1"}
+    )
+    # Every topic has producer_config, so a schema without it rejects every blob
+    fields = {k: v for k, v in TOPIC_FIELDS.items() if k != "producer_config"}
+    result = run_materialize(config_dirs, write_schema(config_dirs, fields))
+    assert result.exit_code != 0
+    assert "fails the ops-kafka sentry-options schema" in result.output
+    assert "producer_config" in result.output
+    assert list((config_dirs / "output").iterdir()) == []
