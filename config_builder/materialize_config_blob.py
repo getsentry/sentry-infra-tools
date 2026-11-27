@@ -84,6 +84,8 @@ class LogicalTopicEntry:
     physical_topics: list[PhysicalTopicEntry]
     producer_config: dict[str, str] = field(default_factory=dict)
     producer_config_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    consumer_config: dict[str, str] = field(default_factory=dict)
+    consumer_config_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
     producer_physical_topic_override: list[PhysicalTopicEntry] = field(
         default_factory=list
     )
@@ -105,6 +107,8 @@ class LogicalTopicEntry:
         return {
             "producer_config": self.producer_config,
             "producer_config_overrides": self.producer_config_overrides,
+            "consumer_config": self.consumer_config,
+            "consumer_config_overrides": self.consumer_config_overrides,
             "physical_topics": [pt.to_dict() for pt in self.physical_topics],
             "producer_physical_topic_override": [
                 pt.to_dict() for pt in self.producer_physical_topic_override
@@ -243,6 +247,12 @@ class ConfigBlob:
                 producer_config_overrides=resolve_default(
                     defaults, data, "producer_config_overrides", empty_default={}
                 ),
+                consumer_config=resolve_default(
+                    defaults, data, "consumer_config", empty_default={}
+                ),
+                consumer_config_overrides=resolve_default(
+                    defaults, data, "consumer_config_overrides", empty_default={}
+                ),
             ).load_physical_topics(physical_topic_dir, region)
         return all_topics
 
@@ -279,6 +289,8 @@ class ConfigBlob:
                     physical_topics=[PhysicalTopicEntry(cluster=pt.cluster)],
                     producer_config=deepcopy(topic.producer_config),
                     producer_config_overrides=deepcopy(topic.producer_config_overrides),
+                    consumer_config=deepcopy(topic.consumer_config),
+                    consumer_config_overrides=deepcopy(topic.consumer_config_overrides),
                     producer_physical_topic_override=deepcopy(
                         topic.producer_physical_topic_override
                     ),
