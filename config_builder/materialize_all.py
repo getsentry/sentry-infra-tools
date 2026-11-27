@@ -79,9 +79,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--schema-legend",
         type=str,
-        default="",
+        required=True,
         help="""
-            Optional filepath to a schema legend file: a JSON object mapping
+            Filepath to a schema legend file: a JSON object mapping
             file path globs (relative to shared_config) to schema files.
         """,
     )
@@ -96,7 +96,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     args = parser.parse_args(argv)
-    legend = None if args.schema_legend == "" else Path(args.schema_legend)
+    legend = Path(args.schema_legend)
     if args.combine_sources:
         print("Validating yaml file schemas", file=stderr)
         try:

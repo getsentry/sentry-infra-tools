@@ -3,7 +3,7 @@ import os
 from enum import Enum
 from pathlib import Path
 from shutil import rmtree
-from typing import Generator, Optional, Sequence, Tuple
+from typing import Generator, Sequence, Tuple
 
 from config_builder.loaders import YamlFileLoader
 from config_builder.merger import FileMerger
@@ -150,7 +150,7 @@ def iterate_roots_and_regions(
                     yield (region_root, True)
 
 
-def validate_all_files(root_directory: Path, schema_legend: Optional[Path]) -> None:
+def validate_all_files(root_directory: Path, schema_legend: Path) -> None:
     validator = JsonSchemaValidator(schema_legend=schema_legend)
     for config_root, _ in iterate_roots_and_regions(root_directory):
         input_files = [

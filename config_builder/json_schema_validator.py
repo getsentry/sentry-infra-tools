@@ -7,15 +7,6 @@ import yaml
 from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
-# TODO: Delete this and only use `JsonSchemaValidator.__load_schema_legend()` to map files to schemas
-DEFAULT_SCHEMAS = {
-    "kafka/topics/regional_overrides/*/*.yaml": "kafka_topic_overrides.schema.json",
-    "kafka/consumer_groups/regional_overrides/*/*.yaml": "consumer_groups/regional_override_consumer_group.schema.json",
-    "kafka/consumer_groups/*.yaml": "consumer_groups/default_consumer_group.schema.json",
-    "kafka/clusters/*.yaml": "kafka_clusters.schema.json",
-    "kafka/consumer_types/*.yaml": "consumer_groups/consumer_type.schema.json",
-}
-
 DEFAULT_ROOT = Path("shared_config")
 DEFAULT_SCHEMAS_DIR = "schemas"
 
@@ -29,8 +20,8 @@ class ValidationException(Exception):
 class JsonSchemaValidator:
     def __init__(
         self,
+        schema_legend: Path,
         root: Optional[Path] = None,
-        schema_legend: Optional[Path] = None,
         schemas_dir: Optional[str] = None,
     ) -> None:
         """
@@ -51,11 +42,7 @@ class JsonSchemaValidator:
             if schemas_dir is None
             else (self.root / schemas_dir)
         )
-        self.schemas = (
-            DEFAULT_SCHEMAS
-            if schema_legend is None
-            else self.__load_schema_legend(schema_legend)
-        )
+        self.schemas = self.__load_schema_legend(schema_legend)
         self.registry = self.__build_registry()
 
     def __build_registry(self) -> Registry[Mapping[str, Resource[Mapping[str, Any]]]]:
